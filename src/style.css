@@ -1,0 +1,517 @@
+/* ======================================================
+   ישיר – עיצוב קטלוג מוצרים
+   גופן: Heebo | צבעים: כחול + כתום + לבן
+   RTL | Mobile-First
+   ====================================================== */
+
+/* ===== VARIABLES ===== */
+:root {
+  --blue-dark:    #1B3F7A;
+  --blue-mid:     #2755A8;
+  --blue-light:   #EDF2FB;
+  --orange:       #F57C21;
+  --orange-light: #FFF3E5;
+  --white:        #FFFFFF;
+  --bg:           #F4F6FA;
+  --text-main:    #1A2340;
+  --text-muted:   #6B7280;
+  --border:       #DDE3EF;
+  --green:        #16A34A;
+  --green-light:  #DCFCE7;
+  --red:          #DC2626;
+  --red-light:    #FEE2E2;
+  --radius:       14px;
+  --radius-sm:    8px;
+  --shadow:       0 2px 12px rgba(27,63,122,.10);
+  --shadow-card:  0 4px 20px rgba(27,63,122,.12);
+  --transition:   .22s ease;
+}
+
+/* ===== RESET ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Heebo', 'Assistant', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text-main);
+  direction: rtl;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; }
+
+/* ===== CONTAINER ===== */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* ===== HEADER ===== */
+.site-header {
+  background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue-mid) 100%);
+  color: var(--white);
+  padding: 22px 0 20px;
+  box-shadow: 0 3px 16px rgba(27,63,122,.30);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-mark {
+  width: 48px;
+  height: 48px;
+  background: var(--orange);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--white);
+  flex-shrink: 0;
+  box-shadow: 0 3px 10px rgba(245,124,33,.40);
+}
+
+.logo-text-wrap {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.logo-name {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.logo-tagline {
+  font-size: 13px;
+  font-weight: 300;
+  opacity: .80;
+  letter-spacing: .3px;
+}
+
+.header-desc {
+  font-size: 14px;
+  font-weight: 300;
+  opacity: .75;
+  padding-right: 4px;
+}
+
+/* ===== CATEGORY NAV ===== */
+.category-nav {
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+  position: sticky;
+  top: 106px;
+  z-index: 90;
+  box-shadow: 0 2px 8px rgba(0,0,0,.05);
+}
+
+.cat-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.cat-scroll::-webkit-scrollbar { display: none; }
+
+.cat-btn {
+  flex-shrink: 0;
+  padding: 10px 20px;
+  border-radius: 50px;
+  font-size: 15px;
+  font-weight: 500;
+  background: var(--blue-light);
+  color: var(--blue-dark);
+  transition: background var(--transition), color var(--transition), transform .15s;
+  white-space: nowrap;
+  border: 2px solid transparent;
+}
+
+.cat-btn:hover {
+  background: var(--blue-dark);
+  color: var(--white);
+}
+
+.cat-btn.active {
+  background: var(--blue-dark);
+  color: var(--white);
+  border-color: var(--blue-dark);
+  box-shadow: 0 3px 10px rgba(27,63,122,.25);
+}
+
+.cat-btn:active { transform: scale(.96); }
+
+/* ===== CATALOG MAIN ===== */
+.catalog-main {
+  padding-top: 24px;
+  padding-bottom: 48px;
+  min-height: 60vh;
+}
+
+.results-bar {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+  font-weight: 400;
+}
+
+/* ===== PRODUCT GRID ===== */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+/* ===== PRODUCT CARD ===== */
+.product-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--transition), box-shadow var(--transition);
+  border: 1px solid var(--border);
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.product-card.visible {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity .4s ease, transform .4s ease, box-shadow .22s ease;
+}
+
+.product-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(27,63,122,.18);
+}
+
+.product-card.out-of-stock {
+  opacity: .72;
+}
+
+.product-card.out-of-stock:hover {
+  transform: none;
+}
+
+/* אזור התמונה / אייקון */
+.card-image {
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 62px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  inset: 0;
+}
+
+/* תג מלאי */
+.stock-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 10px;
+  border-radius: 50px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.stock-badge.in-stock {
+  background: var(--green-light);
+  color: var(--green);
+}
+
+.stock-badge.out-of-stock {
+  background: var(--red-light);
+  color: var(--red);
+}
+
+/* גוף הכרטיס */
+.card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.card-category {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.card-name {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-main);
+}
+
+.card-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+/* מחיר */
+.card-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.card-price {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--blue-dark);
+}
+
+.card-price-symbol {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--blue-dark);
+}
+
+.card-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* שורת הזמנה */
+.card-order-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* בחירת כמות */
+.qty-wrap {
+  display: flex;
+  align-items: center;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.qty-btn {
+  width: 36px;
+  height: 40px;
+  background: var(--blue-light);
+  color: var(--blue-dark);
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition);
+  line-height: 1;
+}
+
+.qty-btn:hover { background: var(--blue-dark); color: var(--white); }
+.qty-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+.qty-input {
+  width: 44px;
+  height: 40px;
+  border: none;
+  text-align: center;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  background: var(--white);
+  -moz-appearance: textfield;
+  outline: none;
+}
+
+.qty-input::-webkit-inner-spin-button,
+.qty-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+/* כפתור הוסף להזמנה */
+.btn-add {
+  flex: 1;
+  height: 40px;
+  background: var(--orange);
+  color: var(--white);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 700;
+  transition: background var(--transition), transform .15s;
+  white-space: nowrap;
+}
+
+.btn-add:hover { background: #D96A12; }
+.btn-add:active { transform: scale(.97); }
+.btn-add:disabled {
+  background: var(--border);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* ===== STATES ===== */
+.hidden { display: none !important; }
+
+.error-state, .empty-state {
+  text-align: center;
+  padding: 64px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.error-icon { font-size: 48px; }
+
+.error-state p, .empty-state p {
+  font-size: 17px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.btn-refresh {
+  padding: 14px 32px;
+  background: var(--blue-dark);
+  color: var(--white);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  transition: background var(--transition);
+}
+
+.btn-refresh:hover { background: var(--blue-mid); }
+
+/* ===== TOAST ===== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 50%;
+  transform: translateX(50%);
+  background: var(--text-main);
+  color: var(--white);
+  padding: 14px 24px;
+  border-radius: 50px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 999;
+  box-shadow: 0 4px 20px rgba(0,0,0,.25);
+  opacity: 0;
+  transition: opacity .3s ease, bottom .3s ease;
+  white-space: nowrap;
+}
+
+.toast.show {
+  opacity: 1;
+  bottom: 32px;
+}
+
+.toast.success { background: var(--green); }
+
+/* ===== FOOTER ===== */
+.site-footer {
+  background: var(--blue-dark);
+  color: rgba(255,255,255,.7);
+  padding: 24px 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.site-footer a {
+  color: var(--orange);
+  font-weight: 600;
+}
+
+/* ===== SKELETON LOADER ===== */
+.skeleton-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  height: 380px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.skeleton-card::after {
+  content: '';
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 600px) {
+  .site-header { padding: 16px 0 14px; }
+
+  .logo-mark { width: 42px; height: 42px; font-size: 22px; }
+  .logo-name  { font-size: 24px; }
+  .header-desc { display: none; }
+
+  .category-nav { top: 84px; }
+
+  .product-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .card-image { height: 130px; font-size: 50px; }
+
+  .card-body { padding: 12px; gap: 8px; }
+  .card-name  { font-size: 15px; }
+  .card-desc  { display: none; }
+  .card-price { font-size: 21px; }
+
+  .qty-btn   { width: 32px; height: 38px; font-size: 18px; }
+  .qty-input { width: 36px; height: 38px; font-size: 15px; }
+  .btn-add   { height: 38px; font-size: 13px; }
+}
+
+@media (max-width: 380px) {
+  .product-grid { grid-template-columns: 1fr; }
+}
