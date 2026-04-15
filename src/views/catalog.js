@@ -129,8 +129,9 @@ var CatalogView = {
 
     return '<article class="product-card' + (inStock ? '' : ' out-of-stock') + '">' +
       '<div class="card-img-wrap" style="background:' + product.bgColor + '">' +
-        (product.image ? '<img src="' + product.image + '" alt="' + product.name + '" loading="lazy">' :
-          '<span class="card-icon">' + product.icon + '</span>') +
+        (product.image
+          ? '<img src="' + CloudinaryUpload.buildCatalogUrl(product.image) + '" alt="' + product.name + '" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">'
+          : '<span class="card-icon">' + product.icon + '</span>') +
         '<span class="stock-badge ' + (inStock ? 'in' : 'out') + '">' + (inStock ? 'במלאי' : 'חסר') + '</span>' +
         (hasP ? '<span class="personal-badge"><span class="material-icons-round">star</span> מחיר מיוחד בשבילך</span>' : '') +
       '</div>' +

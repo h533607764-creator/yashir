@@ -227,34 +227,91 @@ var AdminView = {
   /* ===== PRODUCTS ===== */
   _products: function (c) {
     var rows = PRODUCTS.map(function (p) {
+      var thumb = p.image
+        ? '<img src="' + CloudinaryUpload.buildThumbUrl(p.image) + '" alt="' + p.name + '" loading="lazy" style="width:60px;height:44px;object-fit:cover;border-radius:6px;display:block">'
+        : '<span style="font-size:26px;display:block;text-align:center">' + p.icon + '</span>';
       return '<tr>' +
         '<td><code>' + p.sku + '</code></td>' +
-        '<td>' + p.icon + ' ' + p.name + '</td>' +
+        '<td style="display:flex;align-items:center;gap:10px;padding:8px 14px">' + thumb + '<span>' + p.name + '</span></td>' +
         '<td>' + p.categoryLabel + '</td>' +
         '<td style="color:var(--blue);font-weight:700">₪' + p.price + '</td>' +
         '<td>' + (p.stock > 0 ? p.stock : '<span style="color:var(--red)">0 — חסר</span>') + '</td>' +
-        '<td><button class="btn-sm" onclick="AdminView._editProd(\'' + p.id + '\')">' +
-          '<span class="material-icons-round">edit</span></button></td></tr>';
+        '<td style="display:flex;gap:6px;padding:8px">' +
+          '<button class="btn-sm" onclick="AdminView._editProd(\'' + p.id + '\')" title="ערוך">' +
+            '<span class="material-icons-round">edit</span></button>' +
+          '<button class="btn-sm" onclick="AdminView._quickUpload(\'' + p.id + '\')" title="העלה תמונה" style="background:var(--orange-dim);color:var(--orange)">' +
+            '<span class="material-icons-round">add_photo_alternate</span></button>' +
+        '</td></tr>';
     }).join('');
 
     c.innerHTML = '<div class="admin-section">' +
       '<div class="admin-section-header"><h2>מוצרים</h2>' +
-        '<div style="display:flex;gap:8px">' +
-          '<button class="btn-primary" onclick="AdminView._addProd()">' +
-            '<span class="material-icons-round">add</span> הוסף מוצר</button>' +
-          '<button class="btn-secondary" onclick="AdminView._showImport()">' +
-            '<span class="material-icons-round">upload_file</span> ייבוא רשימה</button>' +
-        '</div>' +
+        '<button class="btn-primary" onclick="AdminView._addProd()">' +
+          '<span class="material-icons-round">add</span> הוסף מוצר</button>' +
       '</div>' +
-      '<p class="admin-note">תאריך עדכון אחרון: ' + new Date().toLocaleDateString('he-IL') + '</p>' +
+      '<p class="admin-note">תאריך עדכון אחרון: ' + new Date().toLocaleDateString('he-IL') + ' | Cloud: dmqjap7r1</p>' +
+      '<input type="file" id="quick-upload-input" accept="image/*" style="display:none" onchange="AdminView._handleQuickUpload(this)">' +
       '<div class="table-wrap"><table class="admin-table">' +
-        '<thead><tr><th>מק"ט</th><th>שם</th><th>קטגוריה</th><th>מחיר</th><th>מלאי</th><th>עריכה</th></tr></thead>' +
+        '<thead><tr><th>מק"ט</th><th>שם</th><th>קטגוריה</th><th>מחיר</th><th>מלאי</th><th>פעולות</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div></div>';
+  },
+
+  /* ===== QUICK UPLOAD (from product row button) ===== */
+  _quickUpload: function (productId) {
+    AdminView._pendingUploadId = productId;
+    var inp = document.getElementById('quick-upload-input');
+    if (inp) inp.click();
+  },
+
+  _handleQuickUpload: function (input) {
+    var productId = AdminView._pendingUploadId;
+    if (!productId || !input.files || !input.files[0]) return;
+    var file = input.files[0];
+    input.value = '';
+
+    App.toast('מעלה תמונה...', 'info');
+    AdminView._doUpload(file, productId, function (url) {
+      App.toast('✓ התמונה הועלתה בהצלחה', 'success');
+      AdminView._products(document.getElementById('av-content'));
+    });
+  },
+
+  /* ===== CORE UPLOAD LOGIC ===== */
+  _doUpload: function (file, productId, onDone) {
+    var p = PRODUCTS.find(function (x) { return x.id === productId; });
+    if (!p) return;
+
+    CloudinaryUpload.upload(file, {
+      onProgress: function (pct) {
+        var bar = document.getElementById('upload-progress-' + productId);
+        if (bar) {
+          bar.style.display = 'block';
+          bar.querySelector('.upload-bar-fill').style.width = pct + '%';
+          bar.querySelector('.upload-bar-label').textContent = pct + '%';
+        }
+      },
+      onSuccess: function (url) {
+        p.image = url;
+        App.Store.set('products', PRODUCTS);
+        var prev = document.getElementById('img-preview-' + productId);
+        if (prev) { prev.src = url; prev.style.display = 'block'; }
+        var bar = document.getElementById('upload-progress-' + productId);
+        if (bar) bar.style.display = 'none';
+        if (onDone) onDone(url);
+      },
+      onError: function (msg) {
+        App.toast('שגיאה: ' + msg, 'error');
+        var bar = document.getElementById('upload-progress-' + productId);
+        if (bar) bar.style.display = 'none';
+      }
+    });
   },
 
   _editProd: function (id) {
     var p = PRODUCTS.find(function (x) { return x.id === id; });
     if (!p) return;
+    var previewUrl = p.image ? CloudinaryUpload.buildCatalogUrl(p.image) : null;
+
     App.showModal(
       '<h3>עריכת מוצר — ' + p.icon + ' ' + p.name + '</h3>' +
       '<div class="customer-form">' +
@@ -263,15 +320,51 @@ var AdminView = {
         AdminView._fld('מלאי', 'pf-stock', p.stock, 'number') +
         AdminView._fld('יחידה (לדוגמה: ל-100 יח׳)', 'pf-unit', p.unit) +
         AdminView._fld('תיאור', 'pf-desc', p.description) +
-        AdminView._fld('קישור תמונה (URL)', 'pf-image', p.image || '') +
-        (p.image ? '<div style="margin-bottom:12px"><img src="' + p.image + '" alt="תצוגה מקדימה" style="max-width:100%;max-height:120px;border-radius:8px;object-fit:contain;background:#1e3150;padding:8px"></div>' : '') +
+
+        /* ===== IMAGE UPLOAD SECTION ===== */
+        '<div class="form-group" style="gap:10px">' +
+          '<label>תמונת מוצר</label>' +
+
+          /* Current image preview */
+          '<div id="img-preview-wrap" style="margin-bottom:8px">' +
+            (previewUrl
+              ? '<img id="img-preview-' + id + '" src="' + previewUrl + '" alt="תצוגה מקדימה" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;border:1.5px solid var(--border)">'
+              : '<div id="img-preview-' + id + '" style="display:none"></div>' +
+                '<div style="padding:20px;text-align:center;background:var(--navy-dark);border-radius:10px;border:1.5px dashed var(--border);color:var(--text-muted);font-size:14px">' +
+                '<span class="material-icons-round" style="font-size:32px;display:block;margin-bottom:6px">image</span>אין תמונה עדיין</div>') +
+          '</div>' +
+
+          /* Upload button */
+          '<label class="upload-btn-label" style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--blue-dim);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);cursor:pointer;font-size:14px;font-weight:700;color:var(--blue);transition:background .2s">' +
+            '<span class="material-icons-round">add_photo_alternate</span> בחר תמונה מהמחשב' +
+            '<input type="file" accept="image/*" style="display:none" onchange="AdminView._handleEditUpload(\'' + id + '\',this)">' +
+          '</label>' +
+
+          /* Progress bar */
+          '<div id="upload-progress-' + id + '" style="display:none;margin-top:6px">' +
+            '<div style="background:var(--navy-dark);border-radius:4px;overflow:hidden;height:8px">' +
+              '<div class="upload-bar-fill" style="height:100%;background:var(--blue);width:0%;transition:width .3s"></div>' +
+            '</div>' +
+            '<span class="upload-bar-label" style="font-size:12px;color:var(--text-muted)">0%</span>' +
+          '</div>' +
+
+          '<p style="font-size:12px;color:var(--text-muted);margin-top:4px">JPG/PNG/WEBP עד 10MB | הופך אוטומטית לפורמט מהיר לאינטרנט</p>' +
+        '</div>' +
+
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<button class="btn-primary" onclick="AdminView._saveProd(\'' + id + '\')">' +
-            '<span class="material-icons-round">save</span> שמור</button>' +
-          '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+            '<span class="material-icons-round">save</span> שמור פרטים</button>' +
+          '<button class="btn-secondary" onclick="App.closeModal()">סגור</button>' +
         '</div>' +
       '</div>'
     );
+  },
+
+  _handleEditUpload: function (productId, input) {
+    if (!input.files || !input.files[0]) return;
+    AdminView._doUpload(input.files[0], productId, function () {
+      App.toast('✓ התמונה הועלתה וחוברה למוצר', 'success');
+    });
   },
 
   _addProd: function () {
@@ -284,7 +377,6 @@ var AdminView = {
         AdminView._fld('מלאי', 'pf-stock', '100', 'number') +
         AdminView._fld('יחידה', 'pf-unit', "ל-100 יח׳") +
         AdminView._fld('תיאור', 'pf-desc', '') +
-        AdminView._fld('קישור תמונה (URL) — אופציונלי', 'pf-image', '') +
         '<div class="form-group"><label>קטגוריה</label>' +
           '<select id="pf-cat" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px">' +
             '<option value="cups">כוסות</option><option value="plates">צלחות</option><option value="napkins">מפיות</option>' +
