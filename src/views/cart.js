@@ -2,7 +2,7 @@ var CartView = {
   renderPanel: function () {
     var panel = document.getElementById('cart-panel');
     if (!panel) return;
-    var cart     = App.state.cart;
+    var cart      = App.state.cart;
     var needsShip = App.Cart.needsShipping();
     var shipCost  = App.Cart.getShippingCost();
     var minAmt    = App.state.settings.minOrderAmount;
@@ -18,13 +18,36 @@ var CartView = {
           '<button class="btn-primary" onclick="App.closeCart();App.navigate(\'catalog\')">לקטלוג</button></div>'
       : '<div class="cart-items">' +
           cart.map(function (item) {
-            var isOOS = item.outOfStock || item.product.stock === 0;
+            var isOOS      = item.outOfStock || item.product.stock === 0;
+            var lineTotal  = item.unitPrice * item.qty;
+            var cust       = App.Auth.isCustomer() ? App.state.currentUser.customer : null;
+            var basePrice  = cust ? App.Pricing.getUnitPrice(item.product, cust) : item.product.price;
+
+            /* האם יש הנחת כמות פעילה */
+            var bulkPct = item.product.bulkDiscounts
+              ? App.Pricing.getBulkDiscountPct(item.product, item.qty)
+              : 0;
+            var personalPct = item.discountPct - bulkPct;
+            if (personalPct < 0) personalPct = 0;
+
+            /* שורת הנחות */
+            var discInfo = '';
+            if (item.discountPct > 0) {
+              if (bulkPct > 0 && personalPct > 0) {
+                discInfo = '<span class="cart-item-disc">הנחה אישית ' + App.fmtP(personalPct) + '% + כמות ' + bulkPct + '% = <strong>' + App.fmtP(item.discountPct) + '%</strong></span>';
+              } else if (bulkPct > 0) {
+                discInfo = '<span class="cart-item-disc">הנחת כמות <strong>' + bulkPct + '%</strong></span>';
+              } else {
+                discInfo = '<span class="cart-item-disc">הנחה <strong>' + item.discountPct + '%</strong></span>';
+              }
+            }
+
             return '<div class="cart-item' + (isOOS ? ' cart-item-oos' : '') + '">' +
               '<div class="cart-item-icon">' + item.product.icon + '</div>' +
               '<div class="cart-item-info">' +
                 '<span class="cart-item-name">' + item.product.name + '</span>' +
                 '<span class="cart-item-sku">מק"ט ' + item.product.sku + '</span>' +
-                (item.discountPct > 0 ? '<span class="cart-item-disc">הנחה ' + item.discountPct + '%</span>' : '') +
+                discInfo +
                 (isOOS ? '<span class="cart-item-oos-note"><span class="material-icons-round" style="font-size:13px">schedule</span> חסר במלאי — עלול להתעכב</span>' : '') +
               '</div>' +
               '<div class="cart-item-qty">' +
@@ -32,7 +55,12 @@ var CartView = {
                 '<span>' + item.qty + '</span>' +
                 '<button onclick="App.Cart.updateQty(\'' + item.product.id + '\',' + (item.qty + 1) + ')">+</button>' +
               '</div>' +
-              '<div class="cart-item-price">₪' + App.fmtP(item.unitPrice * item.qty) + '</div>' +
+              '<div class="cart-item-price-col">' +
+                (item.qty > 1 && basePrice !== null && basePrice !== item.unitPrice
+                  ? '<span class="cart-item-base-price">₪' + App.fmtP(item.unitPrice) + '/יח׳</span>'
+                  : '') +
+                '<span class="cart-item-price">₪' + App.fmtP(lineTotal) + '</span>' +
+              '</div>' +
               '<button class="cart-item-del" onclick="App.Cart.remove(\'' + item.product.id + '\')">' +
                 '<span class="material-icons-round">delete_outline</span>' +
               '</button></div>';
@@ -42,7 +70,7 @@ var CartView = {
                 '<div class="cart-item-icon">🚚</div>' +
                 '<div class="cart-item-info"><span class="cart-item-name">דמי משלוח</span><span class="cart-item-sku">מק"ט 1000</span></div>' +
                 '<div class="cart-item-qty"><span>1</span></div>' +
-                '<div class="cart-item-price">₪' + shipCost + '</div></div>'
+                '<div class="cart-item-price-col"><span class="cart-item-price">₪' + shipCost + '</span></div></div>'
             : '') +
           '</div>' +
           '<div class="cart-summary">' +
@@ -68,10 +96,10 @@ var CartView = {
     var remaining = App.fmtP(minAmt - App.Cart.subtotal());
     return '<div class="summary-row"><span>סה"כ לפני מע"מ</span><span>₪' + App.fmtP(totals.subtotal) + '</span></div>' +
       '<div class="summary-row"><span>מע"מ (18%)</span><span>₪' + App.fmtP(totals.vat) + '</span></div>' +
-      '<div class="summary-row total"><span>סה"כ סופי</span><span>₪' + App.fmtP(totals.total) + '</span></div>' +
-      (totals.savings > 0 ? '<div class="summary-savings">חסכת בהזמנה זו: ₪' + App.fmtP(totals.savings) + '</div>' : '') +
+      '<div class="summary-row total"><span>סה"כ כולל מע"מ</span><span>₪' + App.fmtP(totals.total) + '</span></div>' +
+      (totals.savings > 0 ? '<div class="summary-savings"><span class="material-icons-round">savings</span> חסכת בהזמנה זו: ₪' + App.fmtP(totals.savings) + '</div>' : '') +
       (needsShip && App.state.cart.length > 0
-        ? '<div class="shipping-notice"><span class="material-icons-round">info</span> עוד ₪' + remaining + ' למשלוח חינם</div>'
+        ? '<div class="shipping-notice"><span class="material-icons-round">info</span> עוד ₪' + remaining + ' למשלוח חינם (לפני מע"מ)</div>'
         : (App.state.cart.length > 0 ? '<div class="free-shipping-notice"><span class="material-icons-round">local_shipping</span> משלוח חינם!</div>' : '')) +
       '<div class="cart-notes"><label>הערות להזמנה</label><textarea id="cv-notes" placeholder="הערות אופציונליות..." rows="2"></textarea></div>' +
       '<button class="btn-submit-order" onclick="CartView.submit()" ' + (App.state.cart.length === 0 ? 'disabled style="opacity:.4"' : '') + '>' +
@@ -83,9 +111,8 @@ var CartView = {
     var notes = document.getElementById('cv-notes');
     var nVal  = notes ? notes.value : '';
 
-    /* אזהרה: מוצרים חסרים במלאי */
     if (App.Cart.hasOOS()) {
-      var oosList = App.state.cart.filter(function (i) { return i.outOfStock || i.product.stock === 0; });
+      var oosList  = App.state.cart.filter(function (i) { return i.outOfStock || i.product.stock === 0; });
       var oosNames = oosList.map(function (i) { return '• ' + i.product.name; }).join('<br>');
       App.showModal(
         '<div class="sys-message">' +
@@ -111,7 +138,7 @@ var CartView = {
         '<div class="sys-message">' +
           '<div class="sys-icon orange"><span class="material-icons-round" style="font-size:30px">local_shipping</span></div>' +
           '<h3>שים לב — ייתווספו דמי משלוח</h3>' +
-          '<p>ההזמנה פחות מ-₪' + App.state.settings.minOrderAmount + '<br>יתווספו דמי משלוח: <strong>₪' + sc + '</strong></p>' +
+          '<p>ההזמנה פחות מ-₪' + App.state.settings.minOrderAmount + ' (לפני מע"מ)<br>יתווספו דמי משלוח: <strong>₪' + sc + '</strong></p>' +
           '<div style="display:flex;gap:10px;margin-top:12px">' +
             '<button class="btn-primary orange" onclick="App.closeModal();App.Orders.submit(\'' + nVal.replace(/'/g, "\\'") + '\')">אישור ושליחה</button>' +
             '<button class="btn-secondary" onclick="App.closeModal()">חזרה לעריכה</button>' +

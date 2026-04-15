@@ -7,14 +7,16 @@ var AdminView = {
     params = params || {};
     if (params.tab) AdminView._tab = params.tab;
     var tabs = [
-      { id: 'orders',    label: 'הזמנות',     icon: 'list_alt' },
-      { id: 'customers', label: 'לקוחות',     icon: 'people' },
-      { id: 'products',  label: 'מוצרים',     icon: 'inventory_2' },
-      { id: 'suppliers', label: 'ספקים',      icon: 'local_shipping' },
-      { id: 'profit',    label: 'רווח',        icon: 'trending_up' },
-      { id: 'stats',     label: 'סטטיסטיקות', icon: 'bar_chart' },
-      { id: 'financial', label: 'פיננסי',     icon: 'account_balance_wallet' },
-      { id: 'settings',  label: 'הגדרות',     icon: 'settings' }
+      { id: 'orders',          label: 'הזמנות',             icon: 'list_alt' },
+      { id: 'customers',       label: 'לקוחות',             icon: 'people' },
+      { id: 'products',        label: 'מוצרים',             icon: 'inventory_2' },
+      { id: 'suppliers',       label: 'ספקים',              icon: 'local_shipping' },
+      { id: 'quote_requests',  label: 'הצעות מחיר',         icon: 'request_quote' },
+      { id: 'product_requests',label: 'בקשות מוצרים',       icon: 'add_circle' },
+      { id: 'profit',          label: 'רווח',                icon: 'trending_up' },
+      { id: 'stats',           label: 'סטטיסטיקות',         icon: 'bar_chart' },
+      { id: 'financial',       label: 'פיננסי',             icon: 'account_balance_wallet' },
+      { id: 'settings',        label: 'הגדרות',             icon: 'settings' }
     ];
     el.innerHTML =
       '<div class="admin-page"><div class="container">' +
@@ -46,14 +48,16 @@ var AdminView = {
     var c = document.getElementById('av-content');
     if (!c) return;
     var map = {
-      orders:    AdminView._orders,
-      customers: AdminView._customers,
-      products:  AdminView._products,
-      suppliers: function (c) { AdminSuppliers.render(c); },
-      profit:    function (c) { AdminProfit.render(c); },
-      stats:     AdminView._stats,
-      financial: AdminView._financial,
-      settings:  AdminView._settings
+      orders:          AdminView._orders,
+      customers:       AdminView._customers,
+      products:        AdminView._products,
+      suppliers:       function (c) { AdminSuppliers.render(c); },
+      quote_requests:  AdminView._quoteRequests,
+      product_requests:AdminView._productRequests,
+      profit:          function (c) { AdminProfit.render(c); },
+      stats:           AdminView._stats,
+      financial:       AdminView._financial,
+      settings:        AdminView._settings
     };
     if (map[id]) map[id](c);
   },
@@ -83,7 +87,8 @@ var AdminView = {
             (o.customerPhone ? '<div style="font-size:11px;color:var(--text-muted)">' + o.customerPhone + '</div>' : '') +
           '</td>' +
           '<td>' + d + '</td>' +
-          '<td style="color:var(--blue);font-weight:700">₪' + o.total + '</td>' +
+          '<td><div style="color:var(--text-muted);font-size:12px">לפני מע"מ: ₪' + o.subtotal + '</div>' +
+               '<div style="color:var(--blue);font-weight:700">כולל מע"מ: ₪' + o.total + '</div></td>' +
           '<td><select onchange="AdminView._setStatus(\'' + o.id + '\',this.value,\'' + ph + '\')" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:' + (SC[o.status] || 'var(--text)') + '">' + sOpts + '</select></td>' +
           '<td><button class="btn-sm" onclick="AdminView._togglePayment(\'' + o.id + '\',\'' + (o.paymentStatus||'unpaid') + '\')" style="font-size:11px;white-space:nowrap">' +
             (paid ? '✅ שולם' : '⏳ ממתין') + '</button></td>' +
@@ -160,7 +165,7 @@ var AdminView = {
     if (!o) { App.toast('הזמנה לא נמצאה', 'error'); return; }
     var rows = o.items.map(function (i) {
       return '<tr><td>' + i.product.sku + '</td><td>' + i.product.name + '</td><td>' + i.qty + '</td>' +
-        '<td>' + i.discountPct + '%</td><td>₪' + (i.unitPrice * i.qty) + '</td></tr>';
+        '<td>' + App.fmtP(i.discountPct) + '%</td><td>₪' + App.fmtP(i.unitPrice * i.qty) + '</td></tr>';
     }).join('');
     App.showModal(
       '<h3>הזמנה #' + o.id + ' — ' + o.customerName + '</h3>' +
@@ -170,7 +175,7 @@ var AdminView = {
       '<div class="order-totals">' +
         '<div>לפני מע"מ: ₪' + o.subtotal + '</div>' +
         '<div>מע"מ: ₪' + o.vat + '</div>' +
-        '<div style="font-weight:700;font-size:16px">סה"כ: ₪' + o.total + '</div>' +
+        '<div style="font-weight:700;font-size:16px">סה"כ כולל מע"מ: ₪' + o.total + '</div>' +
         (o.savings > 0 ? '<div style="color:var(--green)">חסכון: ₪' + o.savings + '</div>' : '') +
       '</div>' +
       (o.notes ? '<p style="margin-top:8px;font-size:14px;color:var(--text-muted)"><strong>הערות:</strong> ' + o.notes + '</p>' : '') +
@@ -227,7 +232,9 @@ var AdminView = {
     App.showModal(
       '<h3>' + (isNew ? 'הוסף לקוח חדש' : 'עריכת ' + cu.name) + '</h3>' +
       '<div class="customer-form">' +
-        AdminView._fld('ח.פ / עוסק מורשה', 'ef-id', cu.id, 'text', !isNew) +
+        /* ח.פ תמיד ניתן לעריכה */
+        AdminView._fld('ח.פ / עוסק מורשה', 'ef-id', cu.id, 'text') +
+        (isNew ? '' : '<p style="font-size:12px;color:var(--orange);margin-top:-8px">⚠️ שינוי ח.פ ישנה את מזהה הלקוח בכל המערכת</p>') +
         AdminView._fld('שם עסק', 'ef-name', cu.name, 'text') +
         AdminView._fld('טלפון', 'ef-phone', cu.phone, 'tel') +
         AdminView._fld('מייל', 'ef-email', cu.email, 'email') +
@@ -268,7 +275,12 @@ var AdminView = {
       existingDebt:    parseFloat(document.getElementById('ef-debt').value) || 0,
       personalPrices:  existing ? (existing.personalPrices || {}) : {}
     };
-    if (origId) {
+    if (origId && origId !== id) {
+      /* ח.פ שונה — מחיקת הישן והוספת חדש */
+      var oldIdx = CUSTOMERS_DB.findIndex(function (x) { return x.id === origId; });
+      if (oldIdx > -1) CUSTOMERS_DB.splice(oldIdx, 1);
+      CUSTOMERS_DB.push(data);
+    } else if (origId) {
       var idx = CUSTOMERS_DB.findIndex(function (x) { return x.id === origId; });
       if (idx > -1) CUSTOMERS_DB[idx] = data; else CUSTOMERS_DB.push(data);
     } else {
@@ -361,11 +373,14 @@ var AdminView = {
       var thumb = p.image
         ? '<img src="' + CloudinaryUpload.buildThumbUrl(p.image) + '" alt="' + p.name + '" loading="lazy" style="width:60px;height:44px;object-fit:cover;border-radius:6px;display:block">'
         : '<span style="font-size:26px;display:block;text-align:center">' + p.icon + '</span>';
+      var hasBulk = p.bulkDiscounts && p.bulkDiscounts.length > 0;
       return '<tr>' +
         '<td><code>' + p.sku + '</code></td>' +
         '<td style="display:flex;align-items:center;gap:10px;padding:8px 14px">' + thumb + '<span>' + p.name + '</span></td>' +
         '<td>' + p.categoryLabel + '</td>' +
         '<td style="color:var(--blue);font-weight:700">₪' + p.price + '</td>' +
+        '<td>' + (p.soldBy ? p.soldBy : '—') + (p.unitsPerPackage ? ' / ' + p.unitsPerPackage + ' יח׳' : '') + '</td>' +
+        '<td>' + (hasBulk ? '<span style="color:var(--green);font-size:12px">✓ יש</span>' : '—') + '</td>' +
         '<td>' + (p.stock > 0 ? p.stock : '<span style="color:var(--red)">0 — חסר</span>') + '</td>' +
         '<td style="display:flex;gap:6px;padding:8px">' +
           '<button class="btn-sm" onclick="AdminView._editProd(\'' + p.id + '\')" title="ערוך">' +
@@ -377,17 +392,20 @@ var AdminView = {
 
     c.innerHTML = '<div class="admin-section">' +
       '<div class="admin-section-header"><h2>מוצרים</h2>' +
-        '<button class="btn-primary" onclick="AdminView._addProd()">' +
-          '<span class="material-icons-round">add</span> הוסף מוצר</button>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn-primary" onclick="AdminView._addProd()">' +
+            '<span class="material-icons-round">add</span> הוסף מוצר</button>' +
+          '<button class="btn-secondary" onclick="AdminView._showImport()" style="font-size:13px">' +
+            '<span class="material-icons-round">upload_file</span> ייבוא JSON</button>' +
+        '</div>' +
       '</div>' +
       '<p class="admin-note">תאריך עדכון אחרון: ' + new Date().toLocaleDateString('he-IL') + ' | Cloud: dmqjap7r1</p>' +
       '<input type="file" id="quick-upload-input" accept="image/*" style="display:none" onchange="AdminView._handleQuickUpload(this)">' +
       '<div class="table-wrap"><table class="admin-table">' +
-        '<thead><tr><th>מק"ט</th><th>שם</th><th>קטגוריה</th><th>מחיר</th><th>מלאי</th><th>פעולות</th></tr></thead>' +
+        '<thead><tr><th>מק"ט</th><th>שם</th><th>קטגוריה</th><th>מחיר</th><th>אריזה</th><th>הנחת כמות</th><th>מלאי</th><th>פעולות</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div></div>';
   },
 
-  /* ===== QUICK UPLOAD (from product row button) ===== */
   _quickUpload: function (productId) {
     AdminView._pendingUploadId = productId;
     var inp = document.getElementById('quick-upload-input');
@@ -399,19 +417,16 @@ var AdminView = {
     if (!productId || !input.files || !input.files[0]) return;
     var file = input.files[0];
     input.value = '';
-
     App.toast('מעלה תמונה...', 'info');
-    AdminView._doUpload(file, productId, function (url) {
+    AdminView._doUpload(file, productId, function () {
       App.toast('✓ התמונה הועלתה בהצלחה', 'success');
       AdminView._products(document.getElementById('av-content'));
     });
   },
 
-  /* ===== CORE UPLOAD LOGIC ===== */
   _doUpload: function (file, productId, onDone) {
     var p = PRODUCTS.find(function (x) { return x.id === productId; });
     if (!p) return;
-
     CloudinaryUpload.upload(file, {
       onProgress: function (pct) {
         var bar = document.getElementById('upload-progress-' + productId);
@@ -438,27 +453,95 @@ var AdminView = {
     });
   },
 
+  _bulkDiscountsEditor: function (bulkDiscounts, containerId) {
+    var discounts = bulkDiscounts || [];
+    var rows = discounts.map(function (d, i) {
+      return '<div class="bulk-row" id="bdr-' + containerId + '-' + i + '">' +
+        '<span style="font-size:13px;color:var(--text-muted)">מ-</span>' +
+        '<input type="number" id="bd-qty-' + containerId + '-' + i + '" value="' + d.minQty + '" min="1" placeholder="כמות" style="width:70px">' +
+        '<span style="font-size:13px;color:var(--text-muted)">יח׳ הנחה</span>' +
+        '<input type="number" id="bd-pct-' + containerId + '-' + i + '" value="' + d.discountPct + '" min="1" max="99" placeholder="%" style="width:60px">' +
+        '<span style="font-size:13px;color:var(--text-muted)">%</span>' +
+        '<button onclick="document.getElementById(\'bdr-' + containerId + '-' + i + '\').remove()" style="background:var(--red-dim);color:var(--red);border-radius:4px;padding:4px 8px;font-size:12px">' +
+          '<span class="material-icons-round" style="font-size:14px">delete</span>' +
+        '</button>' +
+      '</div>';
+    }).join('');
+    return '<div class="form-group">' +
+      '<label>הנחת כמות</label>' +
+      '<div id="bulk-rows-' + containerId + '" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">' + rows + '</div>' +
+      '<button onclick="AdminView._addBulkRow(\'' + containerId + '\')" style="background:var(--blue-dim);color:var(--blue);border-radius:6px;padding:7px 14px;font-size:13px;font-weight:700;border:1px solid var(--border-blue)">' +
+        '<span class="material-icons-round" style="font-size:15px">add</span> הוסף שלב הנחה' +
+      '</button>' +
+    '</div>';
+  },
+
+  _addBulkRow: function (containerId) {
+    var container = document.getElementById('bulk-rows-' + containerId);
+    if (!container) return;
+    var idx = container.children.length;
+    var div = document.createElement('div');
+    div.className = 'bulk-row';
+    div.id = 'bdr-' + containerId + '-' + idx;
+    div.innerHTML =
+      '<span style="font-size:13px;color:var(--text-muted)">מ-</span>' +
+      '<input type="number" id="bd-qty-' + containerId + '-' + idx + '" value="" min="1" placeholder="כמות" style="width:70px">' +
+      '<span style="font-size:13px;color:var(--text-muted)">יח׳ הנחה</span>' +
+      '<input type="number" id="bd-pct-' + containerId + '-' + idx + '" value="" min="1" max="99" placeholder="%" style="width:60px">' +
+      '<span style="font-size:13px;color:var(--text-muted)">%</span>' +
+      '<button onclick="this.parentElement.remove()" style="background:var(--red-dim);color:var(--red);border-radius:4px;padding:4px 8px;font-size:12px">' +
+        '<span class="material-icons-round" style="font-size:14px">delete</span>' +
+      '</button>';
+    container.appendChild(div);
+  },
+
+  _readBulkDiscounts: function (containerId) {
+    var container = document.getElementById('bulk-rows-' + containerId);
+    if (!container) return [];
+    var result = [];
+    Array.from(container.children).forEach(function (row) {
+      var qtyInp = row.querySelector('[id^="bd-qty-"]');
+      var pctInp = row.querySelector('[id^="bd-pct-"]');
+      if (qtyInp && pctInp && qtyInp.value && pctInp.value) {
+        var qty = parseInt(qtyInp.value);
+        var pct = parseFloat(pctInp.value);
+        if (qty > 0 && pct > 0) result.push({ minQty: qty, discountPct: pct });
+      }
+    });
+    return result.sort(function (a, b) { return a.minQty - b.minQty; });
+  },
+
   _editProd: function (id) {
     var p = PRODUCTS.find(function (x) { return x.id === id; });
     if (!p) return;
     var previewUrl = p.image ? CloudinaryUpload.buildCatalogUrl(p.image) : null;
     var threshold  = p.lowStockThreshold != null ? p.lowStockThreshold : 10;
+    var soldByOpts = ['קרטון','שק','מארז','חבילה','ארגז','פלטה'].map(function (o) {
+      return '<option value="' + o + '"' + (p.soldBy === o ? ' selected' : '') + '>' + o + '</option>';
+    }).join('');
 
     App.showModal(
       '<h3>עריכת מוצר — ' + p.icon + ' ' + p.name + '</h3>' +
       '<div class="customer-form">' +
         AdminView._fld('שם מוצר', 'pf-name', p.name) +
-        AdminView._fld('מחיר כללי (₪)', 'pf-price', p.price, 'number') +
+        AdminView._fld('מחיר כללי (₪) — לפני מע"מ', 'pf-price', p.price, 'number') +
         AdminView._fld('מלאי', 'pf-stock', p.stock, 'number') +
-        AdminView._fld('סף מלאי נמוך (שלח התראה מתחת לכמות זו)', 'pf-threshold', threshold, 'number') +
-        AdminView._fld('יחידה (לדוגמה: ל-100 יח׳)', 'pf-unit', p.unit) +
+        AdminView._fld('סף מלאי נמוך', 'pf-threshold', threshold, 'number') +
         AdminView._fld('תיאור', 'pf-desc', p.description) +
-
-        /* ===== IMAGE UPLOAD SECTION ===== */
+        /* ===== שדות אריזה ===== */
+        '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
+          '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">פרטי אריזה ומכירה</p>' +
+          AdminView._fld('כמה יחידות בחבילה', 'pf-upkg', p.unitsPerPackage || '', 'number') +
+          '<div class="form-group"><label>נמכר ב...</label>' +
+            '<select id="pf-soldby" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
+              '<option value="">-- בחר --</option>' + soldByOpts +
+            '</select></div>' +
+          AdminView._fld('כמה יחידות בקרטון/מארז/שק', 'pf-ucont', p.unitsPerContainer || '', 'number') +
+          AdminView._bulkDiscountsEditor(p.bulkDiscounts, 'edit-' + id) +
+        '</div>' +
+        /* ===== תמונה ===== */
         '<div class="form-group" style="gap:10px">' +
           '<label>תמונת מוצר</label>' +
-
-          /* Current image preview */
           '<div id="img-preview-wrap" style="margin-bottom:8px">' +
             (previewUrl
               ? '<img id="img-preview-' + id + '" src="' + previewUrl + '" alt="תצוגה מקדימה" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;border:1.5px solid var(--border)">'
@@ -466,24 +549,17 @@ var AdminView = {
                 '<div style="padding:20px;text-align:center;background:var(--navy-dark);border-radius:10px;border:1.5px dashed var(--border);color:var(--text-muted);font-size:14px">' +
                 '<span class="material-icons-round" style="font-size:32px;display:block;margin-bottom:6px">image</span>אין תמונה עדיין</div>') +
           '</div>' +
-
-          /* Upload button */
-          '<label class="upload-btn-label" style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--blue-dim);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);cursor:pointer;font-size:14px;font-weight:700;color:var(--blue);transition:background .2s">' +
+          '<label class="upload-btn-label" style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--blue-dim);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);cursor:pointer;font-size:14px;font-weight:700;color:var(--blue)">' +
             '<span class="material-icons-round">add_photo_alternate</span> בחר תמונה מהמחשב' +
             '<input type="file" accept="image/*" style="display:none" onchange="AdminView._handleEditUpload(\'' + id + '\',this)">' +
           '</label>' +
-
-          /* Progress bar */
           '<div id="upload-progress-' + id + '" style="display:none;margin-top:6px">' +
             '<div style="background:var(--navy-dark);border-radius:4px;overflow:hidden;height:8px">' +
               '<div class="upload-bar-fill" style="height:100%;background:var(--blue);width:0%;transition:width .3s"></div>' +
             '</div>' +
             '<span class="upload-bar-label" style="font-size:12px;color:var(--text-muted)">0%</span>' +
           '</div>' +
-
-          '<p style="font-size:12px;color:var(--text-muted);margin-top:4px">JPG/PNG/WEBP עד 10MB | הופך אוטומטית לפורמט מהיר לאינטרנט</p>' +
         '</div>' +
-
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<button class="btn-primary" onclick="AdminView._saveProd(\'' + id + '\')">' +
             '<span class="material-icons-round">save</span> שמור פרטים</button>' +
@@ -501,19 +577,31 @@ var AdminView = {
   },
 
   _addProd: function () {
+    var soldByOpts = ['קרטון','שק','מארז','חבילה','ארגז','פלטה'].map(function (o) {
+      return '<option value="' + o + '">' + o + '</option>';
+    }).join('');
     App.showModal(
       '<h3>הוסף מוצר חדש</h3>' +
       '<div class="customer-form">' +
         AdminView._fld('מק"ט (מספר)', 'pf-sku', '', 'text') +
         AdminView._fld('שם מוצר', 'pf-name', '') +
-        AdminView._fld('מחיר (₪)', 'pf-price', '', 'number') +
+        AdminView._fld('מחיר (₪) — לפני מע"מ', 'pf-price', '', 'number') +
         AdminView._fld('מלאי', 'pf-stock', '100', 'number') +
-        AdminView._fld('יחידה', 'pf-unit', "ל-100 יח׳") +
         AdminView._fld('תיאור', 'pf-desc', '') +
         '<div class="form-group"><label>קטגוריה</label>' +
           '<select id="pf-cat" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px">' +
             '<option value="cups">כוסות</option><option value="plates">צלחות</option><option value="napkins">מפיות</option>' +
           '</select></div>' +
+        '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
+          '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">פרטי אריזה ומכירה</p>' +
+          AdminView._fld('כמה יחידות בחבילה', 'pf-upkg', '', 'number') +
+          '<div class="form-group"><label>נמכר ב...</label>' +
+            '<select id="pf-soldby" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
+              '<option value="">-- בחר --</option>' + soldByOpts +
+            '</select></div>' +
+          AdminView._fld('כמה יחידות בקרטון/מארז/שק', 'pf-ucont', '', 'number') +
+          AdminView._bulkDiscountsEditor([], 'new-prod') +
+        '</div>' +
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<button class="btn-primary" onclick="AdminView._saveNewProd()">' +
             '<span class="material-icons-round">add</span> הוסף</button>' +
@@ -530,8 +618,16 @@ var AdminView = {
     p.price             = parseFloat(document.getElementById('pf-price').value) || p.price;
     p.stock             = parseInt(document.getElementById('pf-stock').value);
     p.lowStockThreshold = parseInt(document.getElementById('pf-threshold') && document.getElementById('pf-threshold').value) || 10;
-    p.unit              = document.getElementById('pf-unit').value || p.unit;
     p.description       = document.getElementById('pf-desc').value || p.description;
+    p.unitsPerPackage   = parseInt(document.getElementById('pf-upkg').value) || null;
+    p.soldBy            = document.getElementById('pf-soldby').value || null;
+    p.unitsPerContainer = parseInt(document.getElementById('pf-ucont').value) || null;
+    p.bulkDiscounts     = AdminView._readBulkDiscounts('edit-' + id);
+    /* שמירה ב-Firestore */
+    if (window.DB) {
+      window.DB.collection('products').doc(p.id).set(p)
+        .catch(function (e) { console.warn('Firestore save error:', e); });
+    }
     App.Store.set('products', PRODUCTS);
     App.closeModal();
     App.toast('המוצר עודכן', 'success');
@@ -547,22 +643,24 @@ var AdminView = {
     var catLabels = { cups:'כוסות', plates:'צלחות', napkins:'מפיות' };
     var catIcons  = { cups:'☕', plates:'🍽️', napkins:'🗒️' };
     var newProd = {
-      id: 'prod-' + sku,
-      sku: sku,
-      name: name,
-      category: cat,
-      categoryLabel: catLabels[cat],
-      price: parseFloat(document.getElementById('pf-price').value) || 0,
-      stock: parseInt(document.getElementById('pf-stock').value) || 100,
-      unit: document.getElementById('pf-unit').value || "ל-100 יח׳",
-      icon: catIcons[cat],
-      bgColor: '#1a2030',
-      description: document.getElementById('pf-desc').value || '',
-      image: document.getElementById('pf-image').value.trim() || null
+      id:             'prod-' + sku,
+      sku:            sku,
+      name:           name,
+      category:       cat,
+      categoryLabel:  catLabels[cat],
+      price:          parseFloat(document.getElementById('pf-price').value) || 0,
+      stock:          parseInt(document.getElementById('pf-stock').value) || 100,
+      description:    document.getElementById('pf-desc').value || '',
+      icon:           catIcons[cat],
+      bgColor:        '#1a2030',
+      image:          null,
+      unitsPerPackage:   parseInt(document.getElementById('pf-upkg').value) || null,
+      soldBy:            document.getElementById('pf-soldby').value || null,
+      unitsPerContainer: parseInt(document.getElementById('pf-ucont').value) || null,
+      bulkDiscounts:     AdminView._readBulkDiscounts('new-prod')
     };
     PRODUCTS.push(newProd);
     App.Store.set('products', PRODUCTS);
-    // שמירה ב-Firestore
     if (window.DB) {
       window.DB.collection('products').doc(newProd.id).set(newProd)
         .catch(function (e) { console.warn('Firestore save error:', e); });
@@ -575,13 +673,13 @@ var AdminView = {
   /* ===== IMPORT PRODUCTS ===== */
   _showImport: function () {
     var template = JSON.stringify([
-      { sku: '1010', name: 'שם המוצר', category: 'cups', price: 99, stock: 100, unit: "ל-100 יח'", description: 'תיאור קצר', image: '' }
+      { sku: '1010', name: 'שם המוצר', category: 'cups', price: 99, stock: 100, unitsPerPackage: 100, soldBy: 'קרטון', unitsPerContainer: 1000, description: 'תיאור קצר', image: '' }
     ], null, 2);
     App.showModal(
       '<h3><span class="material-icons-round">upload_file</span> ייבוא מוצרים מרשימה</h3>' +
       '<p style="font-size:13px;color:var(--text-muted);margin-bottom:8px">' +
-        'הדבק כאן רשימת מוצרים בפורמט JSON. כל מוצר חייב לכלול: <strong>sku, name, category, price, stock</strong><br>' +
-        'ערכים אפשריים ל-category: <code>cups</code> / <code>plates</code> / <code>napkins</code>' +
+        'הדבק כאן רשימת מוצרים בפורמט JSON. שדות חובה: <strong>sku, name, category, price, stock</strong><br>' +
+        'ערכים ל-category: <code>cups / plates / napkins</code>' +
       '</p>' +
       '<textarea id="import-json" rows="10" style="width:100%;background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px;font-size:12px;font-family:monospace;direction:ltr;resize:vertical">' +
         template +
@@ -597,65 +695,192 @@ var AdminView = {
   _runImport: function () {
     var raw = document.getElementById('import-json').value.trim();
     var list;
-    try {
-      list = JSON.parse(raw);
-      if (!Array.isArray(list)) throw new Error('not array');
-    } catch (e) {
-      App.toast('שגיאה בפורמט ה-JSON — בדוק את הרשימה', 'error');
-      return;
-    }
+    try { list = JSON.parse(raw); if (!Array.isArray(list)) throw new Error('not array'); }
+    catch (e) { App.toast('שגיאה בפורמט ה-JSON', 'error'); return; }
     var catLabels = { cups: 'כוסות', plates: 'צלחות', napkins: 'מפיות' };
     var catIcons  = { cups: '☕', plates: '🍽️', napkins: '🗒️' };
     var catColors = { cups: '#2d1e14', plates: '#142d1e', napkins: '#1e142d' };
-    var errors = [];
-    var batch  = window.DB ? window.DB.batch() : null;
-
+    var errors = []; var batch = window.DB ? window.DB.batch() : null;
     list.forEach(function (item, i) {
       if (!item.sku || !item.name || !item.category || item.price === undefined) {
-        errors.push('שורה ' + (i + 1) + ': חסרים שדות חובה');
-        return;
+        errors.push('שורה ' + (i + 1) + ': חסרים שדות חובה'); return;
       }
       var prod = {
-        id:            'prod-' + item.sku,
-        sku:           String(item.sku),
-        name:          item.name,
-        category:      item.category,
-        categoryLabel: catLabels[item.category] || item.category,
-        price:         parseFloat(item.price) || 0,
-        stock:         parseInt(item.stock) || 0,
-        unit:          item.unit || "ל-100 יח'",
-        description:   item.description || '',
-        icon:          catIcons[item.category] || '📦',
-        bgColor:       catColors[item.category] || '#1a2030',
-        image:         item.image || null
+        id:             'prod-' + item.sku,
+        sku:            String(item.sku),
+        name:           item.name,
+        category:       item.category,
+        categoryLabel:  catLabels[item.category] || item.category,
+        price:          parseFloat(item.price) || 0,
+        stock:          parseInt(item.stock) || 0,
+        description:    item.description || '',
+        icon:           catIcons[item.category] || '📦',
+        bgColor:        catColors[item.category] || '#1a2030',
+        image:          item.image || null,
+        unitsPerPackage:   parseInt(item.unitsPerPackage) || null,
+        soldBy:            item.soldBy || null,
+        unitsPerContainer: parseInt(item.unitsPerContainer) || null,
+        bulkDiscounts:     item.bulkDiscounts || []
       };
       var existing = PRODUCTS.findIndex(function (p) { return p.id === prod.id; });
-      if (existing > -1) PRODUCTS[existing] = prod;
-      else PRODUCTS.push(prod);
-      if (batch) {
-        var ref = window.DB.collection('products').doc(prod.id);
-        batch.set(ref, prod);
-      }
+      if (existing > -1) PRODUCTS[existing] = prod; else PRODUCTS.push(prod);
+      if (batch) { var ref = window.DB.collection('products').doc(prod.id); batch.set(ref, prod); }
     });
-
-    if (errors.length) {
-      App.toast(errors[0], 'error');
-      return;
-    }
-
+    if (errors.length) { App.toast(errors[0], 'error'); return; }
     App.Store.set('products', PRODUCTS);
-
     function finish() {
       App.closeModal();
-      App.toast('יובאו ' + list.length + ' מוצרים בהצלחה', 'success');
+      App.toast('יובאו ' + list.length + ' מוצרים', 'success');
       AdminView._products(document.getElementById('av-content'));
     }
+    if (batch) batch.commit().then(finish).catch(function () { finish(); });
+    else finish();
+  },
 
-    if (batch) {
-      batch.commit().then(finish).catch(function () { finish(); });
-    } else {
-      finish();
+  /* ===== QUOTE REQUESTS ===== */
+  _quoteRequests: function (c) {
+    c.innerHTML = '<div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div>';
+    if (!window.DB) {
+      c.innerHTML = '<div class="admin-section"><p style="color:var(--text-muted);padding:24px">Firestore לא מחובר</p></div>';
+      return;
     }
+    window.DB.collection('quote_requests').orderBy('requestedAt', 'desc').get()
+      .then(function (snap) {
+        var requests = [];
+        snap.forEach(function (d) { requests.push(Object.assign({ _id: d.id }, d.data())); });
+        var pendingCount = requests.filter(function (r) { return r.status === 'pending'; }).length;
+        var rows = requests.length ? requests.map(function (r) {
+          var d = new Date(r.requestedAt).toLocaleDateString('he-IL');
+          var statusBadge = r.status === 'approved'
+            ? '<span style="background:var(--green-dim);color:var(--green);border-radius:12px;padding:2px 10px;font-size:12px">אושר</span>'
+            : '<span style="background:var(--orange-dim);color:var(--orange);border-radius:12px;padding:2px 10px;font-size:12px">ממתין</span>';
+          return '<tr>' +
+            '<td>' + d + '</td>' +
+            '<td><strong>' + r.customerName + '</strong><div style="font-size:11px;color:var(--text-muted)">' + (r.customerPhone || '') + '</div></td>' +
+            '<td>' + r.productName + '<div style="font-size:11px;color:var(--text-muted)">מק"ט ' + (r.productSku || '') + '</div></td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td>' + (r.approvedPrice ? '₪' + r.approvedPrice : '—') + '</td>' +
+            '<td style="padding:8px">' +
+              (r.status === 'pending'
+                ? '<button class="btn-sm" onclick="AdminView._approveQuote(\'' + r._id + '\',\'' + r.customerId + '\',\'' + r.productId + '\')" title="אשר מחיר" style="background:var(--green-dim);color:var(--green)">' +
+                    '<span class="material-icons-round">price_check</span></button>'
+                : '') +
+            '</td></tr>';
+        }).join('')
+        : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">אין בקשות עדיין</td></tr>';
+
+        c.innerHTML = '<div class="admin-section">' +
+          '<div class="admin-section-header"><h2>בקשות להצעות מחיר' +
+            (pendingCount > 0 ? ' <span style="background:var(--orange);color:#fff;border-radius:12px;padding:2px 10px;font-size:12px;margin-right:6px">' + pendingCount + ' ממתינות</span>' : '') +
+          '</h2><span style="font-size:13px;color:var(--text-muted)">' + requests.length + ' סה"כ</span></div>' +
+          '<div class="table-wrap"><table class="admin-table">' +
+            '<thead><tr><th>תאריך</th><th>לקוח</th><th>מוצר</th><th>סטטוס</th><th>מחיר שאושר</th><th>פעולה</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table></div></div>';
+      })
+      .catch(function () {
+        c.innerHTML = '<div class="admin-section"><p style="color:var(--red);padding:24px">שגיאה בטעינת הבקשות</p></div>';
+      });
+  },
+
+  _approveQuote: function (requestId, customerId, productId) {
+    App.showModal(
+      '<h3><span class="material-icons-round">price_check</span> אשר הצעת מחיר</h3>' +
+      '<div class="customer-form">' +
+        '<div class="form-group"><label>מחיר אישי ללקוח (₪, לפני מע"מ)</label>' +
+          '<input type="number" id="aq-price" placeholder="הזן מחיר" min="0" step="0.01" style="font-size:20px;font-weight:700"></div>' +
+        '<div style="display:flex;gap:10px;margin-top:8px">' +
+          '<button class="btn-primary" onclick="AdminView._confirmApproveQuote(\'' + requestId + '\',\'' + customerId + '\',\'' + productId + '\')">' +
+            '<span class="material-icons-round">check</span> אשר ועדכן מחיר</button>' +
+          '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+        '</div>' +
+      '</div>'
+    );
+    setTimeout(function () {
+      var inp = document.getElementById('aq-price');
+      if (inp) inp.focus();
+    }, 100);
+  },
+
+  _confirmApproveQuote: function (requestId, customerId, productId) {
+    var priceInp = document.getElementById('aq-price');
+    var price    = priceInp ? parseFloat(priceInp.value) : NaN;
+    if (isNaN(price) || price <= 0) { App.toast('נא להזין מחיר תקין', 'warning'); return; }
+
+    /* עדכון מחיר אישי ללקוח */
+    var cu = CUSTOMERS_DB.find(function (x) { return x.id === customerId; });
+    if (cu) {
+      if (!cu.personalPrices) cu.personalPrices = {};
+      cu.personalPrices[productId] = price;
+      App.Store.set('customers', CUSTOMERS_DB);
+    }
+
+    /* עדכון Firestore - quote_requests */
+    if (window.DB) {
+      window.DB.collection('quote_requests').doc(requestId).update({
+        status: 'approved',
+        approvedPrice: price,
+        approvedAt: new Date().toISOString()
+      }).catch(function (e) { console.warn('quote update error:', e); });
+    }
+
+    App.closeModal();
+    App.toast('המחיר אושר ועודכן ללקוח ✅', 'success');
+    AdminView._quoteRequests(document.getElementById('av-content'));
+  },
+
+  /* ===== PRODUCT REQUESTS ===== */
+  _productRequests: function (c) {
+    c.innerHTML = '<div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div>';
+    if (!window.DB) {
+      c.innerHTML = '<div class="admin-section"><p style="color:var(--text-muted);padding:24px">Firestore לא מחובר</p></div>';
+      return;
+    }
+    window.DB.collection('product_requests').orderBy('requestedAt', 'desc').get()
+      .then(function (snap) {
+        var requests = [];
+        snap.forEach(function (d) { requests.push(Object.assign({ _id: d.id }, d.data())); });
+        var pendingCount = requests.filter(function (r) { return r.status === 'pending'; }).length;
+        var rows = requests.length ? requests.map(function (r) {
+          var d = new Date(r.requestedAt).toLocaleDateString('he-IL');
+          var statusBadge = r.status === 'handled'
+            ? '<span style="background:var(--green-dim);color:var(--green);border-radius:12px;padding:2px 10px;font-size:12px">טופל</span>'
+            : '<span style="background:var(--orange-dim);color:var(--orange);border-radius:12px;padding:2px 10px;font-size:12px">ממתין</span>';
+          return '<tr>' +
+            '<td>' + d + '</td>' +
+            '<td><strong>' + r.customerName + '</strong><div style="font-size:11px;color:var(--text-muted)">' + (r.customerPhone || '') + '</div></td>' +
+            '<td><strong>' + r.productName + '</strong>' + (r.estimatedQty ? '<div style="font-size:11px;color:var(--text-muted)">כמות משוערת: ' + r.estimatedQty + '</div>' : '') + '</td>' +
+            '<td>' + (r.notes || '—') + '</td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td style="padding:8px">' +
+              (r.status === 'pending'
+                ? '<button class="btn-sm" onclick="AdminView._markProductRequestHandled(\'' + r._id + '\')" title="סמן כטופל" style="background:var(--green-dim);color:var(--green)">' +
+                    '<span class="material-icons-round">check_circle</span></button>'
+                : '') +
+            '</td></tr>';
+        }).join('')
+        : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">אין בקשות עדיין</td></tr>';
+
+        c.innerHTML = '<div class="admin-section">' +
+          '<div class="admin-section-header"><h2>בקשות למוצרים חדשים' +
+            (pendingCount > 0 ? ' <span style="background:var(--orange);color:#fff;border-radius:12px;padding:2px 10px;font-size:12px;margin-right:6px">' + pendingCount + ' חדשות</span>' : '') +
+          '</h2><span style="font-size:13px;color:var(--text-muted)">' + requests.length + ' סה"כ</span></div>' +
+          '<div class="table-wrap"><table class="admin-table">' +
+            '<thead><tr><th>תאריך</th><th>לקוח</th><th>מוצר מבוקש</th><th>הערות</th><th>סטטוס</th><th>פעולה</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table></div></div>';
+      })
+      .catch(function () {
+        c.innerHTML = '<div class="admin-section"><p style="color:var(--red);padding:24px">שגיאה בטעינת הבקשות</p></div>';
+      });
+  },
+
+  _markProductRequestHandled: function (requestId) {
+    if (!window.DB) return;
+    window.DB.collection('product_requests').doc(requestId).update({ status: 'handled' })
+      .then(function () {
+        App.toast('סומן כטופל', 'success');
+        AdminView._productRequests(document.getElementById('av-content'));
+      })
+      .catch(function () { App.toast('שגיאה', 'error'); });
   },
 
   /* ===== STATISTICS ===== */
@@ -664,7 +889,7 @@ var AdminView = {
     var now = new Date();
     var m = now.getMonth(), y = now.getFullYear();
     var monthly = orders.filter(function (o) { var d = new Date(o.timestamp); return d.getMonth() === m && d.getFullYear() === y; });
-    var allTime = orders;
+    var allTime  = orders;
 
     function topProduct(list) {
       var counts = {};
@@ -785,11 +1010,11 @@ var AdminView = {
     var desc   = document.getElementById('fin-desc').value.trim();
     if (!amount || !desc) { App.toast('תיאור וסכום חובה', 'warning'); return; }
     var record = {
-      date: document.getElementById('fin-date').value,
+      date:        document.getElementById('fin-date').value,
       description: desc,
-      category: document.getElementById('fin-cat').value,
-      amount: amount,
-      type: document.getElementById('fin-type').value
+      category:    document.getElementById('fin-cat').value,
+      amount:      amount,
+      type:        document.getElementById('fin-type').value
     };
     var exp = App.Store.get('expenses') || [];
     exp.unshift(record);
@@ -815,7 +1040,7 @@ var AdminView = {
       '<div class="admin-section">' +
         '<div class="admin-section-header"><h2>הגדרות מערכת</h2></div>' +
         '<div class="settings-grid">' +
-          AdminView._fld('מינימום הזמנה למשלוח חינם (₪)', 'sv-min', s.minOrderAmount, 'number') +
+          AdminView._fld('מינימום הזמנה למשלוח חינם (₪, לפני מע"מ)', 'sv-min', s.minOrderAmount, 'number') +
           AdminView._fld('דמי משלוח ברירת מחדל (₪)', 'sv-ship', s.defaultShippingCost, 'number') +
           '<div class="form-group full-width"><label>הודעת מערכת (מוצגת ללקוחות אחרי כניסה)</label>' +
             '<textarea id="sv-sysmsg" rows="3">' + (s.systemMessage || '') + '</textarea></div>' +

@@ -26,6 +26,7 @@ var AdminSuppliers = {
       var prodCount = Object.values(AdminSuppliers._costs).filter(function (co) { return co.supplierId === s.id; }).length;
       return '<tr>' +
         '<td><strong>' + s.name + '</strong></td>' +
+        '<td><code style="font-size:12px">' + (s.vatId || '—') + '</code></td>' +
         '<td>' + (s.phone || '—') + '</td>' +
         '<td>' + (s.email || '—') + '</td>' +
         '<td>' + prodCount + ' מוצרים</td>' +
@@ -34,7 +35,7 @@ var AdminSuppliers = {
           '<button class="btn-sm" onclick="AdminSuppliers._editCosts(\'' + s.id + '\')" title="עלויות מוצרים"><span class="material-icons-round">price_change</span></button>' +
           '<button class="btn-sm danger" onclick="AdminSuppliers._deleteSupplier(\'' + s.id + '\')" title="מחק"><span class="material-icons-round">delete</span></button>' +
         '</td></tr>';
-    }).join('') || '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">אין ספקים עדיין</td></tr>';
+    }).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">אין ספקים עדיין</td></tr>';
 
     c.innerHTML = '<div class="admin-section">' +
       '<div class="admin-section-header"><h2>ספקים</h2>' +
@@ -42,7 +43,7 @@ var AdminSuppliers = {
           '<span class="material-icons-round">add</span> הוסף ספק</button>' +
       '</div>' +
       '<div class="table-wrap"><table class="admin-table">' +
-        '<thead><tr><th>שם ספק</th><th>טלפון</th><th>מייל</th><th>מוצרים</th><th>פעולות</th></tr></thead>' +
+        '<thead><tr><th>שם ספק</th><th>ח.פ</th><th>טלפון</th><th>מייל</th><th>מוצרים</th><th>פעולות</th></tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
       '</table></div></div>';
   },
@@ -53,6 +54,7 @@ var AdminSuppliers = {
       '<h3>' + (id ? 'עריכת ספק' : 'הוסף ספק חדש') + '</h3>' +
       '<div class="customer-form">' +
         '<div class="form-group"><label>שם ספק</label><input type="text" id="sf-name" value="' + (s.name || '') + '"></div>' +
+        '<div class="form-group"><label>ח.פ / עוסק מורשה</label><input type="text" id="sf-vat" value="' + (s.vatId || '') + '" placeholder="מספר ח.פ"></div>' +
         '<div class="form-group"><label>טלפון</label><input type="tel" id="sf-phone" value="' + (s.phone || '') + '"></div>' +
         '<div class="form-group"><label>מייל</label><input type="email" id="sf-email" value="' + (s.email || '') + '"></div>' +
         '<div class="form-group"><label>הערות</label><textarea id="sf-notes" rows="2">' + (s.notes || '') + '</textarea></div>' +
@@ -71,6 +73,7 @@ var AdminSuppliers = {
     if (!name) { App.toast('שם ספק חובה', 'warning'); return; }
     var data = {
       name:  name,
+      vatId: document.getElementById('sf-vat').value.trim(),
       phone: document.getElementById('sf-phone').value,
       email: document.getElementById('sf-email').value,
       notes: document.getElementById('sf-notes').value

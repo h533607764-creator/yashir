@@ -1,5 +1,5 @@
 /* =============================================================
-   ישיר — App Core v2
+   ישיר — App Core v3
    ============================================================= */
 var App = (function () {
   'use strict';
@@ -86,6 +86,28 @@ var App = (function () {
 
   /* ===== PRICING ===== */
   var Pricing = {
+    /* מחזיר את אחוז הנחת הכמות המקסימלי עבור qty נתון */
+    getBulkDiscountPct: function (product, qty) {
+      var discounts = product.bulkDiscounts;
+      if (!discounts || !discounts.length || !qty || qty < 1) return 0;
+      var best = 0;
+      discounts.forEach(function (d) {
+        if (qty >= d.minQty && d.discountPct > best) best = d.discountPct;
+      });
+      return best;
+    },
+
+    /* הסף המינימלי הבא שיפתח הנחת כמות */
+    getNextBulkThreshold: function (product, qty) {
+      var discounts = product.bulkDiscounts;
+      if (!discounts || !discounts.length) return null;
+      var sorted = discounts.slice().sort(function (a, b) { return a.minQty - b.minQty; });
+      for (var i = 0; i < sorted.length; i++) {
+        if (sorted[i].minQty > qty) return sorted[i];
+      }
+      return null;
+    },
+
     getUnitPrice: function (product, customer) {
       if (!customer) return null;
       var p = customer.personalPrices && customer.personalPrices[product.id];
@@ -95,15 +117,39 @@ var App = (function () {
       }
       return product.price;
     },
+
+    /* מחיר יחידה אחרי הנחה אישית + הנחת כמות */
+    getEffectiveUnitPrice: function (product, customer, qty) {
+      var basePrice = Pricing.getUnitPrice(product, customer);
+      if (basePrice === null) return null;
+      var bulkPct = Pricing.getBulkDiscountPct(product, qty);
+      if (bulkPct > 0) {
+        return parseFloat((basePrice * (1 - bulkPct / 100)).toFixed(2));
+      }
+      return basePrice;
+    },
+
     getDiscountPct: function (product, customer) {
       if (!customer) return 0;
       var p = customer.personalPrices && customer.personalPrices[product.id];
       if (p !== undefined) return parseFloat(Math.max(0, (1 - p / product.price) * 100).toFixed(2));
       return customer.generalDiscount || 0;
     },
+
+    /* אחוז הנחה כולל (אישי + כמות) */
+    getTotalDiscountPct: function (product, customer, qty) {
+      var personalPct = Pricing.getDiscountPct(product, customer);
+      var bulkPct     = Pricing.getBulkDiscountPct(product, qty);
+      if (personalPct === 0 && bulkPct === 0) return 0;
+      /* חישוב מצטבר: (1 - personal%) * (1 - bulk%) */
+      var effectivePrice = product.price * (1 - personalPct / 100) * (1 - bulkPct / 100);
+      return parseFloat(Math.max(0, (1 - effectivePrice / product.price) * 100).toFixed(2));
+    },
+
     hasPersonal: function (product, customer) {
       return !!(customer && customer.personalPrices && customer.personalPrices[product.id] !== undefined);
     },
+
     calcTotals: function (items) {
       var subtotal = 0, savings = 0;
       items.forEach(function (i) {
@@ -135,41 +181,62 @@ var App = (function () {
       if (isOOS) {
         toast('מוצר חסר במלאי — ייתכן עיכוב ביום', 'warning');
       }
+
       var existing = state.cart.find(function (i) { return i.product.id === product.id; });
       if (existing) {
         existing.qty += qty;
+        /* עדכון מחיר אחרי שינוי כמות (הנחת כמות) */
+        var newEffective = Pricing.getEffectiveUnitPrice(product, customer, existing.qty);
+        if (newEffective !== null) existing.unitPrice = newEffective;
+        existing.discountPct = Pricing.getTotalDiscountPct(product, customer, existing.qty);
       } else {
+        var effectivePrice = Pricing.getEffectiveUnitPrice(product, customer, qty);
+        var totalDisc      = Pricing.getTotalDiscountPct(product, customer, qty);
         state.cart.push({
-          product: product,
-          qty: qty,
-          unitPrice: Pricing.getUnitPrice(product, customer),
-          discountPct: Pricing.getDiscountPct(product, customer),
-          outOfStock: isOOS
+          product:     product,
+          qty:         qty,
+          unitPrice:   effectivePrice !== null ? effectivePrice : product.price,
+          discountPct: totalDisc,
+          outOfStock:  isOOS
         });
       }
+
       Cart._save();
       Cart.updateBadge();
       toast('נוסף לעגלה ✓' + (isOOS ? ' (חסר במלאי)' : ''), isOOS ? 'warning' : 'success');
     },
+
     remove: function (id) {
       state.cart = state.cart.filter(function (i) { return i.product.id !== id; });
       Cart._save();
       Cart.updateBadge();
       if (state.cartOpen) CartView.renderPanel();
     },
+
     updateQty: function (id, qty) {
       if (qty < 1) { Cart.remove(id); return; }
       var item = state.cart.find(function (i) { return i.product.id === id; });
-      if (item) item.qty = qty;
+      if (item) {
+        item.qty = qty;
+        /* עדכון מחיר לפי הנחת כמות חדשה */
+        var customer = Auth.isCustomer() ? state.currentUser.customer : null;
+        if (customer) {
+          var newPrice = Pricing.getEffectiveUnitPrice(item.product, customer, qty);
+          if (newPrice !== null) item.unitPrice = newPrice;
+          item.discountPct = Pricing.getTotalDiscountPct(item.product, customer, qty);
+        }
+      }
       Cart._save();
       Cart.updateBadge();
       if (state.cartOpen) CartView.renderPanel();
     },
+
     clear: function () {
       state.cart = [];
       if (Auth.isCustomer()) Store.del('cart_' + state.currentUser.customer.id);
       Cart.updateBadge();
     },
+
     count: function () { return state.cart.reduce(function (s, i) { return s + i.qty; }, 0); },
     subtotal: function () { return parseFloat(state.cart.reduce(function (s, i) { return s + i.unitPrice * i.qty; }, 0).toFixed(2)); },
     needsShipping: function () { return Cart.subtotal() < state.settings.minOrderAmount; },
@@ -178,6 +245,7 @@ var App = (function () {
       return c ? (c.shippingCost || state.settings.defaultShippingCost) : state.settings.defaultShippingCost;
     },
     hasOOS: function () { return state.cart.some(function (i) { return i.outOfStock || i.product.stock === 0; }); },
+
     updateBadge: function () {
       var badge = document.getElementById('cart-badge');
       var fab = document.getElementById('cart-fab-btn');
@@ -187,6 +255,7 @@ var App = (function () {
       badge.style.display = n > 0 ? 'flex' : 'none';
       if (fab) fab.classList.toggle('has-items', n > 0);
     },
+
     _save: function () {
       if (!Auth.isCustomer()) return;
       var cid = state.currentUser.customer.id;
@@ -194,6 +263,7 @@ var App = (function () {
         return { pid: i.product.id, qty: i.qty, unitPrice: i.unitPrice, discountPct: i.discountPct, outOfStock: i.outOfStock };
       }));
     },
+
     _restore: function () {
       if (!Auth.isCustomer()) return;
       var cid = state.currentUser.customer.id;
@@ -247,20 +317,47 @@ var App = (function () {
           .catch(function (e) { console.warn('Firestore order error:', e); });
       }
 
-      // התראת WhatsApp למנהל
       var adminPhone = state.settings.adminPhone;
+      var adminEmail = state.settings.adminEmail;
+
+      var itemsList = items.filter(function(i){ return i.product.sku !== '1000'; })
+        .map(function(i){ return '• ' + i.product.name + ' ×' + i.qty + ' ₪' + fmtP(i.unitPrice * i.qty); }).join('\n');
+
+      var waMsg = '🛒 *הזמנה חדשה #' + id + '*\n' +
+        '👤 ' + customer.name + '\n' +
+        '📱 ' + (customer.phone || '—') + '\n' +
+        '📦 ' + state.cart.length + ' פריטים\n' +
+        itemsList + '\n' +
+        '💰 לפני מע"מ: ₪' + totals.subtotal + '\n' +
+        '💰 סה"כ כולל מע"מ: ₪' + totals.total +
+        (notes ? '\n📝 ' + notes : '');
+
+      // WhatsApp למנהל
       if (adminPhone) {
         var ph = adminPhone.replace(/\D/g, '');
         if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-        var waMsg = '🛒 *הזמנה חדשה #' + id + '*\n' +
-          '👤 ' + customer.name + '\n' +
-          '📱 ' + (customer.phone || '—') + '\n' +
-          '📦 ' + state.cart.length + ' פריטים\n' +
-          '💰 סה"כ: ₪' + totals.total +
-          (notes ? '\n📝 ' + notes : '');
         setTimeout(function () {
           window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
         }, 900);
+      }
+
+      // מייל למנהל
+      if (adminEmail) {
+        var mailSubject = 'הזמנה חדשה #' + id + ' — ' + customer.name;
+        var mailBody = 'הזמנה חדשה התקבלה:\n\n' +
+          'מספר הזמנה: #' + id + '\n' +
+          'לקוח: ' + customer.name + '\n' +
+          'טלפון: ' + (customer.phone || '—') + '\n' +
+          'מייל: ' + (customer.email || '—') + '\n\n' +
+          'פריטים:\n' + itemsList + '\n\n' +
+          'סה"כ לפני מע"מ: ₪' + totals.subtotal + '\n' +
+          'מע"מ: ₪' + totals.vat + '\n' +
+          'סה"כ כולל מע"מ: ₪' + totals.total +
+          (notes ? '\n\nהערות: ' + notes : '') +
+          '\n\nישיר שיווק והפצה';
+        setTimeout(function () {
+          window.open('mailto:' + adminEmail + '?subject=' + encodeURIComponent(mailSubject) + '&body=' + encodeURIComponent(mailBody), '_blank');
+        }, 1800);
       }
 
       state.settings.nextOrderId++;
@@ -269,18 +366,17 @@ var App = (function () {
       closeCart();
       navigate('success', { order: order });
     },
+
     getAll: function () { return Store.get('orders') || []; },
+
     updateStatus: function (orderId, newStatus, customerPhone) {
-      // עדכון localStorage
       var all = Store.get('orders') || [];
       var o = all.find(function (x) { return String(x.id) === String(orderId); });
       if (o) { o.status = newStatus; Store.set('orders', all); }
-      // עדכון Firestore
       if (window.DB) {
         window.DB.collection('orders').doc(String(orderId)).update({ status: newStatus })
           .catch(function (e) { console.warn('status update error:', e); });
       }
-      // WhatsApp ללקוח כשסופק
       if (newStatus === 'delivered' && customerPhone) {
         var ph = customerPhone.replace(/\D/g, '');
         if (ph.startsWith('0')) ph = '972' + ph.substring(1);
@@ -289,6 +385,7 @@ var App = (function () {
         window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(msg), '_blank');
       }
     },
+
     updatePayment: function (orderId, paymentStatus) {
       var all = Store.get('orders') || [];
       var o = all.find(function (x) { return String(x.id) === String(orderId); });
@@ -356,18 +453,32 @@ var App = (function () {
       '<span id="cart-badge" style="display:' + (n > 0 ? 'flex' : 'none') + '">' + n + '</span></button>';
   }
 
+  /* ===== FLOATING BUTTONS ===== */
   function updateFloatBtns() {
     var wrap = document.getElementById('floating-btns');
     if (!wrap) return;
-    // כפתורים צפים מוצגים רק בדף הבית
-    if (state.currentView !== 'landing') { wrap.innerHTML = ''; return; }
-    wrap.innerHTML =
-      '<button class="float-btn order-btn" onclick="App.startOrder()">' +
-        '<span class="material-icons-round">shopping_bag</span><span>התחלת הזמנה</span>' +
-      '</button>' +
-      '<button class="float-btn catalog-btn" onclick="App.navigate(\'catalog\')">' +
-        '<span class="material-icons-round">menu_book</span><span>הקטלוג שלנו</span>' +
-      '</button>';
+
+    if (state.currentView === 'landing') {
+      /* דף נחיתה — כפתורי כניסה להזמנה וקטלוג */
+      wrap.innerHTML =
+        '<button class="float-btn order-btn" onclick="App.startOrder()">' +
+          '<span class="material-icons-round">shopping_bag</span><span class="float-btn-text">התחלת הזמנה</span>' +
+        '</button>' +
+        '<button class="float-btn catalog-btn" onclick="App.navigate(\'catalog\')">' +
+          '<span class="material-icons-round">menu_book</span><span class="float-btn-text">הקטלוג שלנו</span>' +
+        '</button>';
+    } else if (state.currentView === 'catalog' && Auth.isCustomer()) {
+      /* דף קטלוג — כפתור קטלוג מלא + בקשת מוצר חדש */
+      wrap.innerHTML =
+        '<button class="float-btn request-btn" onclick="CatalogView.requestNewProduct()">' +
+          '<span class="material-icons-round">add_circle</span><span class="float-btn-text">בקשת מוצר חדש</span>' +
+        '</button>' +
+        '<button class="float-btn catalog-btn" onclick="CatalogView.goFullCatalog()">' +
+          '<span class="material-icons-round">menu_book</span><span class="float-btn-text">קטלוג מלא</span>' +
+        '</button>';
+    } else {
+      wrap.innerHTML = '';
+    }
   }
 
   /* ===== CART PANEL ===== */
@@ -460,7 +571,10 @@ var App = (function () {
       'background:var(--navy-mid);border:1px solid var(--border);border-radius:14px;' +
       'padding:20px;box-shadow:0 8px 40px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:12px;min-width:260px;max-width:90vw';
     document.body.appendChild(el);
-    setTimeout(function () { var p = document.getElementById('sec-pin'); if (p) { p.focus(); p.addEventListener('keydown', function (e) { if (e.key === 'Enter') _secretLogin(); }); } }, 50);
+    setTimeout(function () {
+      var p = document.getElementById('sec-pin');
+      if (p) { p.focus(); p.addEventListener('keydown', function (e) { if (e.key === 'Enter') _secretLogin(); }); }
+    }, 50);
     setTimeout(function () {
       function away(e) {
         var box = document.getElementById('secret-admin');
@@ -488,10 +602,10 @@ var App = (function () {
   function checkLowStock(product) {
     var threshold = product.lowStockThreshold != null ? product.lowStockThreshold : 10;
     if (product.stock > 0 && product.stock <= threshold) {
-      var phone = '9720552961177';
-      var email = 'yashir.shivuk@gmail.com';
+      var phone = state.settings.adminPhone || '9720552961177';
+      var email = state.settings.adminEmail || 'yashir.shivuk@gmail.com';
       var txt   = 'התראת מלאי נמוך: מוצר "' + product.name + '" (מק"ט ' + product.sku + ') — נשארו ' + product.stock + ' יחידות.';
-      var waUrl = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(txt);
+      var waUrl = 'https://wa.me/' + phone.replace(/\D/g,'').replace(/^0/,'972') + '?text=' + encodeURIComponent(txt);
       var mlUrl = 'mailto:' + email + '?subject=' + encodeURIComponent('התראת מלאי נמוך — ' + product.name) +
                   '&body=' + encodeURIComponent(txt + '\n\nישיר שיווק והפצה');
       showModal(
@@ -536,7 +650,8 @@ var App = (function () {
     navigate: navigate, toggleCart: toggleCart, openCart: openCart, closeCart: closeCart,
     showModal: showModal, closeModal: closeModal, toast: toast,
     showSystemMsg: showSystemMsg, startOrder: startOrder,
-    renderHeader: renderHeader, saveSettings: function () { Store.set('settings', state.settings); },
+    renderHeader: renderHeader, updateFloatBtns: updateFloatBtns,
+    saveSettings: function () { Store.set('settings', state.settings); },
     checkLowStock: checkLowStock,
     _logoClick: _logoClick, _showSecretAdmin: _showSecretAdmin, _secretLogin: _secretLogin,
     updateOrderStatus: Orders.updateStatus,
