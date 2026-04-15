@@ -48,7 +48,7 @@ const PRODUCTS_DATA = [
   /* -------- צלחות -------- */
   {
     id: 'plate-001',
-    name: 'צלחת קרטון עגולה 7"',
+    name: 'צלחת מקרטון עגולה 7"',
     category: 'plates',
     categoryLabel: 'צלחות',
     price: 69,
@@ -56,11 +56,11 @@ const PRODUCTS_DATA = [
     stock: 200,
     icon: '🍽️',
     bgColor: '#F0FFF4',
-    description: "צלחת קרטון לבנה חזקה, מתאימה לאוכל חם וקר",
+    description: "צלחת מקרטון לבנה חזקה, מתאימה לאוכל חם וקר",
   },
   {
     id: 'plate-002',
-    name: 'צלחת קרטון מחולקת 9"',
+    name: 'צלחת מקרטון מחולקת 9"',
     category: 'plates',
     categoryLabel: 'צלחות',
     price: 89,
