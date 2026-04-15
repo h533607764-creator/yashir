@@ -276,26 +276,26 @@ var AdminView = {
       personalPrices:  existing ? (existing.personalPrices || {}) : {}
     };
     if (origId && origId !== id) {
-      /* ח.פ שונה — מחיקת הישן והוספת חדש */
       var oldIdx = CUSTOMERS_DB.findIndex(function (x) { return x.id === origId; });
       if (oldIdx > -1) CUSTOMERS_DB.splice(oldIdx, 1);
       CUSTOMERS_DB.push(data);
+      DBSync.deleteCustomer(origId);
     } else if (origId) {
       var idx = CUSTOMERS_DB.findIndex(function (x) { return x.id === origId; });
       if (idx > -1) CUSTOMERS_DB[idx] = data; else CUSTOMERS_DB.push(data);
     } else {
       CUSTOMERS_DB.push(data);
     }
-    App.Store.set('customers', CUSTOMERS_DB);
+    DBSync.saveCustomer(data);
     App.closeModal();
-    App.toast('הלקוח נשמר', 'success');
+    App.toast('הלקוח נשמר ✅', 'success');
     AdminView._customers(document.getElementById('av-content'));
   },
 
   _delCust: function (id) {
     if (!confirm('למחוק לקוח ' + id + '?')) return;
     window.CUSTOMERS_DB = CUSTOMERS_DB.filter(function (x) { return x.id !== id; });
-    App.Store.set('customers', CUSTOMERS_DB);
+    DBSync.deleteCustomer(id);
     App.toast('הלקוח נמחק', 'success');
     AdminView._customers(document.getElementById('av-content'));
   },
@@ -362,9 +362,9 @@ var AdminView = {
       var inp = document.getElementById('pp-price-' + p.id);
       if (inp && inp.value !== '') cu.personalPrices[p.id] = parseFloat(parseFloat(inp.value).toFixed(2));
     });
-    App.Store.set('customers', CUSTOMERS_DB);
+    DBSync.saveCustomer(cu);
     App.closeModal();
-    App.toast('המחירים האישיים נשמרו', 'success');
+    App.toast('המחירים האישיים נשמרו ✅', 'success');
   },
 
   /* ===== PRODUCTS ===== */
@@ -811,7 +811,7 @@ var AdminView = {
     if (cu) {
       if (!cu.personalPrices) cu.personalPrices = {};
       cu.personalPrices[productId] = price;
-      App.Store.set('customers', CUSTOMERS_DB);
+      DBSync.saveCustomer(cu);
     }
 
     /* עדכון Firestore - quote_requests */

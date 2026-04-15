@@ -643,21 +643,35 @@ var App = (function () {
       setTimeout(showSystemMsg, 800);
     }
 
-    /* טעינת מוצרים מ-Firestore (מקור האמת היחיד) */
+    /* ─── סינכרון מ-Firestore ─── */
     if (window.DB) {
+      /* 1. מוצרים */
       loadProductsFromFirestore(
         function () {
-          /* הצלחה — שמור גם ב-localStorage כגיבוי ורענן תצוגה */
           App.Store.set('products', window.PRODUCTS);
           var el = document.getElementById('view-content');
-          if (el && state.currentView === 'catalog') {
-            CatalogView.render(el);
-          }
+          if (el && state.currentView === 'catalog') CatalogView.render(el);
         },
-        function () {
-          /* timeout/שגיאה — נשאר עם localStorage או static */
-        }
+        function () {}
       );
+
+      /* 2. לקוחות + הגדרות (דרך DBSync) */
+      DBSync.loadCustomers(function (ok) {
+        if (ok) {
+          /* אם המשתמש המחובר הוא לקוח — רענן את האובייקט שלו מהמידע החדש */
+          if (state.currentUser && state.currentUser.role === 'customer') {
+            var fresh = (window.CUSTOMERS_DB || []).find(function (c) {
+              return c.id === state.currentUser.customer.id;
+            });
+            if (fresh) state.currentUser.customer = fresh;
+          }
+        }
+      });
+
+      DBSync.loadSettings(function () {
+        /* רענן header אם הגדרות עודכנו */
+        renderHeader();
+      });
     }
   }
 
@@ -670,7 +684,10 @@ var App = (function () {
     showModal: showModal, closeModal: closeModal, toast: toast,
     showSystemMsg: showSystemMsg, startOrder: startOrder,
     renderHeader: renderHeader, updateFloatBtns: updateFloatBtns,
-    saveSettings: function () { Store.set('settings', state.settings); },
+    saveSettings: function () {
+      Store.set('settings', state.settings);
+      if (window.DBSync) DBSync.saveSettings(state.settings);
+    },
     checkLowStock: checkLowStock,
     _logoClick: _logoClick, _showSecretAdmin: _showSecretAdmin, _secretLogin: _secretLogin,
     updateOrderStatus: Orders.updateStatus,
