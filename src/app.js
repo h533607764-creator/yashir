@@ -44,8 +44,10 @@ var App = (function () {
     if (s) Object.assign(state.settings, s);
     var c = Store.get('customers');
     if (c) window.CUSTOMERS_DB = c;
+    /* מוצרים: טוען מ-localStorage כ-fallback מהיר בלבד —
+       הסנכרון האמיתי מגיע מ-Firestore בסוף init() */
     var p = Store.get('products');
-    if (p) window.PRODUCTS = p;
+    if (p && p.length) window.PRODUCTS = p;
     if (!Store.get('orders'))   Store.set('orders', []);
     if (!Store.get('expenses')) Store.set('expenses', []);
   }
@@ -639,6 +641,23 @@ var App = (function () {
     if (Auth.isCustomer()) {
       renderCartFab();
       setTimeout(showSystemMsg, 800);
+    }
+
+    /* טעינת מוצרים מ-Firestore (מקור האמת היחיד) */
+    if (window.DB) {
+      loadProductsFromFirestore(
+        function () {
+          /* הצלחה — שמור גם ב-localStorage כגיבוי ורענן תצוגה */
+          App.Store.set('products', window.PRODUCTS);
+          var el = document.getElementById('view-content');
+          if (el && state.currentView === 'catalog') {
+            CatalogView.render(el);
+          }
+        },
+        function () {
+          /* timeout/שגיאה — נשאר עם localStorage או static */
+        }
+      );
     }
   }
 
