@@ -23,6 +23,8 @@ var App = (function () {
       vatRate: 0.18,
       nextOrderId: 352436352,
       adminPin: '1234',
+      adminPhone: '',
+      adminEmail: '',
       systemMessage: 'ברוכים הבאים לישיר! הזמינו עד יום ג׳ לאספקה ביום ה׳.',
       landingTitle: 'רמה אחת מעל, דאגה אחת פחות',
       landingSubtitle: 'ישיר שיווק והפצה — מוצרים חד-פעמיים לעסקים ואירועים'
@@ -96,7 +98,7 @@ var App = (function () {
     getDiscountPct: function (product, customer) {
       if (!customer) return 0;
       var p = customer.personalPrices && customer.personalPrices[product.id];
-      if (p !== undefined) return Math.max(0, Math.round((1 - p / product.price) * 100));
+      if (p !== undefined) return parseFloat(Math.max(0, (1 - p / product.price) * 100).toFixed(2));
       return customer.generalDiscount || 0;
     },
     hasPersonal: function (product, customer) {
@@ -218,21 +220,84 @@ var App = (function () {
       var totals = Pricing.calcTotals(items);
       var id = state.settings.nextOrderId;
       var order = {
-        id: id, customerId: customer.id, customerName: customer.name,
-        items: items, subtotal: totals.subtotal, vat: totals.vat,
-        total: totals.total, savings: totals.savings,
-        notes: notes || '', timestamp: new Date().toISOString(), status: 'pending'
+        id: id,
+        customerId: customer.id,
+        customerName: customer.name,
+        customerPhone: customer.phone || '',
+        customerEmail: customer.email || '',
+        items: items,
+        subtotal: totals.subtotal,
+        vat: totals.vat,
+        total: totals.total,
+        savings: totals.savings,
+        notes: notes || '',
+        timestamp: new Date().toISOString(),
+        status: 'new',
+        paymentStatus: 'unpaid'
       };
+
+      // שמירה ב-localStorage
       var all = Store.get('orders') || [];
       all.unshift(order);
       Store.set('orders', all);
+
+      // שמירה ב-Firestore
+      if (window.DB) {
+        window.DB.collection('orders').doc(String(id)).set(order)
+          .catch(function (e) { console.warn('Firestore order error:', e); });
+      }
+
+      // התראת WhatsApp למנהל
+      var adminPhone = state.settings.adminPhone;
+      if (adminPhone) {
+        var ph = adminPhone.replace(/\D/g, '');
+        if (ph.startsWith('0')) ph = '972' + ph.substring(1);
+        var waMsg = '🛒 *הזמנה חדשה #' + id + '*\n' +
+          '👤 ' + customer.name + '\n' +
+          '📱 ' + (customer.phone || '—') + '\n' +
+          '📦 ' + state.cart.length + ' פריטים\n' +
+          '💰 סה"כ: ₪' + totals.total +
+          (notes ? '\n📝 ' + notes : '');
+        setTimeout(function () {
+          window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
+        }, 900);
+      }
+
       state.settings.nextOrderId++;
       Store.set('settings', state.settings);
       Cart.clear();
       closeCart();
       navigate('success', { order: order });
     },
-    getAll: function () { return Store.get('orders') || []; }
+    getAll: function () { return Store.get('orders') || []; },
+    updateStatus: function (orderId, newStatus, customerPhone) {
+      // עדכון localStorage
+      var all = Store.get('orders') || [];
+      var o = all.find(function (x) { return String(x.id) === String(orderId); });
+      if (o) { o.status = newStatus; Store.set('orders', all); }
+      // עדכון Firestore
+      if (window.DB) {
+        window.DB.collection('orders').doc(String(orderId)).update({ status: newStatus })
+          .catch(function (e) { console.warn('status update error:', e); });
+      }
+      // WhatsApp ללקוח כשסופק
+      if (newStatus === 'delivered' && customerPhone) {
+        var ph = customerPhone.replace(/\D/g, '');
+        if (ph.startsWith('0')) ph = '972' + ph.substring(1);
+        var msg = '✅ *הזמנה #' + orderId + ' סופקה!*\n' +
+          'שלום! ההזמנה שלך הגיעה.\nתודה שהזמנת מישיר שיווק והפצה 🙏';
+        window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(msg), '_blank');
+      }
+    },
+    updatePayment: function (orderId, paymentStatus) {
+      var all = Store.get('orders') || [];
+      var o = all.find(function (x) { return String(x.id) === String(orderId); });
+      if (o) { o.paymentStatus = paymentStatus; Store.set('orders', all); }
+      if (window.DB) {
+        window.DB.collection('orders').doc(String(orderId)).update({ paymentStatus: paymentStatus })
+          .catch(function (e) { console.warn('payment update error:', e); });
+      }
+    }
   };
 
   /* ===== ROUTING ===== */
@@ -294,7 +359,8 @@ var App = (function () {
   function updateFloatBtns() {
     var wrap = document.getElementById('floating-btns');
     if (!wrap) return;
-    if (state.currentView === 'success') { wrap.innerHTML = ''; return; }
+    // כפתורים צפים מוצגים רק בדף הבית
+    if (state.currentView !== 'landing') { wrap.innerHTML = ''; return; }
     wrap.innerHTML =
       '<button class="float-btn order-btn" onclick="App.startOrder()">' +
         '<span class="material-icons-round">shopping_bag</span><span>התחלת הזמנה</span>' +
@@ -472,6 +538,8 @@ var App = (function () {
     showSystemMsg: showSystemMsg, startOrder: startOrder,
     renderHeader: renderHeader, saveSettings: function () { Store.set('settings', state.settings); },
     checkLowStock: checkLowStock,
-    _logoClick: _logoClick, _showSecretAdmin: _showSecretAdmin, _secretLogin: _secretLogin
+    _logoClick: _logoClick, _showSecretAdmin: _showSecretAdmin, _secretLogin: _secretLogin,
+    updateOrderStatus: Orders.updateStatus,
+    updateOrderPayment: Orders.updatePayment
   };
 })();

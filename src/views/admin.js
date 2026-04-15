@@ -1,5 +1,7 @@
 var AdminView = {
   _tab: 'orders',
+  _ordersUnsub: null,
+  _lastOrders: [],
 
   render: function (el, params) {
     params = params || {};
@@ -8,6 +10,8 @@ var AdminView = {
       { id: 'orders',    label: 'הזמנות',     icon: 'list_alt' },
       { id: 'customers', label: 'לקוחות',     icon: 'people' },
       { id: 'products',  label: 'מוצרים',     icon: 'inventory_2' },
+      { id: 'suppliers', label: 'ספקים',      icon: 'local_shipping' },
+      { id: 'profit',    label: 'רווח',        icon: 'trending_up' },
       { id: 'stats',     label: 'סטטיסטיקות', icon: 'bar_chart' },
       { id: 'financial', label: 'פיננסי',     icon: 'account_balance_wallet' },
       { id: 'settings',  label: 'הגדרות',     icon: 'settings' }
@@ -24,9 +28,13 @@ var AdminView = {
         '<div id="av-content"></div>' +
       '</div></div>';
     AdminView._render(AdminView._tab);
+    setTimeout(AdminView._checkNewOrders, 700);
   },
 
   tab: function (id) {
+    if (AdminView._tab === 'orders' && id !== 'orders' && AdminView._ordersUnsub) {
+      AdminView._ordersUnsub(); AdminView._ordersUnsub = null;
+    }
     AdminView._tab = id;
     document.querySelectorAll('.admin-tab').forEach(function (b) { b.classList.remove('active'); });
     var btn = document.querySelector('.admin-tab[onclick="AdminView.tab(\'' + id + '\')"]');
@@ -37,41 +45,118 @@ var AdminView = {
   _render: function (id) {
     var c = document.getElementById('av-content');
     if (!c) return;
-    var map = { orders: AdminView._orders, customers: AdminView._customers, products: AdminView._products, stats: AdminView._stats, financial: AdminView._financial, settings: AdminView._settings };
+    var map = {
+      orders:    AdminView._orders,
+      customers: AdminView._customers,
+      products:  AdminView._products,
+      suppliers: function (c) { AdminSuppliers.render(c); },
+      profit:    function (c) { AdminProfit.render(c); },
+      stats:     AdminView._stats,
+      financial: AdminView._financial,
+      settings:  AdminView._settings
+    };
     if (map[id]) map[id](c);
   },
 
   /* ===== ORDERS ===== */
   _orders: function (c) {
-    var all = App.Orders.getAll();
-    var rows = all.length
-      ? all.map(function (o) {
-          var d = new Date(o.timestamp).toLocaleDateString('he-IL');
-          return '<tr>' +
-            '<td><strong>' + o.id + '</strong></td>' +
-            '<td>' + o.customerName + '</td>' +
-            '<td>' + d + '</td>' +
-            '<td style="color:var(--blue);font-weight:700">₪' + o.total + '</td>' +
-            '<td><span class="status-badge ' + o.status + '">' + (o.status === 'pending' ? 'בטיפול' : 'הושלם') + '</span></td>' +
-            '<td style="display:flex;gap:6px;padding:8px">' +
-              '<button class="btn-sm" title="צפה" onclick="AdminView._viewOrder(' + o.id + ')"><span class="material-icons-round">visibility</span></button>' +
-              '<button class="btn-sm" title="תעודה" onclick="SuccessView.printNote(' + o.id + ')"><span class="material-icons-round">print</span></button>' +
-            '</td></tr>';
-        }).join('')
-      : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">אין הזמנות עדיין</td></tr>';
+    var SL = { new:'חדש', processing:'בטיפול', ready:'מוכן למשלוח', shipped:'יצא למשלוח', delivered:'הגיע ללקוח' };
+    var SC = { new:'var(--orange)', processing:'var(--blue)', ready:'#8b5cf6', shipped:'#06b6d4', delivered:'#22c55e' };
 
-    c.innerHTML = '<div class="admin-section">' +
-      '<div class="admin-section-header"><h2>הזמנות</h2>' +
-        '<span style="font-size:13px;color:var(--text-muted)">' + all.length + ' הזמנות סה"כ</span>' +
-      '</div>' +
-      '<div class="table-wrap"><table class="admin-table">' +
-        '<thead><tr><th>מספר</th><th>לקוח</th><th>תאריך</th><th>סה"כ</th><th>סטטוס</th><th>פעולות</th></tr></thead>' +
-        '<tbody>' + rows + '</tbody>' +
-      '</table></div></div>';
+    c.innerHTML = '<div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div>';
+
+    if (AdminView._ordersUnsub) { AdminView._ordersUnsub(); AdminView._ordersUnsub = null; }
+
+    function renderOrders(all) {
+      AdminView._lastOrders = all;
+      var newCount = all.filter(function (o) { return o.status === 'new'; }).length;
+      var rows = all.length ? all.map(function (o) {
+        var d = new Date(o.timestamp).toLocaleDateString('he-IL');
+        var paid = o.paymentStatus === 'paid';
+        var ph = (o.customerPhone || '').replace(/'/g, '');
+        var sOpts = Object.keys(SL).map(function (s) {
+          return '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' + SL[s] + '</option>';
+        }).join('');
+        return '<tr>' +
+          '<td><strong>' + o.id + '</strong></td>' +
+          '<td><div>' + o.customerName + '</div>' +
+            (o.customerPhone ? '<div style="font-size:11px;color:var(--text-muted)">' + o.customerPhone + '</div>' : '') +
+          '</td>' +
+          '<td>' + d + '</td>' +
+          '<td style="color:var(--blue);font-weight:700">₪' + o.total + '</td>' +
+          '<td><select onchange="AdminView._setStatus(\'' + o.id + '\',this.value,\'' + ph + '\')" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:' + (SC[o.status] || 'var(--text)') + '">' + sOpts + '</select></td>' +
+          '<td><button class="btn-sm" onclick="AdminView._togglePayment(\'' + o.id + '\',\'' + (o.paymentStatus||'unpaid') + '\')" style="font-size:11px;white-space:nowrap">' +
+            (paid ? '✅ שולם' : '⏳ ממתין') + '</button></td>' +
+          '<td style="display:flex;gap:4px;padding:8px;flex-wrap:wrap">' +
+            '<button class="btn-sm" title="צפה" onclick="AdminView._viewOrder(\'' + o.id + '\')"><span class="material-icons-round">visibility</span></button>' +
+            '<button class="btn-sm" title="תעודה" onclick="SuccessView.printNote(\'' + o.id + '\')"><span class="material-icons-round">print</span></button>' +
+            (ph ? '<button class="btn-sm" title="WhatsApp" onclick="AdminView._waOrder(\'' + o.id + '\',\'' + ph + '\')" style="background:#25d366;color:#fff"><span class="material-icons-round">chat</span></button>' : '') +
+          '</td></tr>';
+      }).join('') : '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">אין הזמנות עדיין</td></tr>';
+
+      c.innerHTML = '<div class="admin-section">' +
+        '<div class="admin-section-header"><h2>הזמנות' +
+          (newCount > 0 ? ' <span style="background:var(--orange);color:#fff;border-radius:12px;padding:2px 10px;font-size:12px;margin-right:6px">' + newCount + ' חדשות</span>' : '') +
+        '</h2><span style="font-size:13px;color:var(--text-muted)">' + all.length + ' סה"כ</span></div>' +
+        '<div class="table-wrap"><table class="admin-table">' +
+          '<thead><tr><th>מספר</th><th>לקוח</th><th>תאריך</th><th>סה"כ</th><th>סטטוס</th><th>תשלום</th><th>פעולות</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table></div></div>';
+    }
+
+    if (window.DB) {
+      AdminView._ordersUnsub = window.DB.collection('orders').orderBy('timestamp', 'desc')
+        .onSnapshot(function (snap) {
+          var all = []; snap.forEach(function (d) { all.push(d.data()); }); renderOrders(all);
+        }, function () { renderOrders(App.Orders.getAll()); });
+    } else {
+      renderOrders(App.Orders.getAll());
+    }
+  },
+
+  _setStatus: function (orderId, newStatus, phone) {
+    App.updateOrderStatus(orderId, newStatus, phone);
+    App.toast('סטטוס עודכן', 'success');
+  },
+
+  _togglePayment: function (orderId, current) {
+    var next = current === 'paid' ? 'unpaid' : 'paid';
+    App.updateOrderPayment(orderId, next);
+    App.toast(next === 'paid' ? 'סומן כשולם ✅' : 'סומן כממתין', next === 'paid' ? 'success' : 'info');
+  },
+
+  _waOrder: function (orderId, phone) {
+    var SL = { new:'חדש', processing:'בטיפול', ready:'מוכן למשלוח', shipped:'יצא למשלוח', delivered:'הגיע ללקוח' };
+    var o = (AdminView._lastOrders || []).find(function (x) { return String(x.id) === String(orderId); })
+          || (App.Orders.getAll()).find(function (x) { return String(x.id) === String(orderId); });
+    var ph = phone.replace(/\D/g, '');
+    if (ph.startsWith('0')) ph = '972' + ph.substring(1);
+    var msg = o ? '📦 הזמנה #' + o.id + '\nלקוח: ' + o.customerName + '\nסה"כ: ₪' + o.total + '\nסטטוס: ' + (SL[o.status] || o.status)
+                : 'פרטי הזמנה #' + orderId;
+    window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(msg), '_blank');
+  },
+
+  _checkNewOrders: function () {
+    if (!window.DB) return;
+    window.DB.collection('orders').where('status', '==', 'new').get()
+      .then(function (snap) {
+        if (snap.empty) return;
+        App.showModal(
+          '<div class="sys-message">' +
+            '<div class="sys-icon" style="background:var(--orange-dim)"><span class="material-icons-round" style="font-size:30px;color:var(--orange)">notifications_active</span></div>' +
+            '<h3>' + snap.size + ' הזמנות חדשות ממתינות!</h3>' +
+            '<p>ישנן הזמנות חדשות שטרם טופלו.</p>' +
+            '<div style="display:flex;gap:10px;margin-top:12px">' +
+              '<button class="btn-primary" onclick="App.closeModal();AdminView.tab(\'orders\')">צפה בהזמנות</button>' +
+              '<button class="btn-secondary" onclick="App.closeModal()">לאחר כך</button>' +
+            '</div>' +
+          '</div>'
+        );
+      }).catch(function () {});
   },
 
   _viewOrder: function (orderId) {
-    var o = (App.Orders.getAll()).find(function (x) { return x.id === orderId; });
+    var o = (AdminView._lastOrders || []).find(function (x) { return String(x.id) === String(orderId); })
+          || (App.Orders.getAll()).find(function (x) { return String(x.id) === String(orderId); });
     if (!o) { App.toast('הזמנה לא נמצאה', 'error'); return; }
     var rows = o.items.map(function (i) {
       return '<tr><td>' + i.product.sku + '</td><td>' + i.product.name + '</td><td>' + i.qty + '</td>' +
@@ -100,12 +185,14 @@ var AdminView = {
   /* ===== CUSTOMERS ===== */
   _customers: function (c) {
     var rows = CUSTOMERS_DB.map(function (cu) {
+      var debt = cu.existingDebt || 0;
       return '<tr>' +
         '<td><code style="font-size:12px">' + cu.id + '</code></td>' +
         '<td><strong>' + cu.name + '</strong></td>' +
-        '<td>' + cu.phone + '</td>' +
+        '<td>' + (cu.phone || '—') + '</td>' +
         '<td>' + (cu.generalDiscount || 0) + '%</td>' +
-        '<td>₪' + (cu.shippingCost || App.state.settings.defaultShippingCost) + '</td>' +
+        '<td>' + (cu.paymentTerms || 'מזומן') + '</td>' +
+        '<td style="color:' + (debt > 0 ? 'var(--orange)' : 'inherit') + ';font-weight:' + (debt > 0 ? '700' : '400') + '">₪' + debt + '</td>' +
         '<td>' + Object.keys(cu.personalPrices || {}).length + ' מוצרים</td>' +
         '<td style="display:flex;gap:6px;padding:8px">' +
           '<button class="btn-sm" onclick="AdminView._editCust(\'' + cu.id + '\')" title="ערוך"><span class="material-icons-round">edit</span></button>' +
@@ -120,7 +207,7 @@ var AdminView = {
           '<span class="material-icons-round">person_add</span> הוסף לקוח</button>' +
       '</div>' +
       '<div class="table-wrap"><table class="admin-table">' +
-        '<thead><tr><th>ח.פ</th><th>שם</th><th>טלפון</th><th>הנחה כללית</th><th>דמי משלוח</th><th>מחירים אישיים</th><th>פעולות</th></tr></thead>' +
+        '<thead><tr><th>ח.פ</th><th>שם</th><th>טלפון</th><th>הנחה</th><th>תנאי תשלום</th><th>חוב קיים</th><th>מחירים</th><th>פעולות</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div></div>';
   },
 
@@ -131,8 +218,12 @@ var AdminView = {
 
   _editCust: function (id) {
     var isNew = !id;
-    var cu = isNew ? { id:'', name:'', email:'', phone:'', address:'', contactPerson:'', shippingAddress:'', generalDiscount:0, shippingCost:45, personalPrices:{} }
-                   : CUSTOMERS_DB.find(function (x) { return x.id === id; }) || {};
+    var cu = isNew
+      ? { id:'', name:'', email:'', phone:'', address:'', contactPerson:'', shippingAddress:'', generalDiscount:0, shippingCost:45, paymentTerms:'מזומן', existingDebt:0, personalPrices:{} }
+      : CUSTOMERS_DB.find(function (x) { return x.id === id; }) || {};
+    var termsOpts = ['מזומן','שוטף 30','שוטף 60','שוטף 90','שוטף+30','שוטף+60'].map(function (t) {
+      return '<option value="' + t + '"' + (cu.paymentTerms === t ? ' selected' : '') + '>' + t + '</option>';
+    }).join('');
     App.showModal(
       '<h3>' + (isNew ? 'הוסף לקוח חדש' : 'עריכת ' + cu.name) + '</h3>' +
       '<div class="customer-form">' +
@@ -145,6 +236,11 @@ var AdminView = {
         AdminView._fld('כתובת למשלוח', 'ef-shaddr', cu.shippingAddress, 'text') +
         AdminView._fld('הנחה כללית (%)', 'ef-disc', cu.generalDiscount, 'number') +
         AdminView._fld('דמי משלוח אישיים (₪)', 'ef-ship', cu.shippingCost, 'number') +
+        AdminView._fld('חוב קיים (₪)', 'ef-debt', cu.existingDebt || 0, 'number') +
+        '<div class="form-group"><label>תנאי תשלום</label>' +
+          '<select id="ef-terms" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
+            termsOpts +
+          '</select></div>' +
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<button class="btn-primary" onclick="AdminView._saveCust(\'' + (id || '') + '\')">' +
             '<span class="material-icons-round">save</span> שמור</button>' +
@@ -168,6 +264,8 @@ var AdminView = {
       shippingAddress: document.getElementById('ef-shaddr').value,
       generalDiscount: parseInt(document.getElementById('ef-disc').value) || 0,
       shippingCost:    parseInt(document.getElementById('ef-ship').value) || 45,
+      paymentTerms:    document.getElementById('ef-terms').value,
+      existingDebt:    parseFloat(document.getElementById('ef-debt').value) || 0,
       personalPrices:  existing ? (existing.personalPrices || {}) : {}
     };
     if (origId) {
@@ -726,6 +824,8 @@ var AdminView = {
           '<div class="form-group full-width"><label>תת-כותרת / תיאור בדף נחיתה</label>' +
             '<textarea id="sv-sub" rows="2">' + s.landingSubtitle + '</textarea></div>' +
           AdminView._fld('קוד מנהל (PIN)', 'sv-pin', s.adminPin, 'password') +
+          AdminView._fld('WhatsApp מנהל לקבלת התראות (כולל קידומת 972)', 'sv-phone', s.adminPhone || '', 'tel') +
+          AdminView._fld('מייל מנהל לקבלת התראות', 'sv-email', s.adminEmail || '', 'email') +
         '</div>' +
         '<button class="btn-primary" onclick="AdminView._saveSettings()">' +
           '<span class="material-icons-round">save</span> שמור הגדרות' +
@@ -740,6 +840,8 @@ var AdminView = {
     s.systemMessage        = document.getElementById('sv-sysmsg').value;
     s.landingTitle         = document.getElementById('sv-title').value;
     s.landingSubtitle      = document.getElementById('sv-sub').value;
+    s.adminPhone           = document.getElementById('sv-phone').value;
+    s.adminEmail           = document.getElementById('sv-email').value;
     var pin = document.getElementById('sv-pin').value;
     if (pin && pin.length >= 4) s.adminPin = pin;
     App.saveSettings();

@@ -10,6 +10,8 @@ var CUSTOMERS_DB = [
     shippingAddress: 'שד׳ הרצל 10, תל אביב',
     generalDiscount: 0,
     shippingCost: 35,
+    paymentTerms: 'שוטף 30',
+    existingDebt: 0,
     personalPrices: { 'cup-001': 75, 'cup-002': 85, 'plt-001': 55 }
   },
   {
@@ -22,6 +24,8 @@ var CUSTOMERS_DB = [
     shippingAddress: 'דיזנגוף 50, תל אביב',
     generalDiscount: 10,
     shippingCost: 45,
+    paymentTerms: 'מזומן',
+    existingDebt: 0,
     personalPrices: {}
   },
   {
@@ -34,6 +38,8 @@ var CUSTOMERS_DB = [
     shippingAddress: 'כביש 4, קיבוץ שפיים',
     generalDiscount: 5,
     shippingCost: 60,
+    paymentTerms: 'שוטף 60',
+    existingDebt: 0,
     personalPrices: { 'nap-001': 40, 'nap-002': 49, 'plt-002': 78 }
   }
 ];
