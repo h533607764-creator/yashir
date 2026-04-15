@@ -1,0 +1,371 @@
+var AdminView = {
+  _tab: 'orders',
+
+  render: function (el, params) {
+    params = params || {};
+    if (params.tab) AdminView._tab = params.tab;
+    var tabs = [
+      { id: 'orders',    label: 'הזמנות',  icon: 'list_alt' },
+      { id: 'customers', label: 'לקוחות',  icon: 'people' },
+      { id: 'products',  label: 'מוצרים',  icon: 'inventory_2' },
+      { id: 'settings',  label: 'הגדרות',  icon: 'settings' }
+    ];
+    el.innerHTML =
+      '<div class="admin-page"><div class="container">' +
+        '<h1 class="admin-title"><span class="material-icons-round">admin_panel_settings</span> פאנל ניהול — ישיר</h1>' +
+        '<div class="admin-tabs">' +
+          tabs.map(function (t) {
+            return '<button class="admin-tab' + (AdminView._tab === t.id ? ' active' : '') + '" onclick="AdminView.tab(\'' + t.id + '\')">' +
+              '<span class="material-icons-round">' + t.icon + '</span> ' + t.label + '</button>';
+          }).join('') +
+        '</div>' +
+        '<div id="av-content"></div>' +
+      '</div></div>';
+    AdminView._render(AdminView._tab);
+  },
+
+  tab: function (id) {
+    AdminView._tab = id;
+    document.querySelectorAll('.admin-tab').forEach(function (b) { b.classList.remove('active'); });
+    var btn = document.querySelector('.admin-tab[onclick="AdminView.tab(\'' + id + '\')"]');
+    if (btn) btn.classList.add('active');
+    AdminView._render(id);
+  },
+
+  _render: function (id) {
+    var c = document.getElementById('av-content');
+    if (!c) return;
+    ({ orders: AdminView._orders, customers: AdminView._customers, products: AdminView._products, settings: AdminView._settings })[id](c);
+  },
+
+  /* ===== ORDERS ===== */
+  _orders: function (c) {
+    var all = App.Orders.getAll();
+    var rows = all.length
+      ? all.map(function (o) {
+          var d = new Date(o.timestamp).toLocaleDateString('he-IL');
+          return '<tr>' +
+            '<td><strong>' + o.id + '</strong></td>' +
+            '<td>' + o.customerName + '</td>' +
+            '<td>' + d + '</td>' +
+            '<td style="color:var(--blue);font-weight:700">₪' + o.total + '</td>' +
+            '<td><span class="status-badge ' + o.status + '">' + (o.status === 'pending' ? 'בטיפול' : 'הושלם') + '</span></td>' +
+            '<td style="display:flex;gap:6px;padding:8px">' +
+              '<button class="btn-sm" title="צפה" onclick="AdminView._viewOrder(' + o.id + ')"><span class="material-icons-round">visibility</span></button>' +
+              '<button class="btn-sm" title="תעודה" onclick="SuccessView.printNote(' + o.id + ')"><span class="material-icons-round">print</span></button>' +
+            '</td></tr>';
+        }).join('')
+      : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">אין הזמנות עדיין</td></tr>';
+
+    c.innerHTML = '<div class="admin-section">' +
+      '<div class="admin-section-header"><h2>הזמנות</h2>' +
+        '<span style="font-size:13px;color:var(--text-muted)">' + all.length + ' הזמנות סה"כ</span>' +
+      '</div>' +
+      '<div class="table-wrap"><table class="admin-table">' +
+        '<thead><tr><th>מספר</th><th>לקוח</th><th>תאריך</th><th>סה"כ</th><th>סטטוס</th><th>פעולות</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table></div></div>';
+  },
+
+  _viewOrder: function (orderId) {
+    var o = (App.Orders.getAll()).find(function (x) { return x.id === orderId; });
+    if (!o) { App.toast('הזמנה לא נמצאה', 'error'); return; }
+    var rows = o.items.map(function (i) {
+      return '<tr><td>' + i.product.sku + '</td><td>' + i.product.name + '</td><td>' + i.qty + '</td>' +
+        '<td>' + i.discountPct + '%</td><td>₪' + (i.unitPrice * i.qty) + '</td></tr>';
+    }).join('');
+    App.showModal(
+      '<h3>הזמנה #' + o.id + ' — ' + o.customerName + '</h3>' +
+      '<div class="table-wrap"><table class="admin-table">' +
+        '<thead><tr><th>מק"ט</th><th>מוצר</th><th>כמות</th><th>הנחה</th><th>סה"כ</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>' +
+      '<div class="order-totals">' +
+        '<div>לפני מע"מ: ₪' + o.subtotal + '</div>' +
+        '<div>מע"מ: ₪' + o.vat + '</div>' +
+        '<div style="font-weight:700;font-size:16px">סה"כ: ₪' + o.total + '</div>' +
+        (o.savings > 0 ? '<div style="color:var(--green)">חסכון: ₪' + o.savings + '</div>' : '') +
+      '</div>' +
+      (o.notes ? '<p style="margin-top:8px;font-size:14px;color:var(--text-muted)"><strong>הערות:</strong> ' + o.notes + '</p>' : '') +
+      '<div style="display:flex;gap:10px;margin-top:16px">' +
+        '<button class="btn-primary" onclick="SuccessView.printNote(' + o.id + ');App.closeModal()">' +
+          '<span class="material-icons-round">print</span> תעודת משלוח</button>' +
+        '<button class="btn-secondary" onclick="App.closeModal()">סגור</button>' +
+      '</div>'
+    );
+  },
+
+  /* ===== CUSTOMERS ===== */
+  _customers: function (c) {
+    var rows = CUSTOMERS_DB.map(function (cu) {
+      return '<tr>' +
+        '<td><code style="font-size:12px">' + cu.id + '</code></td>' +
+        '<td><strong>' + cu.name + '</strong></td>' +
+        '<td>' + cu.phone + '</td>' +
+        '<td>' + (cu.generalDiscount || 0) + '%</td>' +
+        '<td>₪' + (cu.shippingCost || App.state.settings.defaultShippingCost) + '</td>' +
+        '<td>' + Object.keys(cu.personalPrices || {}).length + ' מוצרים</td>' +
+        '<td style="display:flex;gap:6px;padding:8px">' +
+          '<button class="btn-sm" onclick="AdminView._editCust(\'' + cu.id + '\')" title="ערוך"><span class="material-icons-round">edit</span></button>' +
+          '<button class="btn-sm" onclick="AdminView._custPrices(\'' + cu.id + '\')" title="מחירים אישיים"><span class="material-icons-round">price_change</span></button>' +
+          '<button class="btn-sm danger" onclick="AdminView._delCust(\'' + cu.id + '\')" title="מחק"><span class="material-icons-round">delete</span></button>' +
+        '</td></tr>';
+    }).join('');
+
+    c.innerHTML = '<div class="admin-section">' +
+      '<div class="admin-section-header"><h2>לקוחות</h2>' +
+        '<button class="btn-primary" onclick="AdminView._editCust(null)">' +
+          '<span class="material-icons-round">person_add</span> הוסף לקוח</button>' +
+      '</div>' +
+      '<div class="table-wrap"><table class="admin-table">' +
+        '<thead><tr><th>ח.פ</th><th>שם</th><th>טלפון</th><th>הנחה כללית</th><th>דמי משלוח</th><th>מחירים אישיים</th><th>פעולות</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div></div>';
+  },
+
+  _fld: function (label, id, value, type, disabled) {
+    return '<div class="form-group"><label>' + label + '</label>' +
+      '<input type="' + (type || 'text') + '" id="' + id + '" value="' + (value || '') + '"' + (disabled ? ' disabled style="opacity:.5"' : '') + '></div>';
+  },
+
+  _editCust: function (id) {
+    var isNew = !id;
+    var cu = isNew ? { id:'', name:'', email:'', phone:'', address:'', contactPerson:'', shippingAddress:'', generalDiscount:0, shippingCost:45, personalPrices:{} }
+                   : CUSTOMERS_DB.find(function (x) { return x.id === id; }) || {};
+    App.showModal(
+      '<h3>' + (isNew ? 'הוסף לקוח חדש' : 'עריכת ' + cu.name) + '</h3>' +
+      '<div class="customer-form">' +
+        AdminView._fld('ח.פ / עוסק מורשה', 'ef-id', cu.id, 'text', !isNew) +
+        AdminView._fld('שם עסק', 'ef-name', cu.name, 'text') +
+        AdminView._fld('טלפון', 'ef-phone', cu.phone, 'tel') +
+        AdminView._fld('מייל', 'ef-email', cu.email, 'email') +
+        AdminView._fld('כתובת', 'ef-address', cu.address, 'text') +
+        AdminView._fld('איש קשר למשלוח', 'ef-contact', cu.contactPerson, 'text') +
+        AdminView._fld('כתובת למשלוח', 'ef-shaddr', cu.shippingAddress, 'text') +
+        AdminView._fld('הנחה כללית (%)', 'ef-disc', cu.generalDiscount, 'number') +
+        AdminView._fld('דמי משלוח אישיים (₪)', 'ef-ship', cu.shippingCost, 'number') +
+        '<div style="display:flex;gap:10px;margin-top:4px">' +
+          '<button class="btn-primary" onclick="AdminView._saveCust(\'' + (id || '') + '\')">' +
+            '<span class="material-icons-round">save</span> שמור</button>' +
+          '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+        '</div>' +
+      '</div>'
+    );
+  },
+
+  _saveCust: function (origId) {
+    var id   = document.getElementById('ef-id').value.trim();
+    var name = document.getElementById('ef-name').value.trim();
+    if (!id || !name) { App.toast('ח.פ ושם חובה', 'warning'); return; }
+    var existing = origId ? CUSTOMERS_DB.find(function (x) { return x.id === origId; }) : null;
+    var data = {
+      id: id, name: name,
+      phone:           document.getElementById('ef-phone').value,
+      email:           document.getElementById('ef-email').value,
+      address:         document.getElementById('ef-address').value,
+      contactPerson:   document.getElementById('ef-contact').value,
+      shippingAddress: document.getElementById('ef-shaddr').value,
+      generalDiscount: parseInt(document.getElementById('ef-disc').value) || 0,
+      shippingCost:    parseInt(document.getElementById('ef-ship').value) || 45,
+      personalPrices:  existing ? (existing.personalPrices || {}) : {}
+    };
+    if (origId) {
+      var idx = CUSTOMERS_DB.findIndex(function (x) { return x.id === origId; });
+      if (idx > -1) CUSTOMERS_DB[idx] = data; else CUSTOMERS_DB.push(data);
+    } else {
+      CUSTOMERS_DB.push(data);
+    }
+    App.Store.set('customers', CUSTOMERS_DB);
+    App.closeModal();
+    App.toast('הלקוח נשמר', 'success');
+    AdminView._customers(document.getElementById('av-content'));
+  },
+
+  _delCust: function (id) {
+    if (!confirm('למחוק לקוח ' + id + '?')) return;
+    window.CUSTOMERS_DB = CUSTOMERS_DB.filter(function (x) { return x.id !== id; });
+    App.Store.set('customers', CUSTOMERS_DB);
+    App.toast('הלקוח נמחק', 'success');
+    AdminView._customers(document.getElementById('av-content'));
+  },
+
+  _custPrices: function (custId) {
+    var cu = CUSTOMERS_DB.find(function (x) { return x.id === custId; });
+    if (!cu) return;
+    var rows = PRODUCTS.map(function (p) {
+      var curr = cu.personalPrices && cu.personalPrices[p.id] !== undefined ? cu.personalPrices[p.id] : '';
+      return '<div class="personal-price-row">' +
+        '<span class="sku">' + p.sku + '</span>' +
+        '<span>' + p.name + '</span>' +
+        '<span class="base-price-hint">מחיר כללי: ₪' + p.price + '</span>' +
+        '<input type="number" id="pp-' + p.id + '" value="' + curr + '" placeholder="—" min="0" style="width:80px">' +
+      '</div>';
+    }).join('');
+    App.showModal(
+      '<h3>מחירים אישיים — ' + cu.name + '</h3>' +
+      '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">השאר ריק להשתמש במחיר כללי / הנחה כללית</p>' +
+      '<div class="personal-prices-grid">' + rows + '</div>' +
+      '<div style="display:flex;gap:10px;margin-top:16px">' +
+        '<button class="btn-primary" onclick="AdminView._savePrices(\'' + custId + '\')">' +
+          '<span class="material-icons-round">save</span> שמור מחירים</button>' +
+        '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+      '</div>'
+    );
+  },
+
+  _savePrices: function (custId) {
+    var cu = CUSTOMERS_DB.find(function (x) { return x.id === custId; });
+    if (!cu) return;
+    cu.personalPrices = {};
+    PRODUCTS.forEach(function (p) {
+      var inp = document.getElementById('pp-' + p.id);
+      if (inp && inp.value !== '') cu.personalPrices[p.id] = parseFloat(inp.value);
+    });
+    App.Store.set('customers', CUSTOMERS_DB);
+    App.closeModal();
+    App.toast('המחירים האישיים נשמרו', 'success');
+  },
+
+  /* ===== PRODUCTS ===== */
+  _products: function (c) {
+    var rows = PRODUCTS.map(function (p) {
+      return '<tr>' +
+        '<td><code>' + p.sku + '</code></td>' +
+        '<td>' + p.icon + ' ' + p.name + '</td>' +
+        '<td>' + p.categoryLabel + '</td>' +
+        '<td style="color:var(--blue);font-weight:700">₪' + p.price + '</td>' +
+        '<td>' + (p.stock > 0 ? p.stock : '<span style="color:var(--red)">0 — חסר</span>') + '</td>' +
+        '<td><button class="btn-sm" onclick="AdminView._editProd(\'' + p.id + '\')">' +
+          '<span class="material-icons-round">edit</span></button></td></tr>';
+    }).join('');
+
+    c.innerHTML = '<div class="admin-section">' +
+      '<div class="admin-section-header"><h2>מוצרים</h2>' +
+        '<button class="btn-primary" onclick="AdminView._addProd()">' +
+          '<span class="material-icons-round">add</span> הוסף מוצר</button>' +
+      '</div>' +
+      '<p class="admin-note">תאריך עדכון אחרון: ' + new Date().toLocaleDateString('he-IL') + '</p>' +
+      '<div class="table-wrap"><table class="admin-table">' +
+        '<thead><tr><th>מק"ט</th><th>שם</th><th>קטגוריה</th><th>מחיר</th><th>מלאי</th><th>עריכה</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div></div>';
+  },
+
+  _editProd: function (id) {
+    var p = PRODUCTS.find(function (x) { return x.id === id; });
+    if (!p) return;
+    App.showModal(
+      '<h3>עריכת מוצר — ' + p.icon + ' ' + p.name + '</h3>' +
+      '<div class="customer-form">' +
+        AdminView._fld('שם מוצר', 'pf-name', p.name) +
+        AdminView._fld('מחיר כללי (₪)', 'pf-price', p.price, 'number') +
+        AdminView._fld('מלאי', 'pf-stock', p.stock, 'number') +
+        AdminView._fld('יחידה (לדוגמה: ל-100 יח׳)', 'pf-unit', p.unit) +
+        AdminView._fld('תיאור', 'pf-desc', p.description) +
+        '<div style="display:flex;gap:10px;margin-top:4px">' +
+          '<button class="btn-primary" onclick="AdminView._saveProd(\'' + id + '\')">' +
+            '<span class="material-icons-round">save</span> שמור</button>' +
+          '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+        '</div>' +
+      '</div>'
+    );
+  },
+
+  _addProd: function () {
+    App.showModal(
+      '<h3>הוסף מוצר חדש</h3>' +
+      '<div class="customer-form">' +
+        AdminView._fld('מק"ט (מספר)', 'pf-sku', '', 'text') +
+        AdminView._fld('שם מוצר', 'pf-name', '') +
+        AdminView._fld('מחיר (₪)', 'pf-price', '', 'number') +
+        AdminView._fld('מלאי', 'pf-stock', '100', 'number') +
+        AdminView._fld('יחידה', 'pf-unit', "ל-100 יח׳") +
+        AdminView._fld('תיאור', 'pf-desc', '') +
+        '<div class="form-group"><label>קטגוריה</label>' +
+          '<select id="pf-cat" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px">' +
+            '<option value="cups">כוסות</option><option value="plates">צלחות</option><option value="napkins">מפיות</option>' +
+          '</select></div>' +
+        '<div style="display:flex;gap:10px;margin-top:4px">' +
+          '<button class="btn-primary" onclick="AdminView._saveNewProd()">' +
+            '<span class="material-icons-round">add</span> הוסף</button>' +
+          '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+        '</div>' +
+      '</div>'
+    );
+  },
+
+  _saveProd: function (id) {
+    var p = PRODUCTS.find(function (x) { return x.id === id; });
+    if (!p) return;
+    p.name  = document.getElementById('pf-name').value || p.name;
+    p.price = parseFloat(document.getElementById('pf-price').value) || p.price;
+    p.stock = parseInt(document.getElementById('pf-stock').value);
+    p.unit  = document.getElementById('pf-unit').value || p.unit;
+    p.description = document.getElementById('pf-desc').value || p.description;
+    App.Store.set('products', PRODUCTS);
+    App.closeModal();
+    App.toast('המוצר עודכן', 'success');
+    AdminView._products(document.getElementById('av-content'));
+  },
+
+  _saveNewProd: function () {
+    var sku  = document.getElementById('pf-sku').value.trim();
+    var name = document.getElementById('pf-name').value.trim();
+    var cat  = document.getElementById('pf-cat').value;
+    if (!sku || !name) { App.toast('מק"ט ושם חובה', 'warning'); return; }
+    var catLabels = { cups:'כוסות', plates:'צלחות', napkins:'מפיות' };
+    var catIcons  = { cups:'☕', plates:'🍽️', napkins:'🗒️' };
+    var newProd = {
+      id: 'prod-' + sku,
+      sku: sku,
+      name: name,
+      category: cat,
+      categoryLabel: catLabels[cat],
+      price: parseFloat(document.getElementById('pf-price').value) || 0,
+      stock: parseInt(document.getElementById('pf-stock').value) || 100,
+      unit: document.getElementById('pf-unit').value || "ל-100 יח׳",
+      icon: catIcons[cat],
+      bgColor: '#1a2030',
+      description: document.getElementById('pf-desc').value || '',
+      image: null
+    };
+    PRODUCTS.push(newProd);
+    App.Store.set('products', PRODUCTS);
+    App.closeModal();
+    App.toast('המוצר נוסף', 'success');
+    AdminView._products(document.getElementById('av-content'));
+  },
+
+  /* ===== SETTINGS ===== */
+  _settings: function (c) {
+    var s = App.state.settings;
+    c.innerHTML =
+      '<div class="admin-section">' +
+        '<div class="admin-section-header"><h2>הגדרות מערכת</h2></div>' +
+        '<div class="settings-grid">' +
+          AdminView._fld('מינימום הזמנה למשלוח חינם (₪)', 'sv-min', s.minOrderAmount, 'number') +
+          AdminView._fld('דמי משלוח ברירת מחדל (₪)', 'sv-ship', s.defaultShippingCost, 'number') +
+          '<div class="form-group full-width"><label>הודעת מערכת (מוצגת ללקוחות אחרי כניסה)</label>' +
+            '<textarea id="sv-sysmsg" rows="3">' + (s.systemMessage || '') + '</textarea></div>' +
+          '<div class="form-group full-width"><label>כותרת ראשית בדף נחיתה</label>' +
+            '<input type="text" id="sv-title" value="' + s.landingTitle + '"></div>' +
+          '<div class="form-group full-width"><label>תת-כותרת / תיאור בדף נחיתה</label>' +
+            '<textarea id="sv-sub" rows="2">' + s.landingSubtitle + '</textarea></div>' +
+          AdminView._fld('קוד מנהל (PIN)', 'sv-pin', s.adminPin, 'password') +
+        '</div>' +
+        '<button class="btn-primary" onclick="AdminView._saveSettings()">' +
+          '<span class="material-icons-round">save</span> שמור הגדרות' +
+        '</button>' +
+      '</div>';
+  },
+
+  _saveSettings: function () {
+    var s = App.state.settings;
+    s.minOrderAmount       = parseInt(document.getElementById('sv-min').value)  || s.minOrderAmount;
+    s.defaultShippingCost  = parseInt(document.getElementById('sv-ship').value) || s.defaultShippingCost;
+    s.systemMessage        = document.getElementById('sv-sysmsg').value;
+    s.landingTitle         = document.getElementById('sv-title').value;
+    s.landingSubtitle      = document.getElementById('sv-sub').value;
+    var pin = document.getElementById('sv-pin').value;
+    if (pin && pin.length >= 4) s.adminPin = pin;
+    App.saveSettings();
+    App.toast('ההגדרות נשמרו', 'success');
+  }
+};

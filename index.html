@@ -2,74 +2,37 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <meta name="description" content="ישיר – קטלוג מוצרים חד-פעמיים לעסקים ואירועים">
-  <title>ישיר – קטלוג מוצרים</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>ישיר שיווק והפצה</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
   <link rel="stylesheet" href="src/style.css">
 </head>
 <body>
+  <div id="app">
+    <header id="site-header"></header>
+    <main id="view-content"></main>
+    <div id="floating-btns"></div>
+    <div id="cart-fab-wrap"></div>
+  </div>
 
-  <!-- ===== HEADER ===== -->
-  <header class="site-header">
-    <div class="container header-inner">
-      <div class="logo">
-        <div class="logo-mark">י</div>
-        <div class="logo-text-wrap">
-          <span class="logo-name">ישיר</span>
-          <span class="logo-tagline">אספקה לעסקים</span>
-        </div>
-      </div>
-      <p class="header-desc">מוצרים חד-פעמיים איכותיים לעסקים, מסעדות ואירועים</p>
-    </div>
-  </header>
+  <div id="overlay-backdrop" class="hidden"></div>
+  <div id="cart-panel"        class="hidden"></div>
+  <div id="modal-wrap"        class="hidden"></div>
+  <div id="toast-wrap"></div>
 
-  <!-- ===== CATEGORY FILTER ===== -->
-  <nav class="category-nav" id="categoryNav" aria-label="סינון קטגוריות">
-    <div class="container">
-      <div class="cat-scroll">
-        <button class="cat-btn active" data-category="all">הכל</button>
-        <button class="cat-btn" data-category="cups">☕ כוסות</button>
-        <button class="cat-btn" data-category="plates">🍽️ צלחות</button>
-        <button class="cat-btn" data-category="napkins">🗒️ מפיות</button>
-      </div>
-    </div>
-  </nav>
-
-  <!-- ===== MAIN CATALOG ===== -->
-  <main class="container catalog-main" id="catalogMain">
-    <div class="results-bar" id="resultsBar"></div>
-
-    <div class="product-grid" id="productGrid" role="list">
-      <!-- מוצרים מוזרקים ע"י catalog.js -->
-    </div>
-
-    <!-- מצב שגיאה -->
-    <div class="error-state hidden" id="errorState" role="alert">
-      <div class="error-icon">⚠️</div>
-      <p>אופס, משהו השתבש.<br>לא ניתן לטעון את המוצרים.</p>
-      <button class="btn-refresh" onclick="loadProducts()">לחץ כאן לרענון</button>
-    </div>
-
-    <!-- מצב ריק -->
-    <div class="empty-state hidden" id="emptyState">
-      <p>לא נמצאו מוצרים בקטגוריה זו.</p>
-    </div>
-  </main>
-
-  <!-- ===== TOAST הודעה ===== -->
-  <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
-
-  <!-- ===== FOOTER ===== -->
-  <footer class="site-footer">
-    <div class="container">
-      <p>© 2026 ישיר – כל הזכויות שמורות</p>
-      <p class="footer-contact">לפניות: <a href="tel:052-0000000">052-000-0000</a></p>
-    </div>
-  </footer>
-
-  <script src="src/catalog.js"></script>
+  <script src="src/data/products.js"></script>
+  <script src="src/data/customers.js"></script>
+  <script src="src/app.js"></script>
+  <script src="src/views/landing.js"></script>
+  <script src="src/views/login.js"></script>
+  <script src="src/views/catalog.js"></script>
+  <script src="src/views/cart.js"></script>
+  <script src="src/views/success.js"></script>
+  <script src="src/views/admin.js"></script>
 </body>
 </html>
