@@ -336,8 +336,21 @@ var App = (function () {
       if (state.cartOpen) closeCart();
     });
     Auth.tryAuto();
-    navigate('landing');
-    if (Auth.isCustomer()) setTimeout(showSystemMsg, 800);
+
+    // מציג מסך טעינה בזמן שמוצרים עולים מ-Firestore
+    var el = document.getElementById('view-content');
+    el.innerHTML =
+      '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px">' +
+        '<div style="width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
+        '<p style="color:var(--text-muted);font-size:15px">טוען מוצרים...</p>' +
+      '</div>';
+
+    function afterLoad() {
+      navigate('landing');
+      if (Auth.isCustomer()) setTimeout(showSystemMsg, 800);
+    }
+
+    loadProductsFromFirestore(afterLoad, afterLoad);
   }
 
   document.addEventListener('DOMContentLoaded', init);

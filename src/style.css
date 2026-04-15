@@ -731,3 +731,8 @@ img { max-width: 100%; display: block; }
 @media print {
   #floating-btns, #cart-fab-wrap, #site-header { display: none !important; }
 }
+
+/* ===== LOADING SPINNER ===== */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

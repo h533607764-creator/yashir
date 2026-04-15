@@ -300,6 +300,11 @@ var AdminView = {
     p.unit  = document.getElementById('pf-unit').value || p.unit;
     p.description = document.getElementById('pf-desc').value || p.description;
     App.Store.set('products', PRODUCTS);
+    // שמירה ב-Firestore
+    if (window.DB) {
+      window.DB.collection('products').doc(id).set(p)
+        .catch(function (e) { console.warn('Firestore save error:', e); });
+    }
     App.closeModal();
     App.toast('המוצר עודכן', 'success');
     AdminView._products(document.getElementById('av-content'));
@@ -328,6 +333,11 @@ var AdminView = {
     };
     PRODUCTS.push(newProd);
     App.Store.set('products', PRODUCTS);
+    // שמירה ב-Firestore
+    if (window.DB) {
+      window.DB.collection('products').doc(newProd.id).set(newProd)
+        .catch(function (e) { console.warn('Firestore save error:', e); });
+    }
     App.closeModal();
     App.toast('המוצר נוסף', 'success');
     AdminView._products(document.getElementById('av-content'));
