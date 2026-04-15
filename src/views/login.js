@@ -17,18 +17,6 @@ var LoginView = {
             '</button>' +
             '<p class="login-guest-note">אורח? <a onclick="App.navigate(\'catalog\')" style="cursor:pointer;color:var(--orange)">לקטלוג</a> (ללא מחירים)</p>' +
           '</div>' +
-          '<div class="admin-login-toggle">' +
-            '<button class="btn-text-small" onclick="LoginView.toggleAdmin()">' +
-              '<span class="material-icons-round">admin_panel_settings</span> כניסת מנהל' +
-            '</button>' +
-          '</div>' +
-          '<div id="lv-admin" style="display:none;flex-direction:column;gap:16px">' +
-            '<div class="form-group"><label>קוד מנהל</label>' +
-              '<input type="password" id="lv-pin" placeholder="••••" maxlength="8"></div>' +
-            '<button class="btn-primary full-width orange" onclick="LoginView.doAdmin()">' +
-              '<span class="material-icons-round">admin_panel_settings</span> כניסת מנהל' +
-            '</button>' +
-          '</div>' +
         '</div>' +
       '</div>';
 

@@ -5,10 +5,12 @@ var AdminView = {
     params = params || {};
     if (params.tab) AdminView._tab = params.tab;
     var tabs = [
-      { id: 'orders',    label: 'הזמנות',  icon: 'list_alt' },
-      { id: 'customers', label: 'לקוחות',  icon: 'people' },
-      { id: 'products',  label: 'מוצרים',  icon: 'inventory_2' },
-      { id: 'settings',  label: 'הגדרות',  icon: 'settings' }
+      { id: 'orders',    label: 'הזמנות',     icon: 'list_alt' },
+      { id: 'customers', label: 'לקוחות',     icon: 'people' },
+      { id: 'products',  label: 'מוצרים',     icon: 'inventory_2' },
+      { id: 'stats',     label: 'סטטיסטיקות', icon: 'bar_chart' },
+      { id: 'financial', label: 'פיננסי',     icon: 'account_balance_wallet' },
+      { id: 'settings',  label: 'הגדרות',     icon: 'settings' }
     ];
     el.innerHTML =
       '<div class="admin-page"><div class="container">' +
@@ -35,7 +37,8 @@ var AdminView = {
   _render: function (id) {
     var c = document.getElementById('av-content');
     if (!c) return;
-    ({ orders: AdminView._orders, customers: AdminView._customers, products: AdminView._products, settings: AdminView._settings })[id](c);
+    var map = { orders: AdminView._orders, customers: AdminView._customers, products: AdminView._products, stats: AdminView._stats, financial: AdminView._financial, settings: AdminView._settings };
+    if (map[id]) map[id](c);
   },
 
   /* ===== ORDERS ===== */
@@ -190,18 +193,28 @@ var AdminView = {
   _custPrices: function (custId) {
     var cu = CUSTOMERS_DB.find(function (x) { return x.id === custId; });
     if (!cu) return;
-    var rows = PRODUCTS.map(function (p) {
-      var curr = cu.personalPrices && cu.personalPrices[p.id] !== undefined ? cu.personalPrices[p.id] : '';
+    var rows = PRODUCTS.filter(function(p){ return p.category !== 'shipping'; }).map(function (p) {
+      var currPrice = cu.personalPrices && cu.personalPrices[p.id] !== undefined ? cu.personalPrices[p.id] : '';
+      var currPct   = currPrice !== '' ? Math.max(0, Math.round((1 - currPrice / p.price) * 100)) : '';
       return '<div class="personal-price-row">' +
         '<span class="sku">' + p.sku + '</span>' +
-        '<span>' + p.name + '</span>' +
-        '<span class="base-price-hint">מחיר כללי: ₪' + p.price + '</span>' +
-        '<input type="number" id="pp-' + p.id + '" value="' + curr + '" placeholder="—" min="0" style="width:80px">' +
+        '<span style="flex:1">' + p.name + '</span>' +
+        '<span class="base-price-hint">כללי: ₪' + p.price + '</span>' +
+        '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">' +
+          '<div style="display:flex;align-items:center;gap:4px">' +
+            '<span style="font-size:11px;color:var(--text-muted);width:22px">₪</span>' +
+            '<input type="number" id="pp-price-' + p.id + '" value="' + currPrice + '" placeholder="—" min="0" step="0.01" style="width:75px" oninput="AdminView._syncPct(\'' + p.id + '\',' + p.price + ')">' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:4px">' +
+            '<span style="font-size:11px;color:var(--text-muted);width:22px">%</span>' +
+            '<input type="number" id="pp-pct-' + p.id + '" value="' + currPct + '" placeholder="—" min="0" max="100" style="width:75px" oninput="AdminView._syncPrice(\'' + p.id + '\',' + p.price + ')">' +
+          '</div>' +
+        '</div>' +
       '</div>';
     }).join('');
     App.showModal(
       '<h3>מחירים אישיים — ' + cu.name + '</h3>' +
-      '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">השאר ריק להשתמש במחיר כללי / הנחה כללית</p>' +
+      '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">הזן מחיר ב-₪ <strong>או</strong> הנחה ב-%. הלקוח יראה את ההנחה באחוזים.</p>' +
       '<div class="personal-prices-grid">' + rows + '</div>' +
       '<div style="display:flex;gap:10px;margin-top:16px">' +
         '<button class="btn-primary" onclick="AdminView._savePrices(\'' + custId + '\')">' +
@@ -211,13 +224,33 @@ var AdminView = {
     );
   },
 
+  _syncPct: function (id, basePrice) {
+    var priceInp = document.getElementById('pp-price-' + id);
+    var pctInp   = document.getElementById('pp-pct-' + id);
+    if (!priceInp || !pctInp) return;
+    var price = parseFloat(priceInp.value);
+    if (!isNaN(price) && basePrice > 0) {
+      pctInp.value = Math.max(0, Math.round((1 - price / basePrice) * 100));
+    } else { pctInp.value = ''; }
+  },
+
+  _syncPrice: function (id, basePrice) {
+    var priceInp = document.getElementById('pp-price-' + id);
+    var pctInp   = document.getElementById('pp-pct-' + id);
+    if (!priceInp || !pctInp) return;
+    var pct = parseFloat(pctInp.value);
+    if (!isNaN(pct) && basePrice > 0) {
+      priceInp.value = parseFloat((basePrice * (1 - pct / 100)).toFixed(2));
+    } else { priceInp.value = ''; }
+  },
+
   _savePrices: function (custId) {
     var cu = CUSTOMERS_DB.find(function (x) { return x.id === custId; });
     if (!cu) return;
     cu.personalPrices = {};
     PRODUCTS.forEach(function (p) {
-      var inp = document.getElementById('pp-' + p.id);
-      if (inp && inp.value !== '') cu.personalPrices[p.id] = parseFloat(inp.value);
+      var inp = document.getElementById('pp-price-' + p.id);
+      if (inp && inp.value !== '') cu.personalPrices[p.id] = parseFloat(parseFloat(inp.value).toFixed(2));
     });
     App.Store.set('customers', CUSTOMERS_DB);
     App.closeModal();
@@ -311,6 +344,7 @@ var AdminView = {
     var p = PRODUCTS.find(function (x) { return x.id === id; });
     if (!p) return;
     var previewUrl = p.image ? CloudinaryUpload.buildCatalogUrl(p.image) : null;
+    var threshold  = p.lowStockThreshold != null ? p.lowStockThreshold : 10;
 
     App.showModal(
       '<h3>עריכת מוצר — ' + p.icon + ' ' + p.name + '</h3>' +
@@ -318,6 +352,7 @@ var AdminView = {
         AdminView._fld('שם מוצר', 'pf-name', p.name) +
         AdminView._fld('מחיר כללי (₪)', 'pf-price', p.price, 'number') +
         AdminView._fld('מלאי', 'pf-stock', p.stock, 'number') +
+        AdminView._fld('סף מלאי נמוך (שלח התראה מתחת לכמות זו)', 'pf-threshold', threshold, 'number') +
         AdminView._fld('יחידה (לדוגמה: ל-100 יח׳)', 'pf-unit', p.unit) +
         AdminView._fld('תיאור', 'pf-desc', p.description) +
 
@@ -393,20 +428,16 @@ var AdminView = {
   _saveProd: function (id) {
     var p = PRODUCTS.find(function (x) { return x.id === id; });
     if (!p) return;
-    p.name  = document.getElementById('pf-name').value || p.name;
-    p.price = parseFloat(document.getElementById('pf-price').value) || p.price;
-    p.stock = parseInt(document.getElementById('pf-stock').value);
-    p.unit  = document.getElementById('pf-unit').value || p.unit;
-    p.description = document.getElementById('pf-desc').value || p.description;
-    p.image = document.getElementById('pf-image').value.trim() || null;
+    p.name              = document.getElementById('pf-name').value || p.name;
+    p.price             = parseFloat(document.getElementById('pf-price').value) || p.price;
+    p.stock             = parseInt(document.getElementById('pf-stock').value);
+    p.lowStockThreshold = parseInt(document.getElementById('pf-threshold') && document.getElementById('pf-threshold').value) || 10;
+    p.unit              = document.getElementById('pf-unit').value || p.unit;
+    p.description       = document.getElementById('pf-desc').value || p.description;
     App.Store.set('products', PRODUCTS);
-    // שמירה ב-Firestore
-    if (window.DB) {
-      window.DB.collection('products').doc(id).set(p)
-        .catch(function (e) { console.warn('Firestore save error:', e); });
-    }
     App.closeModal();
     App.toast('המוצר עודכן', 'success');
+    App.checkLowStock(p);
     AdminView._products(document.getElementById('av-content'));
   },
 
@@ -527,6 +558,156 @@ var AdminView = {
     } else {
       finish();
     }
+  },
+
+  /* ===== STATISTICS ===== */
+  _stats: function (c) {
+    var orders = App.Orders.getAll();
+    var now = new Date();
+    var m = now.getMonth(), y = now.getFullYear();
+    var monthly = orders.filter(function (o) { var d = new Date(o.timestamp); return d.getMonth() === m && d.getFullYear() === y; });
+    var allTime = orders;
+
+    function topProduct(list) {
+      var counts = {};
+      list.forEach(function (o) {
+        o.items.forEach(function (i) {
+          if (i.product.sku === '1000') return;
+          var k = i.product.sku + '|' + i.product.name;
+          counts[k] = (counts[k] || 0) + i.qty;
+        });
+      });
+      var keys = Object.keys(counts);
+      if (!keys.length) return null;
+      var top = keys.sort(function (a, b) { return counts[b] - counts[a]; })[0];
+      return { name: top.split('|')[1], qty: counts[top] };
+    }
+
+    function topCustomer(list) {
+      var totals = {};
+      list.forEach(function (o) { totals[o.customerName] = (totals[o.customerName] || 0) + o.total; });
+      var keys = Object.keys(totals);
+      if (!keys.length) return null;
+      var top = keys.sort(function (a, b) { return totals[b] - totals[a]; })[0];
+      return { name: top, total: totals[top] };
+    }
+
+    var mRevenue   = monthly.reduce(function (s, o) { return s + o.total; }, 0);
+    var mOrders    = monthly.length;
+    var mTopProd   = topProduct(monthly);
+    var mTopCust   = topCustomer(monthly);
+    var allRevenue = allTime.reduce(function (s, o) { return s + o.total; }, 0);
+
+    function statCard(icon, label, value, sub) {
+      return '<div class="stat-card"><span class="material-icons-round">' + icon + '</span>' +
+        '<div><div class="stat-val">' + value + '</div><div class="stat-label">' + label + '</div>' +
+        (sub ? '<div class="stat-sub">' + sub + '</div>' : '') + '</div></div>';
+    }
+
+    c.innerHTML =
+      '<div class="admin-section">' +
+        '<div class="admin-section-header"><h2>סטטיסטיקות</h2>' +
+          '<span style="font-size:13px;color:var(--text-muted)">' + now.toLocaleDateString('he-IL', {month:'long', year:'numeric'}) + '</span>' +
+        '</div>' +
+        '<h3 style="font-size:14px;color:var(--text-muted);margin-bottom:10px">החודש הנוכחי</h3>' +
+        '<div class="stats-grid">' +
+          statCard('payments', 'הכנסות החודש', '₪' + App.fmtP(mRevenue), mOrders + ' הזמנות') +
+          statCard('star', 'מוצר מוביל', mTopProd ? mTopProd.name : '—', mTopProd ? mTopProd.qty + ' יח׳' : '') +
+          statCard('emoji_events', 'לקוח מוביל', mTopCust ? mTopCust.name : '—', mTopCust ? '₪' + App.fmtP(mTopCust.total) : '') +
+        '</div>' +
+        '<h3 style="font-size:14px;color:var(--text-muted);margin:20px 0 10px">כל הזמנים</h3>' +
+        '<div class="stats-grid">' +
+          statCard('account_balance', 'סה"כ הכנסות', '₪' + App.fmtP(allRevenue), allTime.length + ' הזמנות') +
+          statCard('inventory_2', 'מוצר מוביל', topProduct(allTime) ? topProduct(allTime).name : '—', topProduct(allTime) ? topProduct(allTime).qty + ' יח׳' : '') +
+          statCard('workspace_premium', 'לקוח מוביל', topCustomer(allTime) ? topCustomer(allTime).name : '—', topCustomer(allTime) ? '₪' + App.fmtP(topCustomer(allTime).total) : '') +
+        '</div>' +
+      '</div>';
+  },
+
+  /* ===== FINANCIAL ===== */
+  _financial: function (c) {
+    var expenses = App.Store.get('expenses') || [];
+    var orders   = App.Orders.getAll();
+    var income   = orders.reduce(function (s, o) { return s + o.total; }, 0);
+    var totalExp = expenses.reduce(function (s, e) { return s + (e.type === 'expense' ? e.amount : -e.amount); }, 0);
+    var profit   = parseFloat((income - totalExp).toFixed(2));
+
+    var rows = expenses.length
+      ? expenses.map(function (e, i) {
+          return '<tr>' +
+            '<td>' + e.date + '</td>' +
+            '<td>' + e.description + '</td>' +
+            '<td>' + (e.category || '—') + '</td>' +
+            '<td style="color:' + (e.type === 'expense' ? 'var(--red)' : 'var(--green)') + ';font-weight:700">' +
+              (e.type === 'expense' ? '−' : '+') + '₪' + App.fmtP(e.amount) + '</td>' +
+            '<td><button class="btn-sm danger" onclick="AdminView._delExpense(' + i + ')"><span class="material-icons-round">delete</span></button></td>' +
+          '</tr>';
+        }).join('')
+      : '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">אין רשומות עדיין</td></tr>';
+
+    c.innerHTML =
+      '<div class="admin-section">' +
+        '<div class="admin-section-header"><h2>ניהול פיננסי</h2>' +
+          '<button class="btn-primary" onclick="AdminView._addExpense()"><span class="material-icons-round">add</span> הוסף רשומה</button>' +
+        '</div>' +
+        '<div class="stats-grid" style="margin-bottom:20px">' +
+          '<div class="stat-card"><span class="material-icons-round">trending_up</span><div><div class="stat-val" style="color:var(--green)">₪' + App.fmtP(income) + '</div><div class="stat-label">הכנסות (הזמנות)</div></div></div>' +
+          '<div class="stat-card"><span class="material-icons-round">trending_down</span><div><div class="stat-val" style="color:var(--red)">₪' + App.fmtP(totalExp) + '</div><div class="stat-label">הוצאות</div></div></div>' +
+          '<div class="stat-card"><span class="material-icons-round">account_balance</span><div><div class="stat-val" style="color:' + (profit >= 0 ? 'var(--green)' : 'var(--red)') + '">₪' + App.fmtP(Math.abs(profit)) + '</div><div class="stat-label">' + (profit >= 0 ? 'רווח' : 'הפסד') + '</div></div></div>' +
+        '</div>' +
+        '<div class="table-wrap"><table class="admin-table">' +
+          '<thead><tr><th>תאריך</th><th>תיאור</th><th>קטגוריה</th><th>סכום</th><th>מחק</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table></div>' +
+      '</div>';
+  },
+
+  _addExpense: function () {
+    App.showModal(
+      '<h3>הוסף רשומה פיננסית</h3>' +
+      '<div class="customer-form">' +
+        AdminView._fld('תאריך', 'fin-date', new Date().toISOString().split('T')[0], 'date') +
+        AdminView._fld('תיאור', 'fin-desc', '') +
+        AdminView._fld('קטגוריה (רשות)', 'fin-cat', '') +
+        AdminView._fld('סכום (₪)', 'fin-amount', '', 'number') +
+        '<div class="form-group"><label>סוג</label>' +
+          '<select id="fin-type" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px">' +
+            '<option value="expense">הוצאה</option><option value="income">הכנסה נוספת</option>' +
+          '</select></div>' +
+        '<div style="display:flex;gap:10px;margin-top:4px">' +
+          '<button class="btn-primary" onclick="AdminView._saveExpense()"><span class="material-icons-round">save</span> שמור</button>' +
+          '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+        '</div>' +
+      '</div>'
+    );
+  },
+
+  _saveExpense: function () {
+    var amount = parseFloat(document.getElementById('fin-amount').value);
+    var desc   = document.getElementById('fin-desc').value.trim();
+    if (!amount || !desc) { App.toast('תיאור וסכום חובה', 'warning'); return; }
+    var record = {
+      date: document.getElementById('fin-date').value,
+      description: desc,
+      category: document.getElementById('fin-cat').value,
+      amount: amount,
+      type: document.getElementById('fin-type').value
+    };
+    var exp = App.Store.get('expenses') || [];
+    exp.unshift(record);
+    App.Store.set('expenses', exp);
+    App.closeModal();
+    App.toast('הרשומה נשמרה', 'success');
+    AdminView._financial(document.getElementById('av-content'));
+  },
+
+  _delExpense: function (idx) {
+    if (!confirm('למחוק רשומה זו?')) return;
+    var exp = App.Store.get('expenses') || [];
+    exp.splice(idx, 1);
+    App.Store.set('expenses', exp);
+    App.toast('נמחק', 'success');
+    AdminView._financial(document.getElementById('av-content'));
   },
 
   /* ===== SETTINGS ===== */
