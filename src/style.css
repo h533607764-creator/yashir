@@ -43,7 +43,6 @@ body {
   font-family: 'Assistant', Arial, sans-serif;
   background: var(--navy);
   color: var(--text);
-  direction: rtl;
   min-height: 100vh;
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
@@ -196,6 +195,42 @@ img { max-width: 100%; display: block; }
   transition: background var(--transition);
 }
 .btn-login-header:hover { background: var(--blue-light); }
+
+/* ===== LANGUAGE BUTTON ===== */
+.btn-lang {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 12px; border-radius: var(--radius-sm);
+  background: var(--blue-dim); color: var(--blue-light);
+  font-size: 12px; font-weight: 700;
+  border: 1px solid var(--border-blue);
+  cursor: pointer; transition: background var(--transition);
+  white-space: nowrap;
+}
+.btn-lang:hover { background: rgba(52,152,219,.25); }
+.btn-lang-option {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-radius: var(--radius-sm);
+  background: var(--navy-mid); border: 1.5px solid var(--border);
+  color: var(--text); font-size: 16px; font-weight: 600;
+  cursor: pointer; transition: all var(--transition); width: 100%;
+}
+.btn-lang-option:hover { border-color: var(--blue); }
+.btn-lang-option.active {
+  border-color: var(--blue); background: var(--blue-dim);
+  color: var(--white); box-shadow: 0 0 0 2px rgba(52,152,219,.2);
+}
+
+/* ===== LTR SUPPORT ===== */
+html[dir="ltr"] body { direction: ltr; }
+html[dir="ltr"] .header-inner { flex-direction: row; }
+html[dir="ltr"] .logo-text-wrap { text-align: left; }
+html[dir="ltr"] .cart-panel-inner { direction: ltr; }
+html[dir="ltr"] #cart-panel { left: auto; right: 0; transform: translateX(100%); }
+html[dir="ltr"] #cart-panel:not(.hidden) { transform: translateX(0); }
+html[dir="ltr"] .card-body { text-align: left; }
+html[dir="ltr"] .section-label { text-align: left; }
+html[dir="ltr"] .admin-section-header { text-align: left; }
+html[dir="ltr"] .form-group label { text-align: left; }
 
 /* ===== FLOATING BUTTONS (bottom-left) ===== */
 #floating-btns {

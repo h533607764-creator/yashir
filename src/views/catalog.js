@@ -15,11 +15,11 @@ var CatalogView = {
           '<div class="container">' +
             '<div class="search-wrap">' +
               '<span class="material-icons-round">search</span>' +
-              '<input type="text" id="cv-search" placeholder="חיפוש לפי שם מוצר או מק&quot;ט..." oninput="CatalogView.onSearch(this.value)" value="' + CatalogView._q + '">' +
+              '<input type="text" id="cv-search" placeholder="' + t('catalog.searchPlaceholder') + '" oninput="CatalogView.onSearch(this.value)" value="' + CatalogView._q + '">' +
             '</div>' +
             '<div class="cat-scroll">' +
               (function () {
-                var cats = [{ id: 'all', label: 'הכל' }];
+                var cats = [{ id: 'all', label: t('common.all') }];
                 var seen = {};
                 PRODUCTS.forEach(function (p) {
                   if (p.category && p.category !== 'shipping' && !seen[p.category]) {
@@ -47,13 +47,13 @@ var CatalogView = {
 
   _sectionLabel: function (isCust, isAdmin) {
     if (!isCust && !isAdmin) return '';
-    if (isAdmin) return '<div class="section-label full"><span class="material-icons-round">admin_panel_settings</span> תצוגת מנהל — כל המחירים</div>';
+    if (isAdmin) return '<div class="section-label full"><span class="material-icons-round">admin_panel_settings</span> ' + t('catalog.adminView') + '</div>';
     if (CatalogView._section === 'personal') {
-      return '<div class="section-label"><span class="material-icons-round">star</span> המוצרים שלך — מחירים אישיים</div>';
+      return '<div class="section-label"><span class="material-icons-round">star</span> ' + t('catalog.personalProducts') + '</div>';
     }
-    return '<div class="section-label full"><span class="material-icons-round">menu_book</span> קטלוג מלא' +
+    return '<div class="section-label full"><span class="material-icons-round">menu_book</span> ' + t('catalog.fullCatalog') +
       '<button class="btn-back-personal" onclick="CatalogView.render(document.getElementById(\'view-content\'),{section:\'personal\'})">' +
-        '<span class="material-icons-round">arrow_forward</span> חזרה למוצרים שלי' +
+        '<span class="material-icons-round">' + (I18n.getLang() === 'en' ? 'arrow_back' : 'arrow_forward') + '</span> ' + t('catalog.backToPersonal') +
       '</button></div>';
   },
 
@@ -83,7 +83,7 @@ var CatalogView = {
     var list    = CatalogView._getProducts();
 
     if (list.length === 0) {
-      grid.innerHTML = '<div class="empty-grid"><span class="material-icons-round">inventory_2</span><p>לא נמצאו מוצרים</p></div>';
+      grid.innerHTML = '<div class="empty-grid"><span class="material-icons-round">inventory_2</span><p>' + t('catalog.noProducts') + '</p></div>';
     } else {
       grid.innerHTML = list.map(function (p) { return CatalogView._card(p, cust, isAdmin, section); }).join('');
       if (!App._obs) {
@@ -97,43 +97,38 @@ var CatalogView = {
     var fullLink = document.getElementById('cv-full-link');
     if (fullLink && App.Auth.isCustomer() && section === 'personal') {
       fullLink.innerHTML = '<div class="full-catalog-card" onclick="CatalogView.render(document.getElementById(\'view-content\'),{section:\'full\'})">' +
-        '<span class="material-icons-round">expand_more</span><span>לקטלוג המלא</span><span class="material-icons-round">menu_book</span></div>';
+        '<span class="material-icons-round">expand_more</span><span>' + t('catalog.toFullCatalog') + '</span><span class="material-icons-round">menu_book</span></div>';
     }
   },
 
   _card: function (product, cust, isAdmin, section) {
     var inStock  = product.stock > 0;
     var hasPersonal = cust && App.Pricing.hasPersonal(product, cust);
-    /* בקטלוג מלא — מוצרים ללא מחיר אישי מוצגים ללא מחיר */
     var showPrice = isAdmin || hasPersonal || (cust && section !== 'full') || (cust && App.Pricing.getDiscountPct(product, cust) === 0 && cust.generalDiscount === 0 && !hasPersonal && section !== 'full');
-    /* תמיד נציג מחיר בתצוגה האישית */
     if (cust && section === 'personal') showPrice = true;
-    /* בקטלוג מלא, מוצר שיש לו מחיר כללי בלי הנחה אישית — מציגים מחיר */
     if (cust && section === 'full') showPrice = hasPersonal;
 
     var unitPrice = showPrice ? (isAdmin ? product.price : App.Pricing.getUnitPrice(product, cust)) : null;
     var discPct   = cust ? App.Pricing.getDiscountPct(product, cust) : 0;
     var showPersonalBadge = (section === 'full') && hasPersonal;
 
-    /* מידע על המוצר */
     var productInfoHTML = '';
     if (product.unitsPerPackage) {
-      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">inventory_2</span>' + product.unitsPerPackage + ' יח׳ בחבילה</span>';
+      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">inventory_2</span>' + product.unitsPerPackage + ' ' + t('catalog.unitsInPack') + '</span>';
     }
     if (product.soldBy) {
-      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">local_shipping</span>נמכר ב' + product.soldBy + '</span>';
+      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">local_shipping</span>' + t('catalog.soldBy') + ' ' + product.soldBy + '</span>';
     }
     if (product.unitsPerContainer) {
-      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">straighten</span>' + product.unitsPerContainer + ' יח׳ ב' + (product.soldBy || 'אריזה') + '</span>';
+      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">straighten</span>' + product.unitsPerContainer + ' ' + t('catalog.unitsIn') + (product.soldBy || (I18n.getLang() === 'en' ? 'pack' : 'אריזה')) + '</span>';
     }
 
-    /* הנחות כמות */
     var bulkDiscHTML = '';
     if (product.bulkDiscounts && product.bulkDiscounts.length && showPrice) {
       var bulkItems = product.bulkDiscounts.map(function (d) {
-        return '<span class="bulk-disc-item">מ-' + d.minQty + ' ' + (product.soldBy || 'יח׳') + ': <strong>-' + d.discountPct + '%</strong></span>';
+        return '<span class="bulk-disc-item">' + t('catalog.from') + d.minQty + ' ' + (product.soldBy || t('common.units')) + ': <strong>-' + d.discountPct + '%</strong></span>';
       }).join('');
-      bulkDiscHTML = '<div class="bulk-disc-banner"><span class="material-icons-round">local_offer</span><span>הנחת כמות: ' + bulkItems + '</span></div>';
+      bulkDiscHTML = '<div class="bulk-disc-banner"><span class="material-icons-round">local_offer</span><span>' + t('catalog.bulkDiscount') + ' ' + bulkItems + '</span></div>';
     }
 
     var priceHTML = '';
@@ -144,24 +139,22 @@ var CatalogView = {
         (discPct > 0 ? '<span class="discount-badge">-' + discPct + '%</span>' : '') +
       '</div>';
     } else if (cust && section === 'full') {
-      priceHTML = '<div class="card-price-row guest-quote">מחיר בהצעה אישית</div>';
+      priceHTML = '<div class="card-price-row guest-quote">' + t('catalog.personalQuote') + '</div>';
     } else if (!cust && !isAdmin) {
-      priceHTML = '<div class="card-price-row guest">התחבר בכדי להזמין</div>';
+      priceHTML = '<div class="card-price-row guest">' + t('catalog.loginToOrder') + '</div>';
     }
 
     var orderHTML = '';
     if (cust && section === 'full' && !hasPersonal) {
-      /* מוצר ללא מחיר אישי בקטלוג מלא — כפתור הצעת מחיר */
       orderHTML = '<button class="btn-quote-request" onclick="CatalogView.requestQuote(\'' + product.id + '\')">' +
-        '<span class="material-icons-round">request_quote</span> בקש הצעת מחיר' +
+        '<span class="material-icons-round">request_quote</span> ' + t('catalog.requestQuote') +
       '</button>';
     } else if (cust) {
-      /* לקוח עם מחיר */
       var qtyId = 'qty-' + product.id;
       var cartItem = App.state.cart.find(function (i) { return i.product.id === product.id; });
       var cartQty  = cartItem ? cartItem.qty : 0;
       var inCartBadge = cartQty > 0
-        ? '<div class="in-cart-badge"><span class="material-icons-round">shopping_cart</span> ' + cartQty + ' בעגלה</div>'
+        ? '<div class="in-cart-badge"><span class="material-icons-round">shopping_cart</span> ' + cartQty + ' ' + t('catalog.inCart') + '</div>'
         : '';
 
       orderHTML =
@@ -173,15 +166,14 @@ var CatalogView = {
             '<button class="qty-btn" onclick="CatalogView._qty(\'' + product.id + '\',1)">+</button>' +
           '</div>' +
           '<button class="btn-add-cart' + (!inStock ? ' oos' : '') + '" onclick="CatalogView._add(\'' + product.id + '\')">' +
-            '<span class="material-icons-round">' + (cartQty > 0 ? 'shopping_cart' : 'add_shopping_cart') + '</span> ' + (cartQty > 0 ? 'עדכן' : 'הוסף') +
+            '<span class="material-icons-round">' + (cartQty > 0 ? 'shopping_cart' : 'add_shopping_cart') + '</span> ' + (cartQty > 0 ? t('catalog.update') : t('catalog.addToCart')) +
           '</button>' +
         '</div>' +
-        /* סה"כ שורה + הנחת כמות */
         '<div id="line-info-' + product.id + '" class="line-total-wrap"></div>' +
-        (!inStock ? '<div class="oos-warning"><span class="material-icons-round">schedule</span> עלול להתעכב — חסר במלאי</div>' : '');
+        (!inStock ? '<div class="oos-warning"><span class="material-icons-round">schedule</span> ' + t('catalog.oosDelay') + '</div>' : '');
     } else if (!cust && !isAdmin) {
       orderHTML = '<button class="btn-login-to-order" onclick="App.navigate(\'login\')">' +
-        '<span class="material-icons-round">lock</span> כניסה להזמנה</button>';
+        '<span class="material-icons-round">lock</span> ' + t('catalog.loginToOrderBtn') + '</button>';
     }
 
     return '<article class="product-card' + (inStock ? '' : ' oos-card') + '">' +
@@ -189,11 +181,11 @@ var CatalogView = {
         (product.image
           ? '<img src="' + CloudinaryUpload.buildCatalogUrl(product.image) + '" alt="' + product.name + '" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">'
           : '<span class="card-icon">' + product.icon + '</span>') +
-        '<span class="stock-badge ' + (inStock ? 'in' : 'out') + '">' + (inStock ? 'במלאי' : 'חסר') + '</span>' +
-        (showPersonalBadge ? '<span class="personal-badge"><span class="material-icons-round">star</span> מחיר מיוחד בשבילך</span>' : '') +
+        '<span class="stock-badge ' + (inStock ? 'in' : 'out') + '">' + (inStock ? t('catalog.inStock') : t('catalog.outOfStock')) + '</span>' +
+        (showPersonalBadge ? '<span class="personal-badge"><span class="material-icons-round">star</span> ' + t('catalog.specialPrice') + '</span>' : '') +
       '</div>' +
       '<div class="card-body">' +
-        '<div class="card-meta"><span class="card-sku">מק"ט ' + App.escHTML(product.sku) + '</span><span class="card-cat">' + App.escHTML(product.categoryLabel) + '</span></div>' +
+        '<div class="card-meta"><span class="card-sku">' + t('common.sku') + ' ' + App.escHTML(product.sku) + '</span><span class="card-cat">' + App.escHTML(product.categoryLabel) + '</span></div>' +
         '<h3 class="card-name">' + App.escHTML(product.name) + '</h3>' +
         '<p class="card-desc">' + App.escHTML(product.description) + '</p>' +
         (productInfoHTML ? '<div class="prod-info-tags">' + productInfoHTML + '</div>' : '') +
@@ -204,7 +196,6 @@ var CatalogView = {
     '</article>';
   },
 
-  /* עדכון סה"כ שורה + הצגת הנחת כמות בזמן אמת */
   _updateLineTotal: function (productId) {
     var infoEl  = document.getElementById('line-info-' + productId);
     if (!infoEl) return;
@@ -225,27 +216,24 @@ var CatalogView = {
     var html = '';
     if (qty > 1) {
       if (bulkPct > 0) {
-        /* יש הנחת כמות */
         html = '<div class="line-total bulk-active">' +
           '<span class="line-orig">₪' + App.fmtP(basePrice * qty) + '</span>' +
-          '<span class="line-disc-label">הנחת כמות -' + bulkPct + '%</span>' +
-          '<span class="line-final">סה"כ ₪' + App.fmtP(effectiveP * qty) + '</span>' +
+          '<span class="line-disc-label">' + t('catalog.bulkDiscountLabel') + ' -' + bulkPct + '%</span>' +
+          '<span class="line-final">' + t('catalog.lineTotal') + ' ₪' + App.fmtP(effectiveP * qty) + '</span>' +
         '</div>';
       } else {
         html = '<div class="line-total">' +
-          '<span class="line-final">סה"כ ₪' + App.fmtP(basePrice * qty) + '</span>' +
+          '<span class="line-final">' + t('catalog.lineTotal') + ' ₪' + App.fmtP(basePrice * qty) + '</span>' +
         '</div>';
-        /* הצג סף הנחה הבאה */
         var next = App.Pricing.getNextBulkThreshold(product, qty);
         if (next) {
-          html += '<div class="next-bulk-hint"><span class="material-icons-round">local_offer</span>עוד ' + (next.minQty - qty) + ' ' + (product.soldBy || 'יח׳') + ' לקבלת הנחת ' + next.discountPct + '%</div>';
+          html += '<div class="next-bulk-hint"><span class="material-icons-round">local_offer</span>' + t('catalog.moreFor') + ' ' + (next.minQty - qty) + ' ' + (product.soldBy || t('common.units')) + ' ' + t('catalog.toGet') + ' ' + next.discountPct + '%</div>';
         }
       }
     } else if (qty === 1) {
-      /* הצג סף הנחה ראשוני */
       var nextDisc = App.Pricing.getNextBulkThreshold(product, qty);
       if (nextDisc) {
-        html = '<div class="next-bulk-hint"><span class="material-icons-round">local_offer</span>הזמן ' + nextDisc.minQty + ' ' + (product.soldBy || 'יח׳') + ' לקבלת הנחת ' + nextDisc.discountPct + '%</div>';
+        html = '<div class="next-bulk-hint"><span class="material-icons-round">local_offer</span>' + t('catalog.order') + ' ' + nextDisc.minQty + ' ' + (product.soldBy || t('common.units')) + ' ' + t('catalog.toGet') + ' ' + nextDisc.discountPct + '%</div>';
       }
     }
     infoEl.innerHTML = html;
@@ -287,7 +275,7 @@ var CatalogView = {
     var cItem = App.state.cart.find(function (i) { return i.product.id === id; });
     if (cItem) {
       App.Cart.updateQty(id, qty);
-      App.toast('כמות עודכנה ✓', 'success');
+      App.toast(t('catalog.qtyUpdated'), 'success');
     } else {
       App.Cart.add(p, qty);
     }
@@ -297,24 +285,23 @@ var CatalogView = {
     CatalogView.render(document.getElementById('view-content'), { section: 'full' });
   },
 
-  /* ===== בקשת הצעת מחיר ===== */
   requestQuote: function (productId) {
     var product = PRODUCTS.find(function (p) { return p.id === productId; });
     if (!product) return;
     var customer = App.Auth.isCustomer() ? App.state.currentUser.customer : null;
-    if (!customer) { App.toast('יש להתחבר תחילה', 'warning'); return; }
+    if (!customer) { App.toast(t('catalog.loginFirst'), 'warning'); return; }
 
     App.showModal(
       '<div class="sys-message">' +
         '<div class="sys-icon" style="background:var(--blue-dim);color:var(--blue)"><span class="material-icons-round" style="font-size:30px">request_quote</span></div>' +
-        '<h3>בקשת הצעת מחיר</h3>' +
-        '<p>האם לשלוח בקשת הצעת מחיר עבור:<br><strong>' + App.escHTML(product.name) + '</strong>?</p>' +
-        '<p style="font-size:13px;color:var(--text-muted)">הנציג שלנו יחזור אליך עם מחיר אישי בהקדם.</p>' +
+        '<h3>' + t('catalog.quoteModalTitle') + '</h3>' +
+        '<p>' + t('catalog.quoteModalText') + '<br><strong>' + App.escHTML(product.name) + '</strong></p>' +
+        '<p style="font-size:13px;color:var(--text-muted)">' + t('catalog.quoteModalNote') + '</p>' +
         '<div style="display:flex;gap:10px;margin-top:12px;width:100%">' +
           '<button class="btn-primary full-width" onclick="CatalogView._confirmQuote(\'' + productId + '\')">' +
-            '<span class="material-icons-round">send</span> שלח בקשה' +
+            '<span class="material-icons-round">send</span> ' + t('catalog.sendRequest') +
           '</button>' +
-          '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+          '<button class="btn-secondary" onclick="App.closeModal()">' + t('common.cancel') + '</button>' +
         '</div>' +
       '</div>'
     );
@@ -338,61 +325,56 @@ var CatalogView = {
       status:       'pending'
     };
 
-    /* שמירה ב-Firestore */
     if (window.DB) {
       window.DB.collection('quote_requests').add(reqData)
         .catch(function (e) { console.warn('quote_request save error:', e); });
     }
 
-    /* WhatsApp למנהל */
     if (settings.adminPhone) {
       var ph = settings.adminPhone.replace(/\D/g,'');
       if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-      var waMsg = '💰 *בקשת הצעת מחיר*\n' +
-        '👤 לקוח: ' + customer.name + '\n' +
+      var waMsg = '💰 *' + t('catalog.quoteModalTitle') + '*\n' +
+        '👤 ' + customer.name + '\n' +
         '📱 ' + (customer.phone || '—') + '\n' +
-        '📦 מוצר: ' + product.name + ' (מק"ט ' + product.sku + ')';
+        '📦 ' + product.name + ' (' + t('common.sku') + ' ' + product.sku + ')';
       setTimeout(function () {
         window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
       }, 400);
     }
 
-    /* מייל למנהל */
     if (settings.adminEmail) {
-      var subject = 'בקשת הצעת מחיר — ' + customer.name + ' / ' + product.name;
-      var body    = 'בקשת הצעת מחיר חדשה:\n\n' +
-        'לקוח: ' + customer.name + ' (ח.פ: ' + customer.id + ')\n' +
-        'טלפון: ' + (customer.phone || '—') + '\n' +
-        'מייל: ' + (customer.email || '—') + '\n\n' +
-        'מוצר: ' + product.name + '\n' +
-        'מק"ט: ' + product.sku + '\n\n' +
-        'ישיר שיווק והפצה';
+      var subject = t('catalog.quoteModalTitle') + ' — ' + customer.name + ' / ' + product.name;
+      var body    = t('catalog.quoteModalTitle') + ':\n\n' +
+        customer.name + ' (' + customer.id + ')\n' +
+        (customer.phone || '—') + '\n\n' +
+        product.name + '\n' +
+        t('common.sku') + ': ' + product.sku + '\n\n' +
+        t('success.companyName');
       setTimeout(function () {
         window.open('mailto:' + settings.adminEmail + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
       }, 1000);
     }
 
     App.closeModal();
-    App.toast('הבקשה נשלחה! ניצור איתך קשר בהקדם', 'success');
+    App.toast(t('catalog.requestSent'), 'success');
   },
 
-  /* ===== בקשת מוצר חדש ===== */
   requestNewProduct: function () {
     var customer = App.Auth.isCustomer() ? App.state.currentUser.customer : null;
     if (!customer) { App.navigate('login'); return; }
 
     App.showModal(
-      '<h3><span class="material-icons-round">add_circle</span> בקשת מוצר חדש</h3>' +
-      '<p style="font-size:14px;color:var(--text-muted);margin-bottom:12px">לא מצאת מה שחיפשת? תכתוב לנו ונשלח הצעת מחיר.</p>' +
+      '<h3><span class="material-icons-round">add_circle</span> ' + t('catalog.newProductTitle') + '</h3>' +
+      '<p style="font-size:14px;color:var(--text-muted);margin-bottom:12px">' + t('catalog.newProductText') + '</p>' +
       '<div class="customer-form">' +
-        '<div class="form-group"><label>שם המוצר / תיאור</label><input type="text" id="npr-name" placeholder="לדוגמה: כוס נייר 6 אונ׳ לבנה" style="font-size:16px"></div>' +
-        '<div class="form-group"><label>כמות משוערת (רשות)</label><input type="number" id="npr-qty" placeholder="לדוגמה: 500" min="1"></div>' +
-        '<div class="form-group"><label>הערות נוספות (רשות)</label><textarea id="npr-notes" rows="2" placeholder="פרטים נוספים..."></textarea></div>' +
+        '<div class="form-group"><label>' + t('catalog.productNameLabel') + '</label><input type="text" id="npr-name" placeholder="' + t('catalog.productNamePlaceholder') + '" style="font-size:16px"></div>' +
+        '<div class="form-group"><label>' + t('catalog.estQtyLabel') + '</label><input type="number" id="npr-qty" placeholder="' + t('catalog.estQtyPlaceholder') + '" min="1"></div>' +
+        '<div class="form-group"><label>' + t('catalog.extraNotesLabel') + '</label><textarea id="npr-notes" rows="2" placeholder="' + t('catalog.extraNotesPlaceholder') + '"></textarea></div>' +
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<button class="btn-primary" onclick="CatalogView._sendProductRequest()">' +
-            '<span class="material-icons-round">send</span> שלח בקשה' +
+            '<span class="material-icons-round">send</span> ' + t('catalog.sendRequest') +
           '</button>' +
-          '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+          '<button class="btn-secondary" onclick="App.closeModal()">' + t('common.cancel') + '</button>' +
         '</div>' +
       '</div>'
     );
@@ -406,7 +388,7 @@ var CatalogView = {
     var name = document.getElementById('npr-name');
     var qty  = document.getElementById('npr-qty');
     var notes = document.getElementById('npr-notes');
-    if (!name || !name.value.trim()) { App.toast('נא להזין שם מוצר', 'warning'); return; }
+    if (!name || !name.value.trim()) { App.toast(t('catalog.enterProductName'), 'warning'); return; }
 
     var customer = App.Auth.isCustomer() ? App.state.currentUser.customer : null;
     var settings = App.state.settings;
@@ -422,43 +404,40 @@ var CatalogView = {
       status:       'pending'
     };
 
-    /* שמירה ב-Firestore */
     if (window.DB) {
       window.DB.collection('product_requests').add(reqData)
         .catch(function (e) { console.warn('product_request save error:', e); });
     }
 
-    /* WhatsApp למנהל */
     if (settings.adminPhone) {
       var ph = settings.adminPhone.replace(/\D/g,'');
       if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-      var waMsg = '📦 *בקשה למוצר חדש*\n' +
+      var waMsg = '📦 *' + t('catalog.newProductTitle') + '*\n' +
         '👤 ' + customer.name + '\n' +
         '📱 ' + (customer.phone || '—') + '\n' +
-        '🛒 מוצר: ' + name.value.trim() +
-        (qty && qty.value ? '\n📊 כמות משוערת: ' + qty.value : '') +
+        '🛒 ' + name.value.trim() +
+        (qty && qty.value ? '\n📊 ' + qty.value : '') +
         (notes && notes.value.trim() ? '\n📝 ' + notes.value.trim() : '');
       setTimeout(function () {
         window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
       }, 400);
     }
 
-    /* מייל למנהל */
     if (settings.adminEmail) {
-      var subject = 'בקשה למוצר חדש — ' + customer.name;
-      var body    = 'בקשה למוצר חדש:\n\n' +
-        'לקוח: ' + customer.name + ' (ח.פ: ' + customer.id + ')\n' +
-        'טלפון: ' + (customer.phone || '—') + '\n\n' +
-        'מוצר מבוקש: ' + name.value.trim() + '\n' +
-        (qty && qty.value ? 'כמות משוערת: ' + qty.value + '\n' : '') +
-        (notes && notes.value.trim() ? 'הערות: ' + notes.value.trim() + '\n' : '') +
-        '\nישיר שיווק והפצה';
+      var subject = t('catalog.newProductTitle') + ' — ' + customer.name;
+      var body    = t('catalog.newProductTitle') + ':\n\n' +
+        customer.name + ' (' + customer.id + ')\n' +
+        (customer.phone || '—') + '\n\n' +
+        name.value.trim() + '\n' +
+        (qty && qty.value ? qty.value + '\n' : '') +
+        (notes && notes.value.trim() ? notes.value.trim() + '\n' : '') +
+        '\n' + t('success.companyName');
       setTimeout(function () {
         window.open('mailto:' + settings.adminEmail + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
       }, 1000);
     }
 
     App.closeModal();
-    App.toast('הבקשה נשלחה! ניצור איתך קשר בהקדם', 'success');
+    App.toast(t('catalog.requestSent'), 'success');
   }
 };

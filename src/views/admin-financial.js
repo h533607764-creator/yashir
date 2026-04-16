@@ -1,6 +1,5 @@
 /* =============================================================
-   AdminFinancial — ניהול פיננסי מורחב
-   תקופות, הכנסות/הוצאות לפני ואחרי מע"מ, שורות רווח
+   AdminFinancial — Financial management
    ============================================================= */
 var AdminFinancial = {
   _period: 'month',
@@ -18,7 +17,6 @@ var AdminFinancial = {
       AdminFinancial._transactions = res[1].docs.map(function (d) { return Object.assign({ _id: d.id }, d.data()); });
       AdminFinancial._renderPanel(c);
     }).catch(function () {
-      // Fallback to localStorage orders + empty transactions
       AdminFinancial._orders = App.Orders.getAll();
       AdminFinancial._transactions = [];
       AdminFinancial._renderPanel(c);
@@ -27,11 +25,11 @@ var AdminFinancial = {
 
   _renderPanel: function (c) {
     var periods = [
-      { id: 'month',    label: 'חודש נוכחי' },
-      { id: 'quarter',  label: 'רבעון' },
-      { id: 'halfyear', label: 'חצי שנה' },
-      { id: 'year',     label: 'שנה נוכחית' },
-      { id: 'all',      label: 'מתחילת העסק' }
+      { id: 'month',    label: t('admin.periodMonth') },
+      { id: 'quarter',  label: t('admin.periodQuarter') },
+      { id: 'halfyear', label: t('admin.periodHalfYear') },
+      { id: 'year',     label: t('admin.periodYear') },
+      { id: 'all',      label: t('admin.periodAll') }
     ];
     var vatRate = App.state.settings.vatRate || 0.18;
     var filtered = AdminFinancial._filter(AdminFinancial._period);
@@ -41,7 +39,7 @@ var AdminFinancial = {
       var isIn = tx.type === 'income';
       return '<tr>' +
         '<td>' + tx.date + '</td>' +
-        '<td><span style="color:' + (isIn ? '#22c55e' : '#ef4444') + ';font-weight:700">' + (isIn ? '▲ הכנסה' : '▼ הוצאה') + '</span></td>' +
+        '<td><span style="color:' + (isIn ? '#22c55e' : '#ef4444') + ';font-weight:700">' + (isIn ? t('admin.incomeType') : t('admin.expenseType')) + '</span></td>' +
         '<td>' + tx.description + '</td>' +
         '<td style="color:var(--text-muted)">' + (tx.category || '—') + '</td>' +
         '<td>₪' + tx.amountPreVat + '</td>' +
@@ -49,17 +47,16 @@ var AdminFinancial = {
         '<td style="display:flex;gap:4px;padding:8px">' +
           '<button class="btn-sm danger" onclick="AdminFinancial._deleteTx(\'' + tx._id + '\')"><span class="material-icons-round">delete</span></button>' +
         '</td></tr>';
-    }).join('') || '<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text-muted)">אין רשומות בתקופה זו</td></tr>';
+    }).join('') || '<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text-muted)">' + t('admin.noRecordsInPeriod') + '</td></tr>';
 
     var profColor = sum.netPost >= 0 ? '#22c55e' : '#ef4444';
 
     c.innerHTML = '<div class="admin-section">' +
-      '<div class="admin-section-header"><h2>ניהול פיננסי</h2>' +
+      '<div class="admin-section-header"><h2>' + t('admin.financialTitle') + '</h2>' +
         '<button class="btn-primary" onclick="AdminFinancial._addTx()">' +
-          '<span class="material-icons-round">add</span> הוסף הכנסה / הוצאה</button>' +
+          '<span class="material-icons-round">add</span> ' + t('admin.addIncomeExpense') + '</button>' +
       '</div>' +
 
-      /* תקופות */
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">' +
         periods.map(function (p) {
           return '<button class="cat-btn' + (AdminFinancial._period === p.id ? ' active' : '') +
@@ -67,26 +64,24 @@ var AdminFinancial = {
         }).join('') +
       '</div>' +
 
-      /* כרטיסי סיכום */
       '<div class="settings-grid" style="margin-bottom:24px">' +
-        AdminFinancial._card('הכנסות ממכירות', '₪' + sum.revenuePost, '₪' + sum.revenuePre + ' לפני מע"מ', 'var(--blue)') +
-        AdminFinancial._card('הוצאות נלוות', '₪' + sum.expensesPost, '₪' + sum.expensesPre + ' לפני מע"מ', '#ef4444') +
-        AdminFinancial._card('הכנסות ידניות נוספות', '₪' + sum.incomePost, '₪' + sum.incomePre + ' לפני מע"מ', '#8b5cf6') +
+        AdminFinancial._card(t('admin.salesRevenue'), '₪' + sum.revenuePost, '₪' + sum.revenuePre + ' ' + t('admin.beforeVatLabel'), 'var(--blue)') +
+        AdminFinancial._card(t('admin.expenses'), '₪' + sum.expensesPost, '₪' + sum.expensesPre + ' ' + t('admin.beforeVatLabel'), '#ef4444') +
+        AdminFinancial._card(t('admin.manualIncome'), '₪' + sum.incomePost, '₪' + sum.incomePre + ' ' + t('admin.beforeVatLabel'), '#8b5cf6') +
       '</div>' +
 
-      /* שורות רווח */
       '<div style="background:var(--navy-light);border-radius:var(--radius);padding:16px;margin-bottom:24px;border:1.5px solid var(--border)">' +
-        '<h3 style="margin-bottom:12px;font-size:14px;color:var(--text-muted)">סיכום רווחיות</h3>' +
+        '<h3 style="margin-bottom:12px;font-size:14px;color:var(--text-muted)">' + t('admin.profitSummary') + '</h3>' +
         '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
-          '<thead><tr><th style="text-align:right;padding:6px 0;color:var(--text-muted);font-weight:500"></th>' +
-            '<th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">לפני מע"מ</th>' +
-            '<th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">אחרי מע"מ</th>' +
+          '<thead><tr><th style="text-align:' + (I18n.getLang() === 'en' ? 'left' : 'right') + ';padding:6px 0;color:var(--text-muted);font-weight:500"></th>' +
+            '<th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">' + t('admin.beforeVatLabel') + '</th>' +
+            '<th style="text-align:left;padding:6px 8px;color:var(--text-muted);font-weight:500">' + t('admin.afterVatLabel') + '</th>' +
           '</tr></thead>' +
           '<tbody>' +
-            AdminFinancial._summaryRow('רווח ממכירות (הכנסות פחות הוצאות)', sum.saleNetPre, sum.saleNetPost) +
-            AdminFinancial._summaryRow('רווח/הפסד — הכנסות והוצאות ידניות', sum.manualNetPre, sum.manualNetPost) +
+            AdminFinancial._summaryRow(t('admin.salesProfit'), sum.saleNetPre, sum.saleNetPost) +
+            AdminFinancial._summaryRow(t('admin.manualProfit'), sum.manualNetPre, sum.manualNetPost) +
             '<tr style="border-top:2px solid var(--border)">' +
-              '<td style="padding:8px 0;font-weight:800;font-size:15px">סה"כ רווח נקי</td>' +
+              '<td style="padding:8px 0;font-weight:800;font-size:15px">' + t('admin.netProfit') + '</td>' +
               '<td style="padding:8px;color:' + profColor + ';font-weight:800;font-size:16px">₪' + sum.netPre + '</td>' +
               '<td style="padding:8px;color:' + profColor + ';font-weight:800;font-size:16px">₪' + sum.netPost + '</td>' +
             '</tr>' +
@@ -94,10 +89,9 @@ var AdminFinancial = {
         '</table>' +
       '</div>' +
 
-      /* טבלת עסקאות */
-      '<h3 style="margin-bottom:12px;font-size:14px">הכנסות / הוצאות ידניות</h3>' +
+      '<h3 style="margin-bottom:12px;font-size:14px">' + t('admin.manualTransactions') + '</h3>' +
       '<div class="table-wrap"><table class="admin-table">' +
-        '<thead><tr><th>תאריך</th><th>סוג</th><th>תיאור</th><th>קטגוריה</th><th>לפני מע"מ</th><th>אחרי מע"מ</th><th>מחק</th></tr></thead>' +
+        '<thead><tr><th>' + t('common.date') + '</th><th>' + t('admin.typeCol') + '</th><th>' + t('common.description') + '</th><th>' + t('admin.categoryColFin') + '</th><th>' + t('admin.beforeVatCol') + '</th><th>' + t('admin.afterVatCol') + '</th><th>' + t('admin.deleteCol') + '</th></tr></thead>' +
         '<tbody>' + txRows + '</tbody>' +
       '</table></div></div>';
   },
@@ -134,7 +128,7 @@ var AdminFinancial = {
       ? AdminFinancial._orders.filter(function (o) { return new Date(o.timestamp) >= start; })
       : AdminFinancial._orders;
     var fT = start
-      ? AdminFinancial._transactions.filter(function (t) { return new Date(t.date) >= start; })
+      ? AdminFinancial._transactions.filter(function (tx) { return new Date(tx.date) >= start; })
       : AdminFinancial._transactions;
 
     return { orders: fO, transactions: fT };
@@ -163,13 +157,13 @@ var AdminFinancial = {
 
     var saleNetPre   = parseFloat((revenuePre  - expensesPre).toFixed(2));
     var saleNetPost  = parseFloat((revenuePost - expensesPost).toFixed(2));
-    var manualNetPre = parseFloat((incomePre   - 0).toFixed(2));   // הכנסות ידניות בלבד
+    var manualNetPre = parseFloat((incomePre   - 0).toFixed(2));
     var manualNetPost= parseFloat((incomePost  - 0).toFixed(2));
     var netPre       = parseFloat((saleNetPre  + incomePre).toFixed(2));
     var netPost      = parseFloat((saleNetPost + incomePost).toFixed(2));
 
-    return { revenuePost, revenuePre, expensesPost, expensesPre, incomePost, incomePre,
-             saleNetPre, saleNetPost, manualNetPre, manualNetPost, netPre, netPost };
+    return { revenuePost: revenuePost, revenuePre: revenuePre, expensesPost: expensesPost, expensesPre: expensesPre, incomePost: incomePost, incomePre: incomePre,
+             saleNetPre: saleNetPre, saleNetPost: saleNetPost, manualNetPre: manualNetPre, manualNetPost: manualNetPost, netPre: netPre, netPost: netPost };
   },
 
   _addTx: function () {
@@ -180,36 +174,36 @@ var AdminFinancial = {
     var isNew = !tx;
     tx = tx || { type: 'expense', description: '', amount: '', vatIncluded: true, date: new Date().toISOString().substring(0, 10), category: '' };
     App.showModal(
-      '<h3>' + (isNew ? 'הוסף הכנסה / הוצאה' : 'עריכה') + '</h3>' +
+      '<h3>' + (isNew ? t('admin.addIncomeExpense') : t('common.edit')) + '</h3>' +
       '<div class="customer-form">' +
-        '<div class="form-group"><label>סוג</label>' +
+        '<div class="form-group"><label>' + t('admin.typeCol') + '</label>' +
           '<select id="tf-type" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
-            '<option value="expense"' + (tx.type === 'expense' ? ' selected' : '') + '>הוצאה</option>' +
-            '<option value="income"' + (tx.type === 'income'  ? ' selected' : '') + '>הכנסה נוספת</option>' +
+            '<option value="expense"' + (tx.type === 'expense' ? ' selected' : '') + '>' + t('admin.expense') + '</option>' +
+            '<option value="income"' + (tx.type === 'income'  ? ' selected' : '') + '>' + t('admin.extraIncome') + '</option>' +
           '</select></div>' +
-        '<div class="form-group"><label>תיאור</label><input type="text" id="tf-desc" value="' + (tx.description || '') + '"></div>' +
-        '<div class="form-group"><label>קטגוריה</label><input type="text" id="tf-cat" value="' + (tx.category || '') + '" placeholder="שכירות, שיווק, ציוד..."></div>' +
-        '<div class="form-group"><label>תאריך</label><input type="date" id="tf-date" value="' + tx.date + '"></div>' +
-        '<div class="form-group"><label>סכום (₪)</label><input type="number" id="tf-amount" value="' + (tx.amount || '') + '" min="0" step="0.01"></div>' +
-        '<div class="form-group"><label>הסכום מוזן</label>' +
+        '<div class="form-group"><label>' + t('common.description') + '</label><input type="text" id="tf-desc" value="' + (tx.description || '') + '"></div>' +
+        '<div class="form-group"><label>' + t('admin.categoryColFin') + '</label><input type="text" id="tf-cat" value="' + (tx.category || '') + '" placeholder="' + t('admin.catPlaceholder') + '"></div>' +
+        '<div class="form-group"><label>' + t('common.date') + '</label><input type="date" id="tf-date" value="' + tx.date + '"></div>' +
+        '<div class="form-group"><label>' + t('admin.amount') + '</label><input type="number" id="tf-amount" value="' + (tx.amount || '') + '" min="0" step="0.01"></div>' +
+        '<div class="form-group"><label>' + t('admin.amountEnteredAs') + '</label>' +
           '<select id="tf-vat" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
-            '<option value="true"'  + (tx.vatIncluded  ? ' selected' : '') + '>כולל מע"מ (אחרי מע"מ)</option>' +
-            '<option value="false"' + (!tx.vatIncluded ? ' selected' : '') + '>לא כולל מע"מ (לפני מע"מ)</option>' +
+            '<option value="true"'  + (tx.vatIncluded  ? ' selected' : '') + '>' + t('admin.withVatOption') + '</option>' +
+            '<option value="false"' + (!tx.vatIncluded ? ' selected' : '') + '>' + t('admin.withoutVatOption') + '</option>' +
           '</select></div>' +
         '<div style="display:flex;gap:10px;margin-top:4px">' +
           '<button class="btn-primary" onclick="AdminFinancial._saveTx(\'' + (tx._id || '') + '\')">' +
-            '<span class="material-icons-round">save</span> שמור</button>' +
-          '<button class="btn-secondary" onclick="App.closeModal()">ביטול</button>' +
+            '<span class="material-icons-round">save</span> ' + t('common.save') + '</button>' +
+          '<button class="btn-secondary" onclick="App.closeModal()">' + t('common.cancel') + '</button>' +
         '</div>' +
       '</div>'
     );
   },
 
   _saveTx: function (id) {
-    if (!window.DB) { App.toast('Firestore לא מחובר', 'error'); return; }
+    if (!window.DB) { App.toast(t('admin.firestoreNotConnected'), 'error'); return; }
     var amount = parseFloat(document.getElementById('tf-amount').value);
     var desc   = document.getElementById('tf-desc').value.trim();
-    if (!desc || isNaN(amount)) { App.toast('תיאור וסכום חובה', 'warning'); return; }
+    if (!desc || isNaN(amount)) { App.toast(t('admin.descAmountRequired'), 'warning'); return; }
 
     var vatIncluded = document.getElementById('tf-vat').value === 'true';
     var vatRate = App.state.settings.vatRate || 0.18;
@@ -230,16 +224,16 @@ var AdminFinancial = {
 
     var ref = id ? window.DB.collection('transactions').doc(id) : window.DB.collection('transactions').doc();
     ref.set(data).then(function () {
-      App.toast('נשמר בהצלחה', 'success');
+      App.toast(t('admin.savedSuccess'), 'success');
       App.closeModal();
       AdminFinancial.render(document.getElementById('av-content'));
-    }).catch(function () { App.toast('שגיאה בשמירה', 'error'); });
+    }).catch(function () { App.toast(t('admin.saveError'), 'error'); });
   },
 
   _deleteTx: function (id) {
-    if (!confirm('למחוק רשומה זו?')) return;
+    if (!confirm(t('admin.deleteRecordConfirm'))) return;
     window.DB.collection('transactions').doc(id).delete().then(function () {
-      App.toast('נמחק', 'success');
+      App.toast(t('admin.deleted'), 'success');
       AdminFinancial.render(document.getElementById('av-content'));
     });
   }

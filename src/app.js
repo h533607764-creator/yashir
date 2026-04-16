@@ -1,5 +1,5 @@
 /* =============================================================
-   ישיר — App Core v3
+   ישיר — App Core v3 (i18n)
    ============================================================= */
 var App = (function () {
   'use strict';
@@ -14,6 +14,11 @@ var App = (function () {
   function escHTML(str) {
     if (str === null || str === undefined) return '';
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  function dateFmt(d) {
+    var locale = I18n.getLang() === 'en' ? 'en-US' : 'he-IL';
+    return new Date(d).toLocaleDateString(locale);
   }
 
   /* ===== STATE ===== */
@@ -49,14 +54,11 @@ var App = (function () {
     if (s) Object.assign(state.settings, s);
     var c = Store.get('customers');
     if (c) window.CUSTOMERS_DB = c;
-    /* מוצרים: טוען מ-localStorage כ-fallback מהיר בלבד —
-       הסנכרון האמיתי מגיע מ-Firestore בסוף init() */
     var p = Store.get('products');
     if (p && p.length) window.PRODUCTS = p;
     if (!Store.get('orders'))   Store.set('orders', []);
     if (!Store.get('expenses')) Store.set('expenses', []);
 
-    /* ניקוי הזמנות ישנות מעל 6 חודשים מ-localStorage */
     var sixMonthsAgo = Date.now() - 180 * 864e5;
     var localOrders = Store.get('orders');
     if (localOrders && localOrders.length > 200) {
@@ -101,7 +103,6 @@ var App = (function () {
 
   /* ===== PRICING ===== */
   var Pricing = {
-    /* מחזיר את אחוז הנחת הכמות המקסימלי עבור qty נתון */
     getBulkDiscountPct: function (product, qty) {
       var discounts = product.bulkDiscounts;
       if (!discounts || !discounts.length || !qty || qty < 1) return 0;
@@ -111,8 +112,6 @@ var App = (function () {
       });
       return best;
     },
-
-    /* הסף המינימלי הבא שיפתח הנחת כמות */
     getNextBulkThreshold: function (product, qty) {
       var discounts = product.bulkDiscounts;
       if (!discounts || !discounts.length) return null;
@@ -122,7 +121,6 @@ var App = (function () {
       }
       return null;
     },
-
     getUnitPrice: function (product, customer) {
       if (!customer) return null;
       var p = customer.personalPrices && customer.personalPrices[product.id];
@@ -132,8 +130,6 @@ var App = (function () {
       }
       return product.price;
     },
-
-    /* מחיר יחידה אחרי הנחה אישית + הנחת כמות */
     getEffectiveUnitPrice: function (product, customer, qty) {
       var basePrice = Pricing.getUnitPrice(product, customer);
       if (basePrice === null) return null;
@@ -143,28 +139,22 @@ var App = (function () {
       }
       return basePrice;
     },
-
     getDiscountPct: function (product, customer) {
       if (!customer) return 0;
       var p = customer.personalPrices && customer.personalPrices[product.id];
       if (p !== undefined) return parseFloat(Math.max(0, (1 - p / product.price) * 100).toFixed(2));
       return customer.generalDiscount || 0;
     },
-
-    /* אחוז הנחה כולל (אישי + כמות) */
     getTotalDiscountPct: function (product, customer, qty) {
       var personalPct = Pricing.getDiscountPct(product, customer);
       var bulkPct     = Pricing.getBulkDiscountPct(product, qty);
       if (personalPct === 0 && bulkPct === 0) return 0;
-      /* חישוב מצטבר: (1 - personal%) * (1 - bulk%) */
       var effectivePrice = product.price * (1 - personalPct / 100) * (1 - bulkPct / 100);
       return parseFloat(Math.max(0, (1 - effectivePrice / product.price) * 100).toFixed(2));
     },
-
     hasPersonal: function (product, customer) {
       return !!(customer && customer.personalPrices && customer.personalPrices[product.id] !== undefined);
     },
-
     calcTotals: function (items) {
       var subtotal = 0, savings = 0;
       items.forEach(function (i) {
@@ -188,19 +178,18 @@ var App = (function () {
   /* ===== CART ===== */
   var Cart = {
     add: function (product, qty) {
-      if (!Auth.isCustomer()) { toast('יש להתחבר תחילה', 'warning'); return; }
+      if (!Auth.isCustomer()) { toast(t('catalog.loginFirst'), 'warning'); return; }
       qty = qty || 1;
       var customer = state.currentUser.customer;
       var isOOS = product.stock === 0;
 
       if (isOOS) {
-        toast('מוצר חסר במלאי — ייתכן עיכוב ביום', 'warning');
+        toast(t('cart.oosToast'), 'warning');
       }
 
       var existing = state.cart.find(function (i) { return i.product.id === product.id; });
       if (existing) {
         existing.qty += qty;
-        /* עדכון מחיר אחרי שינוי כמות (הנחת כמות) */
         var newEffective = Pricing.getEffectiveUnitPrice(product, customer, existing.qty);
         if (newEffective !== null) existing.unitPrice = newEffective;
         existing.discountPct = Pricing.getTotalDiscountPct(product, customer, existing.qty);
@@ -218,7 +207,7 @@ var App = (function () {
 
       Cart._save();
       Cart.updateBadge();
-      toast('נוסף לעגלה ✓' + (isOOS ? ' (חסר במלאי)' : ''), isOOS ? 'warning' : 'success');
+      toast(isOOS ? t('cart.addedOos') : t('cart.addedToCart'), isOOS ? 'warning' : 'success');
     },
 
     remove: function (id) {
@@ -233,7 +222,6 @@ var App = (function () {
       var item = state.cart.find(function (i) { return i.product.id === id; });
       if (item) {
         item.qty = qty;
-        /* עדכון מחיר לפי הנחת כמות חדשה */
         var customer = Auth.isCustomer() ? state.currentUser.customer : null;
         if (customer) {
           var newPrice = Pricing.getEffectiveUnitPrice(item.product, customer, qty);
@@ -330,12 +318,10 @@ var App = (function () {
         paymentStatus: 'unpaid'
       };
 
-      // שמירה ב-localStorage
       var all = Store.get('orders') || [];
       all.unshift(order);
       Store.set('orders', all);
 
-      // שמירה ב-Firestore
       if (window.DB) {
         window.DB.collection('orders').doc(String(id)).set(order)
           .catch(function (e) { console.warn('Firestore order error:', e); });
@@ -360,10 +346,12 @@ var App = (function () {
       if (newStatus === 'delivered' && customerPhone) {
         var ph = customerPhone.replace(/\D/g, '');
         if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-        var msg = '✅ *הזמנה #' + orderId + ' סופקה!*\n' +
-          'שלום! ההזמנה שלך הגיעה.\nתודה שהזמנת מישיר שיווק והפצה 🙏';
+        var msg = '✅ *' + t('admin.order') + ' #' + orderId + '*\n' +
+          (I18n.getLang() === 'en'
+            ? 'Hello! Your order has been delivered.\nThank you for ordering from Yashir! 🙏'
+            : 'שלום! ההזמנה שלך הגיעה.\nתודה שהזמנת מישיר שיווק והפצה 🙏');
         var w = window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(msg), '_blank');
-        if (!w) toast('חלון WhatsApp נחסם — אפשר חלונות קופצים', 'warning');
+        if (!w) toast(t('sys.popupBlocked'), 'warning');
       }
     },
 
@@ -404,25 +392,35 @@ var App = (function () {
   function renderHeader() {
     var h = document.getElementById('site-header');
     if (!h) return;
+
+    var langBtn = '<button class="btn-lang" onclick="App.showLangSelector()" title="' + t('lang.title') + '">' +
+      '<span class="material-icons-round" style="font-size:18px">translate</span> ' + t('lang.btn') +
+    '</button>';
+
     var user = '';
     if (Auth.isAdmin()) {
       user = '<div class="header-user">' +
-        '<span class="header-role admin-badge"><span class="material-icons-round" style="font-size:16px">admin_panel_settings</span> מנהל</span>' +
-        '<button class="btn-admin-panel" onclick="App.navigate(\'admin\')">פאנל ניהול</button>' +
+        '<span class="header-role admin-badge"><span class="material-icons-round" style="font-size:16px">admin_panel_settings</span> ' + t('header.admin') + '</span>' +
+        '<button class="btn-admin-panel" onclick="App.navigate(\'admin\')">' + t('header.adminPanel') + '</button>' +
         '<button class="btn-logout" onclick="App.Auth.logout()"><span class="material-icons-round" style="font-size:18px">logout</span></button>' +
+        langBtn +
         '</div>';
     } else if (Auth.isCustomer()) {
       user = '<div class="header-user">' +
-        '<span class="header-welcome">שלום, <strong>' + escHTML(state.currentUser.customer.name) + '</strong></span>' +
-        '<button class="btn-logout orange" onclick="App.Auth.logout()">התנתק</button>' +
+        '<span class="header-welcome">' + t('header.hello') + '<strong>' + escHTML(state.currentUser.customer.name) + '</strong></span>' +
+        '<button class="btn-logout orange" onclick="App.Auth.logout()">' + t('header.logout') + '</button>' +
+        langBtn +
         '</div>';
     } else {
-      user = '<div class="header-user"><button class="btn-login-header" onclick="App.navigate(\'login\')">כניסה</button></div>';
+      user = '<div class="header-user">' +
+        '<button class="btn-login-header" onclick="App.navigate(\'login\')">' + t('header.login') + '</button>' +
+        langBtn +
+        '</div>';
     }
     h.innerHTML = '<div class="container header-inner">' +
       '<div class="logo" onclick="App._logoClick()" style="cursor:pointer">' +
-        '<div class="logo-mark">י</div>' +
-        '<div class="logo-text-wrap"><span class="logo-name">ישיר</span><span class="logo-tagline">שיווק והפצה</span></div>' +
+        '<div class="logo-mark">' + t('header.logoMark') + '</div>' +
+        '<div class="logo-text-wrap"><span class="logo-name">' + t('header.logoName') + '</span><span class="logo-tagline">' + t('header.logoTagline') + '</span></div>' +
       '</div>' + user + '</div>';
     renderCartFab();
   }
@@ -432,9 +430,65 @@ var App = (function () {
     if (!wrap) return;
     if (!Auth.isCustomer()) { wrap.innerHTML = ''; return; }
     var n = Cart.count();
-    wrap.innerHTML = '<button id="cart-fab-btn" class="cart-fab' + (n > 0 ? ' has-items' : '') + '" onclick="App.toggleCart()" aria-label="עגלה">' +
+    wrap.innerHTML = '<button id="cart-fab-btn" class="cart-fab' + (n > 0 ? ' has-items' : '') + '" onclick="App.toggleCart()" aria-label="' + t('header.cart') + '">' +
       '<span class="material-icons-round" style="font-size:26px">shopping_cart</span>' +
       '<span id="cart-badge" style="display:' + (n > 0 ? 'flex' : 'none') + '">' + n + '</span></button>';
+  }
+
+  /* ===== LANGUAGE SELECTOR ===== */
+  function showLangSelector() {
+    var isRemembered = I18n.isRemembered();
+    var curLang = I18n.getLang();
+    showModal(
+      '<div class="sys-message">' +
+        '<div class="sys-icon"><span class="material-icons-round" style="font-size:30px">translate</span></div>' +
+        '<h3>' + t('lang.title') + '</h3>' +
+        '<div style="display:flex;flex-direction:column;gap:12px;width:100%;margin-top:12px">' +
+          '<button id="lang-btn-he" class="btn-lang-option' + (curLang === 'he' ? ' active' : '') + '" onclick="App._selectLang(\'he\')">' +
+            '<span style="font-size:20px">🇮🇱</span> <span>' + t('lang.hebrew') + '</span>' +
+          '</button>' +
+          '<button id="lang-btn-en" class="btn-lang-option' + (curLang === 'en' ? ' active' : '') + '" onclick="App._selectLang(\'en\')">' +
+            '<span style="font-size:20px">🇬🇧</span> <span>' + t('lang.english') + '</span>' +
+          '</button>' +
+          '<label class="checkbox-label" style="margin-top:8px"><input type="checkbox" id="lang-remember"' + (isRemembered ? ' checked' : '') + '> ' +
+            t('lang.remember') + '</label>' +
+          '<button class="btn-primary full-width" onclick="App._confirmLang()">' +
+            '<span class="material-icons-round">check</span> ' + t('lang.save') +
+          '</button>' +
+        '</div>' +
+      '</div>'
+    );
+    App._pendingLang = curLang;
+  }
+
+  var _pendingLang = 'he';
+
+  function _selectLang(lang) {
+    _pendingLang = lang;
+    var heBtn = document.getElementById('lang-btn-he');
+    var enBtn = document.getElementById('lang-btn-en');
+    if (heBtn) heBtn.classList.toggle('active', lang === 'he');
+    if (enBtn) enBtn.classList.toggle('active', lang === 'en');
+  }
+
+  function _confirmLang() {
+    var remember = document.getElementById('lang-remember');
+    var rem = remember ? remember.checked : false;
+    I18n.setLang(_pendingLang, rem);
+    closeModal();
+    renderHeader();
+    updateFloatBtns();
+    var el = document.getElementById('view-content');
+    if (el) {
+      switch (state.currentView) {
+        case 'landing':  LandingView.render(el); break;
+        case 'login':    LoginView.render(el); break;
+        case 'catalog':  CatalogView.render(el); break;
+        case 'success':  SuccessView.render(el); break;
+        case 'admin':    AdminView.render(el); break;
+      }
+    }
+    if (state.cartOpen) CartView.renderPanel();
   }
 
   /* ===== FLOATING BUTTONS ===== */
@@ -443,22 +497,20 @@ var App = (function () {
     if (!wrap) return;
 
     if (state.currentView === 'landing') {
-      /* דף נחיתה — כפתורי כניסה להזמנה וקטלוג */
       wrap.innerHTML =
         '<button class="float-btn order-btn" onclick="App.startOrder()">' +
-          '<span class="material-icons-round">shopping_bag</span><span class="float-btn-text">התחלת הזמנה</span>' +
+          '<span class="material-icons-round">shopping_bag</span><span class="float-btn-text">' + t('float.startOrder') + '</span>' +
         '</button>' +
         '<button class="float-btn catalog-btn" onclick="App.navigate(\'catalog\')">' +
-          '<span class="material-icons-round">menu_book</span><span class="float-btn-text">הקטלוג שלנו</span>' +
+          '<span class="material-icons-round">menu_book</span><span class="float-btn-text">' + t('float.catalog') + '</span>' +
         '</button>';
     } else if (state.currentView === 'catalog' && Auth.isCustomer()) {
-      /* דף קטלוג — כפתור קטלוג מלא + בקשת מוצר חדש */
       wrap.innerHTML =
         '<button class="float-btn request-btn" onclick="CatalogView.requestNewProduct()">' +
-          '<span class="material-icons-round">add_circle</span><span class="float-btn-text">בקשת מוצר חדש</span>' +
+          '<span class="material-icons-round">add_circle</span><span class="float-btn-text">' + t('float.requestProduct') + '</span>' +
         '</button>' +
         '<button class="float-btn catalog-btn" onclick="CatalogView.goFullCatalog()">' +
-          '<span class="material-icons-round">menu_book</span><span class="float-btn-text">קטלוג מלא</span>' +
+          '<span class="material-icons-round">menu_book</span><span class="float-btn-text">' + t('float.fullCatalog') + '</span>' +
         '</button>';
     } else {
       wrap.innerHTML = '';
@@ -517,8 +569,8 @@ var App = (function () {
     if (Store.get(key)) return;
     showModal('<div class="sys-message">' +
       '<div class="sys-icon"><span class="material-icons-round" style="font-size:30px">campaign</span></div>' +
-      '<h3>הודעת מערכת</h3><p>' + escHTML(msg) + '</p>' +
-      '<button class="btn-primary full-width" onclick="App.closeModal()">הבנתי, תודה</button></div>');
+      '<h3>' + t('sys.title') + '</h3><p>' + escHTML(msg) + '</p>' +
+      '<button class="btn-primary full-width" onclick="App.closeModal()">' + t('sys.understood') + '</button></div>');
     Store.set(key, 1);
   }
 
@@ -549,9 +601,9 @@ var App = (function () {
     var el = document.createElement('div');
     el.id = 'secret-admin';
     el.innerHTML =
-      '<p style="font-size:12px;color:var(--text-muted);text-align:center;margin:0">ניהול מערכת</p>' +
-      '<input type="password" id="sec-pin" placeholder="קוד גישה" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:inherit;font-size:16px;text-align:center;width:100%">' +
-      '<button onclick="App._secretLogin()" style="background:var(--orange);color:#fff;border-radius:8px;padding:12px;font-weight:800;font-family:inherit;font-size:15px;cursor:pointer;border:none;width:100%">כניסה</button>';
+      '<p style="font-size:12px;color:var(--text-muted);text-align:center;margin:0">' + t('sys.adminAccess') + '</p>' +
+      '<input type="password" id="sec-pin" placeholder="' + t('sys.accessCode') + '" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:inherit;font-size:16px;text-align:center;width:100%">' +
+      '<button onclick="App._secretLogin()" style="background:var(--orange);color:#fff;border-radius:8px;padding:12px;font-weight:800;font-family:inherit;font-size:15px;cursor:pointer;border:none;width:100%">' + t('header.login') + '</button>';
     el.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:600;' +
       'background:var(--navy-mid);border:1px solid var(--border);border-radius:14px;' +
       'padding:20px;box-shadow:0 8px 40px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:12px;min-width:260px;max-width:90vw';
@@ -578,7 +630,7 @@ var App = (function () {
       renderHeader();
       navigate('admin');
     } else {
-      toast('קוד שגוי', 'error');
+      toast(t('sys.wrongCode'), 'error');
       pin.value = ''; pin.focus();
     }
   }
@@ -589,21 +641,21 @@ var App = (function () {
     if (product.stock > 0 && product.stock <= threshold) {
       var phone = state.settings.adminPhone || '9720552961177';
       var email = state.settings.adminEmail || 'yashir.shivuk@gmail.com';
-      var txt   = 'התראת מלאי נמוך: מוצר "' + escHTML(product.name) + '" (מק"ט ' + escHTML(product.sku) + ') — נשארו ' + product.stock + ' יחידות.';
+      var txt   = t('sys.lowStockAlert') + ': "' + escHTML(product.name) + '" (' + t('common.sku') + ' ' + escHTML(product.sku) + ') — ' + t('sys.lowStockMsg') + ' ' + product.stock + ' ' + t('common.units') + '.';
       var waUrl = 'https://wa.me/' + phone.replace(/\D/g,'').replace(/^0/,'972') + '?text=' + encodeURIComponent(txt);
-      var mlUrl = 'mailto:' + email + '?subject=' + encodeURIComponent('התראת מלאי נמוך — ' + product.name) +
-                  '&body=' + encodeURIComponent(txt + '\n\nישיר שיווק והפצה');
+      var mlUrl = 'mailto:' + email + '?subject=' + encodeURIComponent(t('sys.lowStockAlert') + ' — ' + product.name) +
+                  '&body=' + encodeURIComponent(txt + '\n\n' + t('success.companyName'));
       showModal(
         '<div class="sys-message">' +
           '<div class="sys-icon" style="background:var(--orange-dim);color:var(--orange)"><span class="material-icons-round" style="font-size:30px">warning_amber</span></div>' +
-          '<h3>מלאי נמוך!</h3>' +
-          '<p><strong>' + escHTML(product.name) + '</strong> — נשארו <strong>' + product.stock + '</strong> יחידות בלבד.</p>' +
+          '<h3>' + t('sys.lowStockTitle') + '</h3>' +
+          '<p><strong>' + escHTML(product.name) + '</strong> — ' + t('sys.lowStockMsg') + ' <strong>' + product.stock + '</strong> ' + t('sys.unitsOnly') + '</p>' +
           '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;width:100%">' +
             '<a href="' + waUrl + '" target="_blank" class="btn-primary full-width" style="text-decoration:none;justify-content:center">' +
-              '<span class="material-icons-round">chat</span> שלח התראה ב-WhatsApp</a>' +
+              '<span class="material-icons-round">chat</span> ' + t('sys.sendWhatsApp') + '</a>' +
             '<a href="' + mlUrl + '" class="btn-secondary full-width" style="text-decoration:none;justify-content:center">' +
-              '<span class="material-icons-round">email</span> שלח התראה במייל</a>' +
-            '<button class="btn-secondary" onclick="App.closeModal()">סגור</button>' +
+              '<span class="material-icons-round">email</span> ' + t('sys.sendEmail') + '</a>' +
+            '<button class="btn-secondary" onclick="App.closeModal()">' + t('common.close') + '</button>' +
           '</div>' +
         '</div>'
       );
@@ -626,9 +678,7 @@ var App = (function () {
       setTimeout(showSystemMsg, 800);
     }
 
-    /* ─── סינכרון מ-Firestore ─── */
     if (window.DB) {
-      /* 1. מוצרים */
       loadProductsFromFirestore(
         function () {
           App.Store.set('products', window.PRODUCTS);
@@ -638,10 +688,8 @@ var App = (function () {
         function () {}
       );
 
-      /* 2. לקוחות + הגדרות (דרך DBSync) */
       DBSync.loadCustomers(function (ok) {
         if (ok) {
-          /* אם המשתמש המחובר הוא לקוח — רענן את האובייקט שלו מהמידע החדש */
           if (state.currentUser && state.currentUser.role === 'customer') {
             var fresh = (window.CUSTOMERS_DB || []).find(function (c) {
               return c.id === state.currentUser.customer.id;
@@ -652,7 +700,6 @@ var App = (function () {
       });
 
       DBSync.loadSettings(function () {
-        /* רענן header אם הגדרות עודכנו */
         renderHeader();
       });
     }
@@ -663,10 +710,13 @@ var App = (function () {
   /* ===== PUBLIC API ===== */
   return {
     state: state, Auth: Auth, Cart: Cart, Orders: Orders, Pricing: Pricing, Store: Store, fmtP: fmtP, escHTML: escHTML,
+    dateFmt: dateFmt,
     navigate: navigate, toggleCart: toggleCart, openCart: openCart, closeCart: closeCart,
     showModal: showModal, closeModal: closeModal, toast: toast,
     showSystemMsg: showSystemMsg, startOrder: startOrder,
     renderHeader: renderHeader, updateFloatBtns: updateFloatBtns,
+    showLangSelector: showLangSelector,
+    _selectLang: _selectLang, _confirmLang: _confirmLang, _pendingLang: _pendingLang,
     saveSettings: function () {
       Store.set('settings', state.settings);
       if (window.DBSync) DBSync.saveSettings(state.settings);

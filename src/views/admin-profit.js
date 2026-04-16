@@ -1,5 +1,5 @@
 /* =============================================================
-   AdminProfit — רווח לפי מוצרים (מחיר קנייה מול מכירה)
+   AdminProfit — Profit by product (purchase vs sale price)
    ============================================================= */
 var AdminProfit = {
   render: function (c) {
@@ -24,13 +24,13 @@ var AdminProfit = {
       var cd  = costs[p.id];
       var cost = cd ? cd.cost : null;
 
-      var salePre  = parseFloat((p.price / vatDiv).toFixed(2));
-      var salePost = p.price;
+      var salePre  = p.price;
+      var salePost = parseFloat((p.price * vatDiv).toFixed(2));
 
       var marginPost = cost !== null ? parseFloat((salePost - cost).toFixed(2)) : null;
       var marginPre  = cost !== null ? parseFloat((salePre  - cost).toFixed(2)) : null;
-      var marginPct  = (cost !== null && salePost > 0)
-        ? parseFloat(((salePost - cost) / salePost * 100).toFixed(2)) : null;
+      var marginPct  = (cost !== null && salePre > 0)
+        ? parseFloat(((salePre - cost) / salePre * 100).toFixed(2)) : null;
 
       var col = marginPost !== null
         ? (marginPost > 0 ? '#22c55e' : '#ef4444')
@@ -41,7 +41,7 @@ var AdminProfit = {
         '<td>' + p.icon + ' ' + p.name + '</td>' +
         '<td>₪' + salePost + '</td>' +
         '<td>₪' + salePre + '</td>' +
-        '<td>' + (cost !== null ? '₪' + cost : '<span style="color:var(--text-muted)">לא הוגדר</span>') + '</td>' +
+        '<td>' + (cost !== null ? '₪' + cost : '<span style="color:var(--text-muted)">' + t('admin.notDefined') + '</span>') + '</td>' +
         '<td style="color:' + col + ';font-weight:700">' + (marginPost !== null ? '₪' + marginPost : '—') + '</td>' +
         '<td style="color:' + col + ';font-weight:700">' + (marginPre  !== null ? '₪' + marginPre  : '—') + '</td>' +
         '<td style="color:' + col + '">' + (marginPct  !== null ? marginPct + '%'              : '—') + '</td>' +
@@ -49,25 +49,19 @@ var AdminProfit = {
       '</tr>';
     }).join('');
 
-    var totalSale = PRODUCTS.filter(function (p) { return p.category !== 'shipping'; })
-      .reduce(function (s, p) { return s + p.price; }, 0);
-    var totalCost = PRODUCTS.filter(function (p) { return p.category !== 'shipping'; })
-      .filter(function (p) { return costs[p.id]; })
-      .reduce(function (s, p) { return s + costs[p.id].cost; }, 0);
-
     c.innerHTML = '<div class="admin-section">' +
       '<div class="admin-section-header">' +
-        '<h2>רווח לפי מוצרים</h2>' +
-        '<span style="font-size:13px;color:var(--text-muted)">מחיר מכירה מול עלות ספק</span>' +
+        '<h2>' + t('admin.profitTitle') + '</h2>' +
+        '<span style="font-size:13px;color:var(--text-muted)">' + t('admin.profitSubtitle') + '</span>' +
       '</div>' +
-      '<p class="admin-note">לעדכון עלויות ספק — עבור ללשונית "ספקים" ↑</p>' +
+      '<p class="admin-note">' + t('admin.profitNote') + '</p>' +
       '<div class="table-wrap"><table class="admin-table">' +
         '<thead><tr>' +
-          '<th>מק"ט</th><th>מוצר</th>' +
-          '<th>מחיר (כולל מע"מ)</th><th>מחיר (לפני מע"מ)</th>' +
-          '<th>עלות ספק</th>' +
-          '<th>רווח (כולל מע"מ)</th><th>רווח (לפני מע"מ)</th>' +
-          '<th>% רווח</th><th>ספק</th>' +
+          '<th>' + t('common.sku') + '</th><th>' + t('admin.product') + '</th>' +
+          '<th>' + t('admin.priceWithVat') + '</th><th>' + t('admin.priceBeforeVatCol') + '</th>' +
+          '<th>' + t('admin.supplierCost') + '</th>' +
+          '<th>' + t('admin.profitWithVat') + '</th><th>' + t('admin.profitBeforeVat') + '</th>' +
+          '<th>' + t('admin.profitPct') + '</th><th>' + t('admin.supplierCol') + '</th>' +
         '</tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
       '</table></div></div>';
