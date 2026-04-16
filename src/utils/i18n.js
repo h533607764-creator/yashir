@@ -570,7 +570,9 @@ var I18n = (function () {
     'admin.translateDone': 'התרגום הושלם ✓',
     'admin.translateNoText': 'אין טקסט לתרגום',
     'admin.translateError': 'שגיאה בתרגום — נסה שוב',
-    'admin.customerNameEn': 'שם עסק (אנגלית — לתצוגה דו-שפתית)',
+    'admin.customerNameEn': 'שם עסק (אותיות לטיניות — תעתיק, לא תרגום)',
+    'admin.transliterateBtn': 'תעתיק',
+    'admin.transliterateDone': 'הותעתק לאותיות לטיניות ✓',
     'admin.settingsOpeningEn': 'משפטי פתיחה באנגלית (דף נחיתה + הודעת מערכת)',
     'admin.translateOpeningAll': 'תרגם הכל לאנגלית',
     'admin.systemMsgEn': 'הודעת מערכת (אנגלית)',
@@ -1092,7 +1094,9 @@ var I18n = (function () {
     'admin.translateDone': 'Translation complete ✓',
     'admin.translateNoText': 'No text to translate',
     'admin.translateError': 'Translation error — try again',
-    'admin.customerNameEn': 'Business name (English — bilingual display)',
+    'admin.customerNameEn': 'Business name (Latin letters — transliteration, not translation)',
+    'admin.transliterateBtn': 'Transliterate',
+    'admin.transliterateDone': 'Transliterated to Latin letters ✓',
     'admin.settingsOpeningEn': 'Opening texts in English (landing + system message)',
     'admin.translateOpeningAll': 'Translate all to English',
     'admin.systemMsgEn': 'System message (English)',
@@ -1186,4 +1190,56 @@ var AutoTranslate = (function () {
   }
 
   return { translate: translate, translateField: translateField, translateAll: translateAll };
+})();
+
+var AutoTransliterate = (function () {
+  'use strict';
+
+  var MAP = {
+    'א': 'a', 'ב': 'b', 'ג': 'g', 'ד': 'd', 'ה': 'h', 'ו': 'v', 'ז': 'z', 'ח': 'ch', 'ט': 't',
+    'י': 'y', 'כ': 'k', 'ך': 'k', 'ל': 'l', 'מ': 'm', 'ם': 'm', 'נ': 'n', 'ן': 'n', 'ס': 's',
+    'ע': 'a', 'פ': 'p', 'ף': 'p', 'צ': 'tz', 'ץ': 'tz', 'ק': 'q', 'ר': 'r', 'ש': 'sh', 'ת': 't',
+    '׳': "'", '״': '"', '־': '-', ' ': ' ', '\t': '\t', '\n': '\n', '\r': '\n'
+  };
+
+  function stripMarks(s) {
+    return s.replace(/[\u0591-\u05BD\u05BF\u05C1\u05C2\u05C4\u05C7\u200E\u200F\u202A-\u202E]/g, '');
+  }
+
+  function capitalizeWords(s) {
+    return s.split(/\s+/).map(function (w) {
+      if (!w) return '';
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    }).filter(Boolean).join(' ');
+  }
+
+  function hebrewToLatin(text) {
+    if (!text) return '';
+    var s = stripMarks(text);
+    var out = '';
+    var punct = ' .,;:!?–—()-/&+"\'@#$%*+=[]{}|<>';
+    for (var i = 0; i < s.length; i++) {
+      var ch = s[i];
+      var rep = MAP[ch];
+      if (rep !== undefined) {
+        out += rep;
+        continue;
+      }
+      if (ch >= '0' && ch <= '9') { out += ch; continue; }
+      if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) { out += ch; continue; }
+      if (punct.indexOf(ch) >= 0) { out += ch; continue; }
+    }
+    return capitalizeWords(out.replace(/\s+/g, ' ').trim());
+  }
+
+  function fillField(heFieldId, enFieldId) {
+    var heInp = document.getElementById(heFieldId);
+    var enInp = document.getElementById(enFieldId);
+    if (!heInp || !enInp) return;
+    if (!heInp.value.trim()) { App.toast(t('admin.translateNoText'), 'warning'); return; }
+    enInp.value = hebrewToLatin(heInp.value);
+    App.toast(t('admin.transliterateDone'), 'success');
+  }
+
+  return { hebrewToLatin: hebrewToLatin, fillField: fillField };
 })();

@@ -254,6 +254,14 @@ var AdminView = {
       '<input type="text" id="' + enId + '" value="' + (value || '') + '" dir="ltr" style="text-align:left"></div>';
   },
 
+  _fldTransliterate: function (label, enId, value, heId) {
+    var btnHtml = heId
+      ? '<button type="button" onclick="AutoTransliterate.fillField(\'' + heId + '\',\'' + enId + '\')" style="background:var(--blue-dim);color:var(--blue);border:1px solid var(--border-blue);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:3px"><span class="material-icons-round" style="font-size:13px">sort_by_alpha</span>' + t('admin.transliterateBtn') + '</button>'
+      : '';
+    return '<div class="form-group"><div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">' + label + '</label>' + btnHtml + '</div>' +
+      '<input type="text" id="' + enId + '" value="' + (value || '') + '" dir="ltr" style="text-align:left"></div>';
+  },
+
   _translateAllEdit: function () {
     var catSel = document.getElementById('pf-cat-edit');
     var subcatSel = document.getElementById('pf-subcat-edit');
@@ -335,7 +343,7 @@ var AdminView = {
         AdminView._fld(t('admin.hpField'), 'ef-id', cu.id, 'text') +
         (isNew ? '' : '<p style="font-size:12px;color:var(--orange);margin-top:-8px">' + t('admin.hpChangeWarning') + '</p>') +
         AdminView._fld(t('admin.businessName'), 'ef-name', cu.name, 'text') +
-        AdminView._fldTranslate(t('admin.customerNameEn'), 'ef-name-en', cu.name_en || '', 'ef-name') +
+        AdminView._fldTransliterate(t('admin.customerNameEn'), 'ef-name-en', cu.name_en || '', 'ef-name') +
         AdminView._fld(t('common.phone'), 'ef-phone', cu.phone, 'tel') +
         AdminView._fld(t('common.email'), 'ef-email', cu.email, 'email') +
         AdminView._fld(t('admin.address'), 'ef-address', cu.address, 'text') +

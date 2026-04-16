@@ -3,7 +3,7 @@ var CUSTOMERS_DB = [
   {
     id: '123456789',
     name: 'מסעדת הים',
-    name_en: 'Sea Restaurant',
+    name_en: 'Msadt Haym',
     email: 'haym@example.com',
     phone: '054-1111111',
     address: 'שד׳ הרצל 10, תל אביב',
@@ -18,7 +18,7 @@ var CUSTOMERS_DB = [
   {
     id: '987654321',
     name: 'קפה עיר',
-    name_en: 'City Cafe',
+    name_en: 'Qph Ayr',
     email: 'kafair@example.com',
     phone: '052-2222222',
     address: 'דיזנגוף 50, תל אביב',
@@ -33,7 +33,7 @@ var CUSTOMERS_DB = [
   {
     id: '555666777',
     name: 'גן אירועים אורכיד',
-    name_en: 'Orchid Events Garden',
+    name_en: 'Gn Ayrvaym Avrkyd',
     email: 'orchid@example.com',
     phone: '058-3333333',
     address: 'כביש 4, קיבוץ שפיים',
