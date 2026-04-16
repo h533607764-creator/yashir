@@ -95,6 +95,7 @@ var App = (function () {
       return true;
     },
     logout: function () {
+      _tearDownSecretAdmin();
       state.currentUser = null;
       state.cart = [];
       Store.del('remember');
@@ -698,6 +699,16 @@ var App = (function () {
   /* ===== SECRET ADMIN LOGIN (5× logo click) ===== */
   var _logoClicks = 0;
   var _logoTimer  = null;
+  var _secretAdminAwayHandler = null;
+
+  function _tearDownSecretAdmin() {
+    var box = document.getElementById('secret-admin');
+    if (box) box.remove();
+    if (_secretAdminAwayHandler) {
+      document.removeEventListener('click', _secretAdminAwayHandler, true);
+      _secretAdminAwayHandler = null;
+    }
+  }
 
   function _logoClick() {
     _logoClicks++;
@@ -712,8 +723,7 @@ var App = (function () {
   }
 
   function _showSecretAdmin() {
-    var old = document.getElementById('secret-admin');
-    if (old) { old.remove(); return; }
+    _tearDownSecretAdmin();
     var el = document.createElement('div');
     el.id = 'secret-admin';
     el.innerHTML =
@@ -729,11 +739,11 @@ var App = (function () {
       if (p) { p.focus(); p.addEventListener('keydown', function (e) { if (e.key === 'Enter') _secretLogin(); }); }
     }, 50);
     setTimeout(function () {
-      function away(e) {
+      _secretAdminAwayHandler = function (e) {
         var box = document.getElementById('secret-admin');
-        if (box && !box.contains(e.target)) { box.remove(); document.removeEventListener('click', away); }
-      }
-      document.addEventListener('click', away);
+        if (box && !box.contains(e.target)) _tearDownSecretAdmin();
+      };
+      document.addEventListener('click', _secretAdminAwayHandler, true);
     }, 200);
   }
 
@@ -741,8 +751,7 @@ var App = (function () {
     var pin = document.getElementById('sec-pin');
     if (!pin) return;
     if (Auth.loginAdmin(pin.value)) {
-      var el = document.getElementById('secret-admin');
-      if (el) el.remove();
+      _tearDownSecretAdmin();
       renderHeader();
       navigate('admin');
     } else {
