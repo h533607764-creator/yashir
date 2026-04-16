@@ -207,6 +207,17 @@ img { max-width: 100%; display: block; }
   white-space: nowrap;
 }
 .btn-lang:hover { background: rgba(52,152,219,.25); }
+.btn-lang-landing {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 32px; padding: 10px 20px; border-radius: 50px;
+  background: rgba(255,255,255,.06); color: var(--text-muted);
+  font-size: 13px; font-weight: 600;
+  border: 1px solid var(--border);
+  cursor: pointer; transition: background var(--transition), color var(--transition);
+}
+.btn-lang-landing:hover { background: var(--blue-dim); color: var(--blue-light); border-color: var(--border-blue); }
+.btn-lang-landing .material-icons-round { font-size: 16px; }
+
 .btn-lang-option {
   display: flex; align-items: center; gap: 10px;
   padding: 14px 18px; border-radius: var(--radius-sm);

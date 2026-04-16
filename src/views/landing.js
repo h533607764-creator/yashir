@@ -25,6 +25,9 @@ var LandingView = {
             '<div class="hero-feature"><span class="material-icons-round">local_shipping</span><span>' + t('landing.shipping') + '</span></div>' +
             '<div class="hero-feature"><span class="material-icons-round">support_agent</span><span>' + t('landing.service') + '</span></div>' +
           '</div>' +
+          '<button class="btn-lang-landing" onclick="App.showLangSelector()">' +
+            '<span class="material-icons-round">translate</span> ' + t('lang.btn') +
+          '</button>' +
         '</div>' +
       '</section>';
     if (App.Auth.isCustomer()) setTimeout(function () { App.showSystemMsg(); }, 600);

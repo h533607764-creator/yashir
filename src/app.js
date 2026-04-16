@@ -671,10 +671,6 @@ var App = (function () {
       setTimeout(showSystemMsg, 800);
     }
 
-    if (!I18n.isRemembered() && !sessionStorage.getItem('yashir_lang_shown')) {
-      sessionStorage.setItem('yashir_lang_shown', '1');
-      setTimeout(showLangSelector, 600);
-    }
 
     if (window.DB) {
       loadProductsFromFirestore(
