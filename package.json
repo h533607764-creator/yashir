@@ -2,6 +2,6 @@
   "name": "yashir-marketing-site",
   "private": true,
   "scripts": {
-    "test": "node src/tests/admin-bugs-proof.cjs && node src/tests/production-stress.cjs"
+    "test": "node src/tests/admin-bugs-proof.cjs && node src/tests/production-stress.cjs && node src/tests/order-malicious-simulation.cjs"
   }
 }
