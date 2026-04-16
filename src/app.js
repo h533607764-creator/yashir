@@ -68,7 +68,12 @@ var App = (function () {
     var sixMonthsAgo = Date.now() - 180 * 864e5;
     var localOrders = Store.get('orders');
     if (localOrders && localOrders.length > 200) {
-      var trimmed = localOrders.filter(function (o) { return new Date(o.timestamp).getTime() > sixMonthsAgo; });
+      var trimmed = localOrders.filter(function (o) {
+        if (!o.timestamp) return true;
+        var t = new Date(o.timestamp).getTime();
+        if (isNaN(t)) return true;
+        return t > sixMonthsAgo;
+      });
       Store.set('orders', trimmed);
     }
   }
@@ -159,13 +164,17 @@ var App = (function () {
     getDiscountPct: function (product, customer) {
       if (!customer) return 0;
       var p = customer.personalPrices && customer.personalPrices[product.id];
-      if (p !== undefined) return parseFloat(Math.max(0, (1 - p / product.price) * 100).toFixed(2));
+      if (p !== undefined) {
+        if (!product.price || product.price <= 0) return 0;
+        return parseFloat(Math.max(0, (1 - p / product.price) * 100).toFixed(2));
+      }
       return customer.generalDiscount || 0;
     },
     getTotalDiscountPct: function (product, customer, qty) {
       var personalPct = Pricing.getDiscountPct(product, customer);
       var bulkPct     = Pricing.getBulkDiscountPct(product, qty);
       if (personalPct === 0 && bulkPct === 0) return 0;
+      if (!product.price || product.price <= 0) return 0;
       var effectivePrice = product.price * (1 - personalPct / 100) * (1 - bulkPct / 100);
       return parseFloat(Math.max(0, (1 - effectivePrice / product.price) * 100).toFixed(2));
     },
@@ -175,9 +184,12 @@ var App = (function () {
     calcTotals: function (items) {
       var subtotal = 0, savings = 0;
       items.forEach(function (i) {
-        var lineTotal = parseFloat((i.unitPrice * i.qty).toFixed(2));
+        var q = Number(i.qty);
+        if (isNaN(q)) q = 0;
+        var lineTotal = parseFloat((i.unitPrice * q).toFixed(2));
         subtotal += lineTotal;
-        var saved = parseFloat(((i.product.price - i.unitPrice) * i.qty).toFixed(2));
+        var listP = typeof i.product.price === 'number' && !isNaN(i.product.price) ? i.product.price : 0;
+        var saved = parseFloat(((listP - i.unitPrice) * q).toFixed(2));
         if (saved > 0) savings += saved;
       });
       subtotal = parseFloat(subtotal.toFixed(2));
@@ -196,7 +208,9 @@ var App = (function () {
   var Cart = {
     add: function (product, qty) {
       if (!Auth.isCustomer()) { toast(t('catalog.loginFirst'), 'warning'); return; }
-      qty = qty || 1;
+      qty = parseInt(qty, 10);
+      if (isNaN(qty) || qty < 1) qty = 1;
+      qty = Math.min(999, qty);
       var customer = state.currentUser.customer;
       var isOOS = product.stock === 0;
 
@@ -207,6 +221,7 @@ var App = (function () {
       var existing = state.cart.find(function (i) { return i.product.id === product.id; });
       if (existing) {
         existing.qty += qty;
+        if (existing.qty > 999) existing.qty = 999;
         var newEffective = Pricing.getEffectiveUnitPrice(product, customer, existing.qty);
         if (newEffective !== null) existing.unitPrice = newEffective;
         existing.discountPct = Pricing.getTotalDiscountPct(product, customer, existing.qty);
@@ -235,7 +250,9 @@ var App = (function () {
     },
 
     updateQty: function (id, qty) {
-      if (qty < 1) { Cart.remove(id); return; }
+      qty = parseInt(qty, 10);
+      if (isNaN(qty) || qty < 1) { Cart.remove(id); return; }
+      qty = Math.min(999, qty);
       var item = state.cart.find(function (i) { return i.product.id === id; });
       if (item) {
         item.qty = qty;
@@ -257,8 +274,19 @@ var App = (function () {
       Cart.updateBadge();
     },
 
-    count: function () { return state.cart.reduce(function (s, i) { return s + i.qty; }, 0); },
-    subtotal: function () { return parseFloat(state.cart.reduce(function (s, i) { return s + i.unitPrice * i.qty; }, 0).toFixed(2)); },
+    count: function () {
+      return state.cart.reduce(function (s, i) {
+        var q = parseInt(i.qty, 10);
+        return s + (isNaN(q) || q < 0 ? 0 : q);
+      }, 0);
+    },
+    subtotal: function () {
+      return parseFloat(state.cart.reduce(function (s, i) {
+        var q = Number(i.qty);
+        if (isNaN(q)) q = 0;
+        return s + i.unitPrice * q;
+      }, 0).toFixed(2));
+    },
     needsShipping: function () { return Cart.subtotal() < state.settings.minOrderAmount; },
     getShippingCost: function () {
       var c = state.currentUser && state.currentUser.customer;
@@ -293,16 +321,35 @@ var App = (function () {
       state.cart = saved.map(function (s) {
         var p = PRODUCTS.find(function (x) { return x.id === s.pid; });
         if (!p) return null;
-        var freshPrice = Pricing.getEffectiveUnitPrice(p, customer, s.qty);
-        var freshDisc  = Pricing.getTotalDiscountPct(p, customer, s.qty);
+        var q = parseInt(s.qty, 10);
+        if (isNaN(q) || q < 1) q = 1;
+        q = Math.min(999, q);
+        var freshPrice = Pricing.getEffectiveUnitPrice(p, customer, q);
+        var freshDisc  = Pricing.getTotalDiscountPct(p, customer, q);
         return {
           product: p,
-          qty: s.qty,
+          qty: q,
           unitPrice: freshPrice !== null ? freshPrice : s.unitPrice,
           discountPct: freshDisc,
           outOfStock: p.stock === 0
         };
       }).filter(Boolean);
+    },
+
+    _repriceAll: function () {
+      if (!Auth.isCustomer() || !state.cart.length) return;
+      var customer = state.currentUser.customer;
+      state.cart.forEach(function (item) {
+        var fresh = PRODUCTS.find(function (x) { return x.id === item.product.id; });
+        if (fresh) item.product = fresh;
+        var ep = Pricing.getEffectiveUnitPrice(item.product, customer, item.qty);
+        if (ep !== null) item.unitPrice = ep;
+        item.discountPct = Pricing.getTotalDiscountPct(item.product, customer, item.qty);
+        item.outOfStock = item.product.stock === 0;
+      });
+      Cart._save();
+      Cart.updateBadge();
+      if (state.cartOpen && typeof CartView !== 'undefined' && CartView.renderPanel) CartView.renderPanel();
     }
   };
 
@@ -336,19 +383,26 @@ var App = (function () {
         paymentStatus: 'unpaid'
       };
 
-      var all = Store.get('orders') || [];
-      all.unshift(order);
-      Store.set('orders', all);
+      function persistLocalAndFinish() {
+        var all = Store.get('orders') || [];
+        all.unshift(order);
+        Store.set('orders', all);
+        Store.set('settings', state.settings);
+        Cart.clear();
+        closeCart();
+        navigate('success', { order: order });
+      }
 
       if (window.DB) {
         window.DB.collection('orders').doc(String(id)).set(order)
-          .catch(function (e) { console.warn('Firestore order error:', e); });
+          .then(function () { persistLocalAndFinish(); })
+          .catch(function (e) {
+            console.warn('Firestore order error:', e);
+            toast(t('cart.orderSaveFailed'), 'error');
+          });
+      } else {
+        persistLocalAndFinish();
       }
-
-      Store.set('settings', state.settings);
-      Cart.clear();
-      closeCart();
-      navigate('success', { order: order });
     },
 
     getAll: function () { return Store.get('orders') || []; },
@@ -792,6 +846,7 @@ var App = (function () {
       loadProductsFromFirestore(
         function () {
           App.Store.set('products', window.PRODUCTS);
+          Cart._repriceAll();
           var el = document.getElementById('view-content');
           if (el && state.currentView === 'catalog') {
             var _cp = {};
@@ -812,6 +867,7 @@ var App = (function () {
               return c.id === state.currentUser.customer.id;
             });
             if (fresh) state.currentUser.customer = fresh;
+            Cart._repriceAll();
           }
         }
       });

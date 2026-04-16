@@ -22,7 +22,7 @@ var SuccessView = {
 
   printNote: function (orderId) {
     var orders = App.Orders.getAll();
-    var order = orders.find(function (o) { return o.id === orderId; }) || SuccessView._lastOrder || {};
+    var order = orders.find(function (o) { return String(o.id) === String(orderId); }) || SuccessView._lastOrder || {};
     if (!order.items) { App.toast(t('success.orderNotFound'), 'error'); return; }
     var isEn = I18n.getLang() === 'en';
     var rows = order.items.map(function (item, i) {

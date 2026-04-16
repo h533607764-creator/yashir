@@ -328,7 +328,8 @@ var CatalogView = {
     var p = PRODUCTS.find(function (x) { return x.id === id; });
     if (!p) return;
     var inp = document.getElementById('qty-' + id);
-    var qty = inp ? parseInt(inp.value) || 0 : 0;
+    var qty = inp ? parseInt(inp.value, 10) || 0 : 0;
+    qty = Math.max(0, Math.min(999, qty));
     var cItem = App.state.cart.find(function (i) { return i.product.id === id; });
     if (qty <= 0) {
       if (cItem) {

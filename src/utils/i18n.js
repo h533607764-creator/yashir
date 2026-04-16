@@ -232,6 +232,7 @@ var I18n = (function () {
     'cart.addedToCart': 'נוסף לעגלה ✓',
     'cart.addedOos': 'נוסף לעגלה ✓ (חסר במלאי)',
     'cart.oosToast': 'מוצר חסר במלאי — ייתכן עיכוב ביום',
+    'cart.orderSaveFailed': 'לא ניתן לשמור את ההזמנה. בדוק את החיבור לרשת ונסה שוב.',
 
     /* --- Success --- */
     'success.title': 'הזמנתך ב\'ישיר\' התקבלה בהצלחה!',
@@ -754,6 +755,7 @@ var I18n = (function () {
     'cart.addedToCart': 'Added to cart ✓',
     'cart.addedOos': 'Added to cart ✓ (out of stock)',
     'cart.oosToast': 'Product out of stock — may be delayed by a day',
+    'cart.orderSaveFailed': 'Could not save your order. Check your connection and try again.',
 
     /* --- Success --- */
     'success.title': 'Your order at Yashir has been received!',

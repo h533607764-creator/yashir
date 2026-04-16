@@ -386,6 +386,18 @@ var AdminView = {
       });
       if (updated) App.Store.set('orders', allOrders);
       App.Store.del('cart_' + origId);
+      if (window.DB) {
+        window.DB.collection('orders').where('customerId', '==', origId).get()
+          .then(function (snap) {
+            if (snap.empty) return;
+            var batch = window.DB.batch();
+            snap.forEach(function (d) {
+              batch.update(d.ref, { customerId: id });
+            });
+            return batch.commit();
+          })
+          .catch(function (e) { console.warn('Firestore migrate order customerId:', e); });
+      }
     } else if (origId) {
       var idx = CUSTOMERS_DB.findIndex(function (x) { return x.id === origId; });
       if (idx > -1) CUSTOMERS_DB[idx] = data; else CUSTOMERS_DB.push(data);
