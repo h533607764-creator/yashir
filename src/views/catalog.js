@@ -1,5 +1,6 @@
 var CatalogView = {
-  _cat: 'all',
+  _selectedCats: [],
+  _selectedSubcats: [],
   _q: '',
   _section: 'personal',
 
@@ -9,6 +10,30 @@ var CatalogView = {
     var isCust  = App.Auth.isCustomer();
     var isAdmin = App.Auth.isAdmin();
 
+    var cats = [];
+    var subcats = [];
+    var seenCat = {};
+    var seenSub = {};
+    PRODUCTS.forEach(function (p) {
+      if (p.category && p.category !== 'shipping' && !seenCat[p.category]) {
+        seenCat[p.category] = true;
+        cats.push({ id: p.category, label: (p.icon ? p.icon + ' ' : '') + (p.categoryLabel || p.category) });
+      }
+      if (p.subcategory && p.category !== 'shipping' && !seenSub[p.subcategory]) {
+        seenSub[p.subcategory] = true;
+        subcats.push({ id: p.subcategory, label: p.subcategoryLabel || p.subcategory, cat: p.category });
+      }
+    });
+
+    var hasFilters = CatalogView._selectedCats.length > 0 || CatalogView._selectedSubcats.length > 0;
+
+    var visibleSubcats = subcats;
+    if (CatalogView._selectedCats.length > 0) {
+      visibleSubcats = subcats.filter(function (s) {
+        return CatalogView._selectedCats.indexOf(s.cat) > -1;
+      });
+    }
+
     el.innerHTML =
       '<div class="catalog-page">' +
         '<div class="catalog-toolbar">' +
@@ -17,20 +42,32 @@ var CatalogView = {
               '<span class="material-icons-round">search</span>' +
               '<input type="text" id="cv-search" placeholder="' + t('catalog.searchPlaceholder') + '" oninput="CatalogView.onSearch(this.value)" value="' + CatalogView._q + '">' +
             '</div>' +
-            '<div class="cat-scroll">' +
-              (function () {
-                var cats = [{ id: 'all', label: t('common.all') }];
-                var seen = {};
-                PRODUCTS.forEach(function (p) {
-                  if (p.category && p.category !== 'shipping' && !seen[p.category]) {
-                    seen[p.category] = true;
-                    cats.push({ id: p.category, label: (p.icon ? p.icon + ' ' : '') + (p.categoryLabel || p.category) });
-                  }
-                });
-                return cats.map(function (c) {
-                  return '<button class="cat-btn' + (CatalogView._cat === c.id ? ' active' : '') + '" onclick="CatalogView.filterCat(\'' + c.id + '\',this)">' + c.label + '</button>';
-                }).join('');
-              })() +
+            '<div class="filter-section">' +
+              '<div class="filter-row">' +
+                '<span class="filter-label">' + t('catalog.categories') + ':</span>' +
+                '<div class="cat-scroll">' +
+                  cats.map(function (c) {
+                    var isActive = CatalogView._selectedCats.indexOf(c.id) > -1;
+                    return '<button class="cat-btn' + (isActive ? ' active' : '') + '" onclick="CatalogView.toggleCat(\'' + c.id + '\')">' + c.label + '</button>';
+                  }).join('') +
+                '</div>' +
+              '</div>' +
+              (visibleSubcats.length > 0 ?
+                '<div class="filter-row">' +
+                  '<span class="filter-label">' + t('catalog.subcategories') + ':</span>' +
+                  '<div class="cat-scroll" id="cv-subcat-scroll">' +
+                    visibleSubcats.map(function (s) {
+                      var isActive = CatalogView._selectedSubcats.indexOf(s.id) > -1;
+                      return '<button class="cat-btn subcat-btn' + (isActive ? ' active' : '') + '" onclick="CatalogView.toggleSubcat(\'' + s.id + '\')">' + s.label + '</button>';
+                    }).join('') +
+                  '</div>' +
+                '</div>'
+              : '') +
+              (hasFilters ?
+                '<button class="btn-clear-filters" onclick="CatalogView.clearFilters()">' +
+                  '<span class="material-icons-round">filter_list_off</span> ' + t('catalog.clearFilters') +
+                '</button>'
+              : '') +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -61,7 +98,12 @@ var CatalogView = {
     var cust = App.Auth.isCustomer() ? App.state.currentUser.customer : null;
     var list = PRODUCTS.slice().sort(function (a, b) { return (a.sku || '').localeCompare(b.sku || ''); });
 
-    if (CatalogView._cat !== 'all') list = list.filter(function (p) { return p.category === CatalogView._cat; });
+    if (CatalogView._selectedCats.length > 0) {
+      list = list.filter(function (p) { return CatalogView._selectedCats.indexOf(p.category) > -1; });
+    }
+    if (CatalogView._selectedSubcats.length > 0) {
+      list = list.filter(function (p) { return CatalogView._selectedSubcats.indexOf(p.subcategory) > -1; });
+    }
     if (CatalogView._q) {
       var q = CatalogView._q.toLowerCase();
       list = list.filter(function (p) { return p.name.toLowerCase().indexOf(q) > -1 || (p.sku || '').indexOf(q) > -1; });
@@ -185,7 +227,7 @@ var CatalogView = {
         (showPersonalBadge ? '<span class="personal-badge"><span class="material-icons-round">star</span> ' + t('catalog.specialPrice') + '</span>' : '') +
       '</div>' +
       '<div class="card-body">' +
-        '<div class="card-meta"><span class="card-sku">' + t('common.sku') + ' ' + App.escHTML(product.sku) + '</span><span class="card-cat">' + App.escHTML(product.categoryLabel) + '</span></div>' +
+        '<div class="card-meta"><span class="card-sku">' + t('common.sku') + ' ' + App.escHTML(product.sku) + '</span><span class="card-cat">' + App.escHTML(product.categoryLabel) + (product.subcategoryLabel ? ' / ' + App.escHTML(product.subcategoryLabel) : '') + '</span></div>' +
         '<h3 class="card-name">' + App.escHTML(product.name) + '</h3>' +
         '<p class="card-desc">' + App.escHTML(product.description) + '</p>' +
         (productInfoHTML ? '<div class="prod-info-tags">' + productInfoHTML + '</div>' : '') +
@@ -239,11 +281,38 @@ var CatalogView = {
     infoEl.innerHTML = html;
   },
 
-  filterCat: function (cat, btn) {
-    CatalogView._cat = cat;
-    document.querySelectorAll('.cat-btn').forEach(function (b) { b.classList.remove('active'); });
-    if (btn) btn.classList.add('active');
+  toggleCat: function (cat) {
+    var idx = CatalogView._selectedCats.indexOf(cat);
+    if (idx > -1) {
+      CatalogView._selectedCats.splice(idx, 1);
+    } else {
+      CatalogView._selectedCats.push(cat);
+    }
+    CatalogView._selectedSubcats = CatalogView._selectedSubcats.filter(function (subId) {
+      return PRODUCTS.some(function (p) {
+        return p.subcategory === subId &&
+          (CatalogView._selectedCats.length === 0 || CatalogView._selectedCats.indexOf(p.category) > -1);
+      });
+    });
+    CatalogView.render(document.getElementById('view-content'));
+  },
+  toggleSubcat: function (subcat) {
+    var idx = CatalogView._selectedSubcats.indexOf(subcat);
+    if (idx > -1) {
+      CatalogView._selectedSubcats.splice(idx, 1);
+    } else {
+      CatalogView._selectedSubcats.push(subcat);
+    }
     CatalogView._renderGrid();
+    document.querySelectorAll('.subcat-btn').forEach(function (b) {
+      var id = b.getAttribute('onclick').match(/toggleSubcat\('([^']+)'\)/);
+      if (id) b.classList.toggle('active', CatalogView._selectedSubcats.indexOf(id[1]) > -1);
+    });
+  },
+  clearFilters: function () {
+    CatalogView._selectedCats = [];
+    CatalogView._selectedSubcats = [];
+    CatalogView.render(document.getElementById('view-content'));
   },
   onSearch: function (q) { CatalogView._q = q; CatalogView._renderGrid(); },
   _qty: function (id, d) {

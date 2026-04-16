@@ -400,6 +400,7 @@ var AdminView = {
         '<td><code>' + p.sku + '</code></td>' +
         '<td style="display:flex;align-items:center;gap:10px;padding:8px 14px">' + thumb + '<span>' + App.escHTML(p.name) + '</span></td>' +
         '<td>' + p.categoryLabel + '</td>' +
+        '<td>' + (p.subcategoryLabel || '—') + '</td>' +
         '<td style="color:var(--blue);font-weight:700">₪' + p.price + '</td>' +
         '<td>' + (p.soldBy ? p.soldBy : '—') + (p.unitsPerPackage ? ' / ' + p.unitsPerPackage + ' ' + t('common.units') : '') + '</td>' +
         '<td>' + (hasBulk ? '<span style="color:var(--green);font-size:12px">' + t('admin.hasBulk') + '</span>' : '—') + '</td>' +
@@ -426,7 +427,7 @@ var AdminView = {
       '<p class="admin-note">' + t('common.lastUpdate') + ': ' + App.dateFmt(new Date()) + ' | Cloud: dmqjap7r1</p>' +
       '<input type="file" id="quick-upload-input" accept="image/*" style="display:none" onchange="AdminView._handleQuickUpload(this)">' +
       '<div class="table-wrap"><table class="admin-table">' +
-        '<thead><tr><th>' + t('admin.skuCol') + '</th><th>' + t('admin.nameProductCol') + '</th><th>' + t('admin.categoryCol') + '</th><th>' + t('admin.priceCol') + '</th><th>' + t('admin.packagingCol') + '</th><th>' + t('admin.bulkDiscountCol') + '</th><th>' + t('admin.stockCol') + '</th><th>' + t('admin.actionsCol') + '</th></tr></thead>' +
+        '<thead><tr><th>' + t('admin.skuCol') + '</th><th>' + t('admin.nameProductCol') + '</th><th>' + t('admin.categoryCol') + '</th><th>' + t('admin.subcategoryCol') + '</th><th>' + t('admin.priceCol') + '</th><th>' + t('admin.packagingCol') + '</th><th>' + t('admin.bulkDiscountCol') + '</th><th>' + t('admin.stockCol') + '</th><th>' + t('admin.actionsCol') + '</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div></div>';
   },
 
@@ -535,6 +536,16 @@ var AdminView = {
     return result.sort(function (a, b) { return a.minQty - b.minQty; });
   },
 
+  _getSubcatsForCategory: function (cat) {
+    var subcatSet = {};
+    PRODUCTS.forEach(function (x) {
+      if (x.category === cat && x.subcategory && x.category !== 'shipping') {
+        subcatSet[x.subcategory] = x.subcategoryLabel || x.subcategory;
+      }
+    });
+    return subcatSet;
+  },
+
   _editProd: function (id) {
     var p = PRODUCTS.find(function (x) { return x.id === id; });
     if (!p) return;
@@ -552,6 +563,12 @@ var AdminView = {
       return '<option value="' + k + '"' + (p.category === k ? ' selected' : '') + '>' + catSet[k] + '</option>';
     }).join('');
 
+    var subcatSet = AdminView._getSubcatsForCategory(p.category);
+    var subcatOpts = '<option value="">' + t('admin.noSubcategory') + '</option>' +
+      Object.keys(subcatSet).map(function (k) {
+        return '<option value="' + k + '"' + (p.subcategory === k ? ' selected' : '') + '>' + subcatSet[k] + '</option>';
+      }).join('');
+
     App.showModal(
       '<h3>' + t('admin.editProductTitle') + ' ' + p.icon + ' ' + p.name + '</h3>' +
       '<div class="customer-form">' +
@@ -566,6 +583,13 @@ var AdminView = {
             '<option value="__new__">' + t('admin.newCategory') + '</option>' +
           '</select>' +
           '<input type="text" id="pf-cat-new-edit" placeholder="' + t('admin.enterCatName') + '" style="display:none;margin-top:6px;background:var(--input-bg);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
+        '</div>' +
+        '<div class="form-group"><label>' + t('admin.subcategory') + '</label>' +
+          '<select id="pf-subcat-edit" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%" onchange="AdminView._onSubcatEditChange()">' +
+            subcatOpts +
+            '<option value="__new__">' + t('admin.newSubcategory') + '</option>' +
+          '</select>' +
+          '<input type="text" id="pf-subcat-new-edit" placeholder="' + t('admin.enterSubcatName') + '" style="display:none;margin-top:6px;background:var(--input-bg);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
         '</div>' +
         '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
           '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.packagingDetails') + '</p>' +
@@ -618,6 +642,14 @@ var AdminView = {
     var inp = document.getElementById('pf-cat-new-edit');
     if (!sel || !inp) return;
     inp.style.display = sel.value === '__new__' ? 'block' : 'none';
+    AdminView._refreshSubcatSelect('pf-subcat-edit', 'pf-subcat-new-edit', sel.value);
+  },
+
+  _onSubcatEditChange: function () {
+    var sel = document.getElementById('pf-subcat-edit');
+    var inp = document.getElementById('pf-subcat-new-edit');
+    if (!sel || !inp) return;
+    inp.style.display = sel.value === '__new__' ? 'block' : 'none';
   },
 
   _onCatAddChange: function () {
@@ -625,6 +657,28 @@ var AdminView = {
     var inp = document.getElementById('pf-cat-new');
     if (!sel || !inp) return;
     inp.style.display = sel.value === '__new__' ? 'block' : 'none';
+    AdminView._refreshSubcatSelect('pf-subcat', 'pf-subcat-new', sel.value);
+  },
+
+  _onSubcatAddChange: function () {
+    var sel = document.getElementById('pf-subcat');
+    var inp = document.getElementById('pf-subcat-new');
+    if (!sel || !inp) return;
+    inp.style.display = sel.value === '__new__' ? 'block' : 'none';
+  },
+
+  _refreshSubcatSelect: function (selectId, newInputId, catValue) {
+    var sel = document.getElementById(selectId);
+    if (!sel) return;
+    var subcatSet = catValue !== '__new__' ? AdminView._getSubcatsForCategory(catValue) : {};
+    var html = '<option value="">' + t('admin.noSubcategory') + '</option>';
+    Object.keys(subcatSet).forEach(function (k) {
+      html += '<option value="' + k + '">' + subcatSet[k] + '</option>';
+    });
+    html += '<option value="__new__">' + t('admin.newSubcategory') + '</option>';
+    sel.innerHTML = html;
+    var inp = document.getElementById(newInputId);
+    if (inp) inp.style.display = 'none';
   },
 
   _addProd: function () {
@@ -643,6 +697,13 @@ var AdminView = {
       return '<option value="' + k + '">' + catSet[k] + '</option>';
     }).join('');
 
+    var firstCat = Object.keys(catSet)[0] || '';
+    var subcatSet = AdminView._getSubcatsForCategory(firstCat);
+    var subcatOpts = '<option value="">' + t('admin.noSubcategory') + '</option>' +
+      Object.keys(subcatSet).map(function (k) {
+        return '<option value="' + k + '">' + subcatSet[k] + '</option>';
+      }).join('');
+
     App.showModal(
       '<h3>' + t('admin.addNewProduct') + '</h3>' +
       '<div class="customer-form">' +
@@ -657,6 +718,13 @@ var AdminView = {
             '<option value="__new__">' + t('admin.newCategory') + '</option>' +
           '</select>' +
           '<input type="text" id="pf-cat-new" placeholder="' + t('admin.enterCatName') + '" style="display:none;margin-top:6px;background:var(--input-bg);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
+        '</div>' +
+        '<div class="form-group"><label>' + t('admin.subcategory') + '</label>' +
+          '<select id="pf-subcat" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%" onchange="AdminView._onSubcatAddChange()">' +
+            subcatOpts +
+            '<option value="__new__">' + t('admin.newSubcategory') + '</option>' +
+          '</select>' +
+          '<input type="text" id="pf-subcat-new" placeholder="' + t('admin.enterSubcatName') + '" style="display:none;margin-top:6px;background:var(--input-bg);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
         '</div>' +
         '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
           '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.packagingDetails') + '</p>' +
@@ -703,6 +771,24 @@ var AdminView = {
         var selOpt = catSel.options[catSel.selectedIndex];
         p.category = newCatVal;
         p.categoryLabel = selOpt ? selOpt.text : newCatVal;
+      }
+    }
+    var subcatSel = document.getElementById('pf-subcat-edit');
+    if (subcatSel) {
+      var subcatVal = subcatSel.value;
+      if (subcatVal === '__new__') {
+        var subcatInp = document.getElementById('pf-subcat-new-edit');
+        var subcatName = subcatInp ? subcatInp.value.trim() : '';
+        if (!subcatName) { App.toast(t('admin.enterNewSubcat'), 'warning'); return; }
+        p.subcategory = subcatName.replace(/\s+/g, '_').toLowerCase();
+        p.subcategoryLabel = subcatName;
+      } else if (subcatVal) {
+        var subcatOpt = subcatSel.options[subcatSel.selectedIndex];
+        p.subcategory = subcatVal;
+        p.subcategoryLabel = subcatOpt ? subcatOpt.text : subcatVal;
+      } else {
+        p.subcategory = '';
+        p.subcategoryLabel = '';
       }
     }
     if (window.DB) {
@@ -753,12 +839,31 @@ var AdminView = {
       catIcon  = (catIcons[cat])  || (existingProd ? existingProd.icon : '📦');
     }
 
+    var subcat = '', subcatLabel = '';
+    var subcatSel = document.getElementById('pf-subcat');
+    if (subcatSel) {
+      var subcatVal = subcatSel.value;
+      if (subcatVal === '__new__') {
+        var subcatInp = document.getElementById('pf-subcat-new');
+        var subcatName = subcatInp ? subcatInp.value.trim() : '';
+        if (!subcatName) { App.toast(t('admin.enterNewSubcat'), 'warning'); return; }
+        subcat = subcatName.replace(/\s+/g, '_').toLowerCase();
+        subcatLabel = subcatName;
+      } else if (subcatVal) {
+        var subcatOpt = subcatSel.options[subcatSel.selectedIndex];
+        subcat = subcatVal;
+        subcatLabel = subcatOpt ? subcatOpt.text : subcatVal;
+      }
+    }
+
     var newProd = {
       id:             'prod-' + sku,
       sku:            sku,
       name:           name,
       category:       cat,
       categoryLabel:  catLabel,
+      subcategory:    subcat,
+      subcategoryLabel: subcatLabel,
       price:          parseFloat(document.getElementById('pf-price').value) || 0,
       stock:          parseInt(document.getElementById('pf-stock').value) || 100,
       description:    document.getElementById('pf-desc').value || '',
@@ -818,6 +923,8 @@ var AdminView = {
         name:           item.name,
         category:       item.category,
         categoryLabel:  catLabels[item.category] || item.category,
+        subcategory:    item.subcategory || '',
+        subcategoryLabel: item.subcategoryLabel || item.subcategory || '',
         price:          parseFloat(item.price) || 0,
         stock:          parseInt(item.stock) || 0,
         description:    item.description || '',
