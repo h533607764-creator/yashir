@@ -193,7 +193,7 @@ var AdminView = {
       '</div>' +
       (o.notes ? '<p style="margin-top:8px;font-size:14px;color:var(--text-muted)"><strong>' + t('admin.notesLabel') + '</strong> ' + App.escHTML(o.notes) + '</p>' : '') +
       '<div style="display:flex;gap:10px;margin-top:16px">' +
-        '<button class="btn-primary" onclick="SuccessView.printNote(' + o.id + ');App.closeModal()">' +
+        '<button class="btn-primary" onclick="SuccessView.printNote(\'' + o.id + '\');App.closeModal()">' +
           '<span class="material-icons-round">print</span> ' + t('admin.printDelivery') + '</button>' +
         '<button class="btn-secondary" onclick="App.closeModal()">' + t('common.close') + '</button>' +
       '</div>'
@@ -857,7 +857,7 @@ var AdminView = {
     p.name              = document.getElementById('pf-name').value || p.name;
     p.price             = parseFloat(document.getElementById('pf-price').value) || p.price;
     p.stock             = parseInt(document.getElementById('pf-stock').value) || 0;
-    p.lowStockThreshold = parseInt(document.getElementById('pf-threshold') && document.getElementById('pf-threshold').value) || 10;
+    p.lowStockThreshold = (function () { var n = parseInt((document.getElementById('pf-threshold') || {}).value, 10); return Number.isNaN(n) ? 10 : n; })();
     p.description       = document.getElementById('pf-desc').value || p.description;
     p.name_en              = (document.getElementById('pf-name-en') || {}).value || p.name_en || '';
     p.description_en       = (document.getElementById('pf-desc-en') || {}).value || p.description_en || '';
@@ -976,7 +976,7 @@ var AdminView = {
       subcategory:    subcat,
       subcategoryLabel: subcatLabel,
       price:          parseFloat(document.getElementById('pf-price').value) || 0,
-      stock:          parseInt(document.getElementById('pf-stock').value) || 100,
+      stock:          (function () { var n = parseInt(document.getElementById('pf-stock').value, 10); return Number.isNaN(n) ? 100 : n; })(),
       description:    document.getElementById('pf-desc').value || '',
       icon:           catIcon,
       bgColor:        '#1a2030',
