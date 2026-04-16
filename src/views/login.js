@@ -40,7 +40,7 @@ var LoginView = {
     App.showModal(
       '<div class="sys-message">' +
         '<div class="sys-icon success"><span class="material-icons-round" style="font-size:30px">waving_hand</span></div>' +
-        '<h3>' + t('header.hello') + App.escHTML(c.name) + '!</h3>' +
+        '<h3>' + t('header.hello') + App.escHTML(pLang(c, 'name')) + '!</h3>' +
         '<p>' + t('login.welcome') + '<br>' + t('login.freeShipping') + ' <strong>₪' + App.state.settings.minOrderAmount + '</strong></p>' +
         '<div style="display:flex;gap:10px">' +
           '<button class="btn-primary" onclick="App.closeModal();App.navigate(\'catalog\')">' +

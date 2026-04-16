@@ -385,6 +385,7 @@ var CatalogView = {
     var reqData  = {
       customerId:   customer.id,
       customerName: customer.name,
+      customerName_en: customer.name_en || '',
       customerPhone: customer.phone || '',
       customerEmail: customer.email || '',
       productId:    product.id,
@@ -403,7 +404,7 @@ var CatalogView = {
       var ph = settings.adminPhone.replace(/\D/g,'');
       if (ph.startsWith('0')) ph = '972' + ph.substring(1);
       var waMsg = '💰 *' + t('catalog.quoteModalTitle') + '*\n' +
-        '👤 ' + customer.name + '\n' +
+        '👤 ' + pLang(customer, 'name') + '\n' +
         '📱 ' + (customer.phone || '—') + '\n' +
         '📦 ' + pLang(product, 'name') + ' (' + t('common.sku') + ' ' + product.sku + ')';
       setTimeout(function () {
@@ -412,9 +413,9 @@ var CatalogView = {
     }
 
     if (settings.adminEmail) {
-      var subject = t('catalog.quoteModalTitle') + ' — ' + customer.name + ' / ' + pLang(product, 'name');
+      var subject = t('catalog.quoteModalTitle') + ' — ' + pLang(customer, 'name') + ' / ' + pLang(product, 'name');
       var body    = t('catalog.quoteModalTitle') + ':\n\n' +
-        customer.name + ' (' + customer.id + ')\n' +
+        pLang(customer, 'name') + ' (' + customer.id + ')\n' +
         (customer.phone || '—') + '\n\n' +
         pLang(product, 'name') + '\n' +
         t('common.sku') + ': ' + product.sku + '\n\n' +
@@ -465,6 +466,7 @@ var CatalogView = {
     var reqData = {
       customerId:   customer.id,
       customerName: customer.name,
+      customerName_en: customer.name_en || '',
       customerPhone: customer.phone || '',
       productName:  name.value.trim(),
       estimatedQty: qty ? (parseInt(qty.value) || null) : null,
@@ -482,7 +484,7 @@ var CatalogView = {
       var ph = settings.adminPhone.replace(/\D/g,'');
       if (ph.startsWith('0')) ph = '972' + ph.substring(1);
       var waMsg = '📦 *' + t('catalog.newProductTitle') + '*\n' +
-        '👤 ' + customer.name + '\n' +
+        '👤 ' + pLang(customer, 'name') + '\n' +
         '📱 ' + (customer.phone || '—') + '\n' +
         '🛒 ' + name.value.trim() +
         (qty && qty.value ? '\n📊 ' + qty.value : '') +
@@ -493,9 +495,9 @@ var CatalogView = {
     }
 
     if (settings.adminEmail) {
-      var subject = t('catalog.newProductTitle') + ' — ' + customer.name;
+      var subject = t('catalog.newProductTitle') + ' — ' + pLang(customer, 'name');
       var body    = t('catalog.newProductTitle') + ':\n\n' +
-        customer.name + ' (' + customer.id + ')\n' +
+        pLang(customer, 'name') + ' (' + customer.id + ')\n' +
         (customer.phone || '—') + '\n\n' +
         name.value.trim() + '\n' +
         (qty && qty.value ? qty.value + '\n' : '') +

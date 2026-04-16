@@ -97,6 +97,10 @@ var DBSync = (function () {
           /* מיזוג עם state.settings הקיים */
           if (window.App && window.App.state) {
             Object.assign(window.App.state.settings, data);
+            var st = window.App.state.settings;
+            if (st.systemMessage_en === undefined) st.systemMessage_en = '';
+            if (st.landingTitle_en === undefined) st.landingTitle_en = '';
+            if (st.landingSubtitle_en === undefined) st.landingSubtitle_en = '';
           }
           /* שמור ב-localStorage */
           try { localStorage.setItem('yashir_settings', JSON.stringify(data)); } catch (e) {}

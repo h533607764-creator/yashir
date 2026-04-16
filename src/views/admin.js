@@ -1,4 +1,15 @@
 var AdminView = {
+  _storedCustomerName: function (r) {
+    if (I18n.getLang() === 'en' && r.customerName_en) return r.customerName_en;
+    return r.customerName || '';
+  },
+
+  _statsCustomerLabel: function (hebrewName) {
+    if (I18n.getLang() !== 'en' || !hebrewName) return hebrewName;
+    var cu = CUSTOMERS_DB.find(function (x) { return x.name === hebrewName; });
+    return (cu && cu.name_en) ? cu.name_en : hebrewName;
+  },
+
   _tab: 'orders',
   _ordersUnsub: null,
   _lastOrders: [],
@@ -83,7 +94,7 @@ var AdminView = {
         }).join('');
         return '<tr>' +
           '<td><strong>' + o.id + '</strong></td>' +
-          '<td><div>' + App.escHTML(o.customerName) + '</div>' +
+          '<td><div>' + App.escHTML(App.orderCustomerDisplay(o)) + '</div>' +
             (o.customerPhone ? '<div style="font-size:11px;color:var(--text-muted)">' + App.escHTML(o.customerPhone) + '</div>' : '') +
           '</td>' +
           '<td>' + d + '</td>' +
@@ -136,7 +147,7 @@ var AdminView = {
           || (App.Orders.getAll()).find(function (x) { return String(x.id) === String(orderId); });
     var ph = phone.replace(/\D/g, '');
     if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-    var msg = o ? '📦 ' + t('admin.order') + ' #' + o.id + '\n' + t('admin.customerCol') + ': ' + o.customerName + '\n' + t('common.total') + ': ₪' + o.total + '\n' + t('common.status') + ': ' + (SL[o.status] || o.status)
+    var msg = o ? '📦 ' + t('admin.order') + ' #' + o.id + '\n' + t('admin.customerCol') + ': ' + App.orderCustomerDisplay(o) + '\n' + t('common.total') + ': ₪' + o.total + '\n' + t('common.status') + ': ' + (SL[o.status] || o.status)
                 : t('admin.order') + ' #' + orderId;
     window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(msg), '_blank');
   },
@@ -182,7 +193,7 @@ var AdminView = {
         '<td>' + App.fmtP(i.discountPct) + '%</td><td>₪' + App.fmtP(i.unitPrice * i.qty) + '</td></tr>';
     }).join('');
     App.showModal(
-      '<h3>' + t('admin.order') + ' #' + o.id + ' — ' + App.escHTML(o.customerName) + '</h3>' +
+      '<h3>' + t('admin.order') + ' #' + o.id + ' — ' + App.escHTML(App.orderCustomerDisplay(o)) + '</h3>' +
       '<div class="table-wrap"><table class="admin-table">' +
         '<thead><tr><th>' + t('common.sku') + '</th><th>' + t('admin.product') + '</th><th>' + t('admin.qtyCol') + '</th><th>' + t('admin.discountCol') + '</th><th>' + t('common.total') + '</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div>' +
@@ -207,7 +218,7 @@ var AdminView = {
       var debt = cu.existingDebt || 0;
       return '<tr>' +
         '<td><code style="font-size:12px">' + cu.id + '</code></td>' +
-        '<td><strong>' + App.escHTML(cu.name) + '</strong></td>' +
+        '<td><strong>' + App.escHTML(pLang(cu, 'name')) + '</strong></td>' +
         '<td>' + (cu.phone || '—') + '</td>' +
         '<td>' + (cu.generalDiscount || 0) + '%</td>' +
         '<td>' + (cu.paymentTerms || t('admin.cash')) + '</td>' +
@@ -313,17 +324,18 @@ var AdminView = {
   _editCust: function (id) {
     var isNew = !id;
     var cu = isNew
-      ? { id:'', name:'', email:'', phone:'', address:'', contactPerson:'', shippingAddress:'', generalDiscount:0, shippingCost:45, paymentTerms: t('admin.cash'), existingDebt:0, personalPrices:{} }
+      ? { id:'', name:'', name_en:'', email:'', phone:'', address:'', contactPerson:'', shippingAddress:'', generalDiscount:0, shippingCost:45, paymentTerms: t('admin.cash'), existingDebt:0, personalPrices:{} }
       : CUSTOMERS_DB.find(function (x) { return x.id === id; }) || {};
     var termsOpts = [t('admin.cash'),'שוטף 30','שוטף 60','שוטף 90','שוטף+30','שוטף+60'].map(function (trm) {
       return '<option value="' + trm + '"' + (cu.paymentTerms === trm ? ' selected' : '') + '>' + trm + '</option>';
     }).join('');
     App.showModal(
-      '<h3>' + (isNew ? t('admin.addNewCustomer') : t('admin.editCustomer') + ' ' + cu.name) + '</h3>' +
+      '<h3>' + (isNew ? t('admin.addNewCustomer') : t('admin.editCustomer') + ' ' + pLang(cu, 'name')) + '</h3>' +
       '<div class="customer-form">' +
         AdminView._fld(t('admin.hpField'), 'ef-id', cu.id, 'text') +
         (isNew ? '' : '<p style="font-size:12px;color:var(--orange);margin-top:-8px">' + t('admin.hpChangeWarning') + '</p>') +
         AdminView._fld(t('admin.businessName'), 'ef-name', cu.name, 'text') +
+        AdminView._fldTranslate(t('admin.customerNameEn'), 'ef-name-en', cu.name_en || '', 'ef-name') +
         AdminView._fld(t('common.phone'), 'ef-phone', cu.phone, 'tel') +
         AdminView._fld(t('common.email'), 'ef-email', cu.email, 'email') +
         AdminView._fld(t('admin.address'), 'ef-address', cu.address, 'text') +
@@ -354,6 +366,7 @@ var AdminView = {
     var existing = origId ? CUSTOMERS_DB.find(function (x) { return x.id === origId; }) : null;
     var data = {
       id: id, name: name,
+      name_en: (document.getElementById('ef-name-en') || {}).value.trim() || '',
       phone:           document.getElementById('ef-phone').value,
       email:           document.getElementById('ef-email').value,
       address:         document.getElementById('ef-address').value,
@@ -420,7 +433,7 @@ var AdminView = {
       '</div>';
     }).join('');
     App.showModal(
-      '<h3>' + t('admin.personalPricesTitle') + ' ' + cu.name + '</h3>' +
+      '<h3>' + t('admin.personalPricesTitle') + ' ' + pLang(cu, 'name') + '</h3>' +
       '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">' + t('admin.priceInstr') + '</p>' +
       '<div class="personal-prices-grid">' + rows + '</div>' +
       '<div style="display:flex;gap:10px;margin-top:16px">' +
@@ -1082,7 +1095,7 @@ var AdminView = {
             : '<span style="background:var(--orange-dim);color:var(--orange);border-radius:12px;padding:2px 10px;font-size:12px">' + t('admin.quotePending') + '</span>';
           return '<tr>' +
             '<td>' + d + '</td>' +
-            '<td><strong>' + App.escHTML(r.customerName) + '</strong><div style="font-size:11px;color:var(--text-muted)">' + App.escHTML(r.customerPhone || '') + '</div></td>' +
+            '<td><strong>' + App.escHTML(AdminView._storedCustomerName(r)) + '</strong><div style="font-size:11px;color:var(--text-muted)">' + App.escHTML(r.customerPhone || '') + '</div></td>' +
             '<td>' + App.escHTML(r.productName) + '<div style="font-size:11px;color:var(--text-muted)">' + t('common.sku') + ' ' + App.escHTML(r.productSku || '') + '</div></td>' +
             '<td>' + statusBadge + '</td>' +
             '<td>' + (r.approvedPrice ? '₪' + r.approvedPrice : '—') + '</td>' +
@@ -1171,7 +1184,7 @@ var AdminView = {
             : '<span style="background:var(--orange-dim);color:var(--orange);border-radius:12px;padding:2px 10px;font-size:12px">' + t('admin.quotePending') + '</span>';
           return '<tr>' +
             '<td>' + d + '</td>' +
-            '<td><strong>' + App.escHTML(r.customerName) + '</strong><div style="font-size:11px;color:var(--text-muted)">' + App.escHTML(r.customerPhone || '') + '</div></td>' +
+            '<td><strong>' + App.escHTML(AdminView._storedCustomerName(r)) + '</strong><div style="font-size:11px;color:var(--text-muted)">' + App.escHTML(r.customerPhone || '') + '</div></td>' +
             '<td><strong>' + App.escHTML(r.productName) + '</strong>' + (r.estimatedQty ? '<div style="font-size:11px;color:var(--text-muted)">' + t('admin.estQty') + ' ' + r.estimatedQty + '</div>' : '') + '</td>' +
             '<td>' + App.escHTML(r.notes || '—') + '</td>' +
             '<td>' + statusBadge + '</td>' +
@@ -1264,13 +1277,13 @@ var AdminView = {
         '<div class="stats-grid">' +
           statCard('payments', t('admin.monthlyIncome'), '₪' + App.fmtP(mRevenue), mOrders + ' ' + t('admin.ordersCount')) +
           statCard('star', t('admin.topProduct'), mTopProd ? mTopProd.name : '—', mTopProd ? mTopProd.qty + ' ' + t('common.units') : '') +
-          statCard('emoji_events', t('admin.topCustomer'), mTopCust ? mTopCust.name : '—', mTopCust ? '₪' + App.fmtP(mTopCust.total) : '') +
+          statCard('emoji_events', t('admin.topCustomer'), mTopCust ? AdminView._statsCustomerLabel(mTopCust.name) : '—', mTopCust ? '₪' + App.fmtP(mTopCust.total) : '') +
         '</div>' +
         '<h3 style="font-size:14px;color:var(--text-muted);margin:20px 0 10px">' + t('admin.allTime') + '</h3>' +
         '<div class="stats-grid">' +
           statCard('account_balance', t('admin.totalIncome'), '₪' + App.fmtP(allRevenue), allTime.length + ' ' + t('admin.ordersCount')) +
           statCard('inventory_2', t('admin.topProduct'), allTopProd ? allTopProd.name : '—', allTopProd ? allTopProd.qty + ' ' + t('common.units') : '') +
-          statCard('workspace_premium', t('admin.topCustomer'), allTopCust ? allTopCust.name : '—', allTopCust ? '₪' + App.fmtP(allTopCust.total) : '') +
+          statCard('workspace_premium', t('admin.topCustomer'), allTopCust ? AdminView._statsCustomerLabel(allTopCust.name) : '—', allTopCust ? '₪' + App.fmtP(allTopCust.total) : '') +
         '</div>' +
       '</div>';
   },
@@ -1287,9 +1300,21 @@ var AdminView = {
           '<div class="form-group full-width"><label>' + t('admin.systemMsg') + '</label>' +
             '<textarea id="sv-sysmsg" rows="3">' + (s.systemMessage || '') + '</textarea></div>' +
           '<div class="form-group full-width"><label>' + t('admin.landingTitle') + '</label>' +
-            '<input type="text" id="sv-title" value="' + s.landingTitle + '"></div>' +
+            '<input type="text" id="sv-title" value="' + App.escHTML(s.landingTitle || '') + '"></div>' +
           '<div class="form-group full-width"><label>' + t('admin.landingSubtitle') + '</label>' +
-            '<textarea id="sv-sub" rows="2">' + s.landingSubtitle + '</textarea></div>' +
+            '<textarea id="sv-sub" rows="2">' + (s.landingSubtitle || '') + '</textarea></div>' +
+          '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;margin-top:8px">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
+              '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.settingsOpeningEn') + '</p>' +
+              '<button type="button" onclick="AdminView._translateSettingsOpening()" style="background:var(--blue);color:#fff;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px;border:none;cursor:pointer"><span class="material-icons-round" style="font-size:15px">translate</span> ' + t('admin.translateOpeningAll') + '</button>' +
+            '</div>' +
+            '<div class="form-group full-width"><label>' + t('admin.systemMsgEn') + '</label>' +
+              '<textarea id="sv-sysmsg-en" rows="3" dir="ltr" style="text-align:left">' + (s.systemMessage_en || '') + '</textarea></div>' +
+            '<div class="form-group full-width"><label>' + t('admin.landingTitleEn') + '</label>' +
+              '<input type="text" id="sv-title-en" value="' + App.escHTML(s.landingTitle_en || '') + '" dir="ltr" style="text-align:left"></div>' +
+            '<div class="form-group full-width"><label>' + t('admin.landingSubtitleEn') + '</label>' +
+              '<textarea id="sv-sub-en" rows="2" dir="ltr" style="text-align:left">' + (s.landingSubtitle_en || '') + '</textarea></div>' +
+          '</div>' +
           AdminView._fld(t('admin.adminPin'), 'sv-pin', s.adminPin, 'password') +
           AdminView._fld(t('admin.adminPhone'), 'sv-phone', s.adminPhone || '', 'tel') +
           AdminView._fld(t('admin.adminEmail'), 'sv-email', s.adminEmail || '', 'email') +
@@ -1300,6 +1325,14 @@ var AdminView = {
       '</div>';
   },
 
+  _translateSettingsOpening: function () {
+    AutoTranslate.translateAll([
+      ['sv-sysmsg', 'sv-sysmsg-en'],
+      ['sv-title', 'sv-title-en'],
+      ['sv-sub', 'sv-sub-en']
+    ]);
+  },
+
   _saveSettings: function () {
     var s = App.state.settings;
     s.minOrderAmount       = parseInt(document.getElementById('sv-min').value)  || s.minOrderAmount;
@@ -1307,6 +1340,9 @@ var AdminView = {
     s.systemMessage        = document.getElementById('sv-sysmsg').value;
     s.landingTitle         = document.getElementById('sv-title').value;
     s.landingSubtitle      = document.getElementById('sv-sub').value;
+    s.systemMessage_en     = (document.getElementById('sv-sysmsg-en') || {}).value || '';
+    s.landingTitle_en      = (document.getElementById('sv-title-en') || {}).value || '';
+    s.landingSubtitle_en   = (document.getElementById('sv-sub-en') || {}).value || '';
     s.adminPhone           = document.getElementById('sv-phone').value;
     s.adminEmail           = document.getElementById('sv-email').value;
     var pin = document.getElementById('sv-pin').value;

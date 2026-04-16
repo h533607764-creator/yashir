@@ -570,6 +570,12 @@ var I18n = (function () {
     'admin.translateDone': 'התרגום הושלם ✓',
     'admin.translateNoText': 'אין טקסט לתרגום',
     'admin.translateError': 'שגיאה בתרגום — נסה שוב',
+    'admin.customerNameEn': 'שם עסק (אנגלית — לתצוגה דו-שפתית)',
+    'admin.settingsOpeningEn': 'משפטי פתיחה באנגלית (דף נחיתה + הודעת מערכת)',
+    'admin.translateOpeningAll': 'תרגם הכל לאנגלית',
+    'admin.systemMsgEn': 'הודעת מערכת (אנגלית)',
+    'admin.landingTitleEn': 'כותרת נחיתה (אנגלית)',
+    'admin.landingSubtitleEn': 'תת-כותרת נחיתה (אנגלית)',
 
     /* --- Error page --- */
     'error.oops': 'אופס, משהו השתבש.',
@@ -1086,6 +1092,12 @@ var I18n = (function () {
     'admin.translateDone': 'Translation complete ✓',
     'admin.translateNoText': 'No text to translate',
     'admin.translateError': 'Translation error — try again',
+    'admin.customerNameEn': 'Business name (English — bilingual display)',
+    'admin.settingsOpeningEn': 'Opening texts in English (landing + system message)',
+    'admin.translateOpeningAll': 'Translate all to English',
+    'admin.systemMsgEn': 'System message (English)',
+    'admin.landingTitleEn': 'Landing title (English)',
+    'admin.landingSubtitleEn': 'Landing subtitle (English)',
 
     /* --- Error page --- */
     'error.oops': 'Oops, something went wrong.',

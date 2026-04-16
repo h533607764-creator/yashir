@@ -37,7 +37,10 @@ var App = (function () {
       adminEmail: '',
       systemMessage: 'ברוכים הבאים לישיר! הזמינו עד יום ג׳ לאספקה ביום ה׳.',
       landingTitle: 'רמה אחת מעל, דאגה אחת פחות',
-      landingSubtitle: 'ישיר שיווק והפצה — מוצרים חד-פעמיים לעסקים ואירועים'
+      landingSubtitle: 'ישיר שיווק והפצה — מוצרים חד-פעמיים לעסקים ואירועים',
+      systemMessage_en: '',
+      landingTitle_en: '',
+      landingSubtitle_en: ''
     }
   };
 
@@ -51,7 +54,12 @@ var App = (function () {
   /* ===== LOAD PERSISTED DATA ===== */
   function loadData() {
     var s = Store.get('settings');
-    if (s) Object.assign(state.settings, s);
+    if (s) {
+      Object.assign(state.settings, s);
+      if (state.settings.systemMessage_en === undefined) state.settings.systemMessage_en = '';
+      if (state.settings.landingTitle_en === undefined) state.settings.landingTitle_en = '';
+      if (state.settings.landingSubtitle_en === undefined) state.settings.landingSubtitle_en = '';
+    }
     var c = Store.get('customers');
     if (c) window.CUSTOMERS_DB = c;
     var p = Store.get('products');
@@ -305,6 +313,7 @@ var App = (function () {
         id: id,
         customerId: customer.id,
         customerName: customer.name,
+        customerName_en: customer.name_en || '',
         customerPhone: customer.phone || '',
         customerEmail: customer.email || '',
         items: items,
@@ -402,7 +411,7 @@ var App = (function () {
         '</div>';
     } else if (Auth.isCustomer()) {
       user = '<div class="header-user">' +
-        '<span class="header-welcome">' + t('header.hello') + '<strong>' + escHTML(state.currentUser.customer.name) + '</strong></span>' +
+        '<span class="header-welcome">' + t('header.hello') + '<strong>' + escHTML(pLang(state.currentUser.customer, 'name')) + '</strong></span>' +
         '<button class="btn-logout orange" onclick="App.Auth.logout()">' + t('header.logout') + '</button>' +
         '</div>';
     } else {
@@ -553,11 +562,24 @@ var App = (function () {
     }, 3200);
   }
 
+  function orderCustomerDisplay(o) {
+    if (!o) return '';
+    if (I18n.getLang() === 'en') {
+      if (o.customerName_en) return o.customerName_en;
+      if (o.customerId && typeof CUSTOMERS_DB !== 'undefined') {
+        var cu = CUSTOMERS_DB.find(function (x) { return String(x.id) === String(o.customerId); });
+        if (cu && cu.name_en) return cu.name_en;
+      }
+    }
+    return o.customerName || '';
+  }
+
   /* ===== SYSTEM MESSAGES ===== */
   function showSystemMsg() {
-    var msg = state.settings.systemMessage;
+    var msg = pLang(state.settings, 'systemMessage');
     if (!msg) return;
-    var hash = 0; for (var i = 0; i < msg.length; i++) { hash = ((hash << 5) - hash + msg.charCodeAt(i)) & 0x7fffffff; }
+    var hashSrc = state.settings.systemMessage || '';
+    var hash = 0; for (var i = 0; i < hashSrc.length; i++) { hash = ((hash << 5) - hash + hashSrc.charCodeAt(i)) & 0x7fffffff; }
     var key = 'sysmsg_' + hash;
     if (Store.get(key)) return;
     showModal('<div class="sys-message">' +
@@ -707,7 +729,7 @@ var App = (function () {
     dateFmt: dateFmt,
     navigate: navigate, toggleCart: toggleCart, openCart: openCart, closeCart: closeCart,
     showModal: showModal, closeModal: closeModal, toast: toast,
-    showSystemMsg: showSystemMsg, startOrder: startOrder,
+    showSystemMsg: showSystemMsg, startOrder: startOrder, orderCustomerDisplay: orderCustomerDisplay,
     renderHeader: renderHeader, updateFloatBtns: updateFloatBtns,
     showLangSelector: showLangSelector,
     _selectLang: _selectLang, _confirmLang: _confirmLang, _pendingLang: _pendingLang,

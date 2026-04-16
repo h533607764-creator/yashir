@@ -64,7 +64,7 @@ var SuccessView = {
       '<h2>' + t('success.companyName') + '</h2>' +
       '<p class="sub">' + t('success.deliveryNote') + '</p>' +
       '<div class="info">' +
-        '<span><strong>' + t('success.customer') + '</strong> ' + App.escHTML(order.customerName) + '</span>' +
+        '<span><strong>' + t('success.customer') + '</strong> ' + App.escHTML(App.orderCustomerDisplay(order)) + '</span>' +
         '<span><strong>' + t('success.orderNumber') + '</strong> ORD-' + order.id + '</span>' +
         '<span><strong>' + t('success.dateLabel') + '</strong> ' + new Date(order.timestamp).toLocaleDateString(locale) + '</span>' +
       '</div>' +

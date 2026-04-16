@@ -8,10 +8,10 @@ var LandingView = {
             '<div class="hero-logo-mark">' + t('header.logoMark') + '</div>' +
             '<div class="hero-logo-text">' +
               '<h1>' + t('landing.companyName') + '</h1>' +
-              '<p class="hero-slogan">' + App.escHTML(s.landingTitle) + '</p>' +
+              '<p class="hero-slogan">' + App.escHTML(pLang(s, 'landingTitle')) + '</p>' +
             '</div>' +
           '</div>' +
-          '<p class="hero-desc">' + App.escHTML(s.landingSubtitle) + '</p>' +
+          '<p class="hero-desc">' + App.escHTML(pLang(s, 'landingSubtitle')) + '</p>' +
           '<div class="hero-ctas">' +
             '<button class="btn-hero-primary" onclick="App.navigate(\'catalog\')">' +
               '<span class="material-icons-round">menu_book</span> ' + t('landing.toCatalog') +
