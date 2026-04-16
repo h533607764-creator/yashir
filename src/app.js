@@ -393,28 +393,21 @@ var App = (function () {
     var h = document.getElementById('site-header');
     if (!h) return;
 
-    var langBtn = '<button class="btn-lang" onclick="App.showLangSelector()" title="' + t('lang.title') + '">' +
-      '<span class="material-icons-round" style="font-size:18px">translate</span> ' + t('lang.btn') +
-    '</button>';
-
     var user = '';
     if (Auth.isAdmin()) {
       user = '<div class="header-user">' +
         '<span class="header-role admin-badge"><span class="material-icons-round" style="font-size:16px">admin_panel_settings</span> ' + t('header.admin') + '</span>' +
         '<button class="btn-admin-panel" onclick="App.navigate(\'admin\')">' + t('header.adminPanel') + '</button>' +
         '<button class="btn-logout" onclick="App.Auth.logout()"><span class="material-icons-round" style="font-size:18px">logout</span></button>' +
-        langBtn +
         '</div>';
     } else if (Auth.isCustomer()) {
       user = '<div class="header-user">' +
         '<span class="header-welcome">' + t('header.hello') + '<strong>' + escHTML(state.currentUser.customer.name) + '</strong></span>' +
         '<button class="btn-logout orange" onclick="App.Auth.logout()">' + t('header.logout') + '</button>' +
-        langBtn +
         '</div>';
     } else {
       user = '<div class="header-user">' +
         '<button class="btn-login-header" onclick="App.navigate(\'login\')">' + t('header.login') + '</button>' +
-        langBtn +
         '</div>';
     }
     h.innerHTML = '<div class="container header-inner">' +
@@ -676,6 +669,11 @@ var App = (function () {
     if (Auth.isCustomer()) {
       renderCartFab();
       setTimeout(showSystemMsg, 800);
+    }
+
+    if (!I18n.isRemembered() && !sessionStorage.getItem('yashir_lang_shown')) {
+      sessionStorage.setItem('yashir_lang_shown', '1');
+      setTimeout(showLangSelector, 600);
     }
 
     if (window.DB) {
