@@ -17,11 +17,11 @@ var CatalogView = {
     PRODUCTS.forEach(function (p) {
       if (p.category && p.category !== 'shipping' && !seenCat[p.category]) {
         seenCat[p.category] = true;
-        cats.push({ id: p.category, label: (p.icon ? p.icon + ' ' : '') + (p.categoryLabel || p.category) });
+        cats.push({ id: p.category, label: (p.icon ? p.icon + ' ' : '') + (pLang(p, 'categoryLabel') || p.category) });
       }
       if (p.subcategory && p.category !== 'shipping' && !seenSub[p.subcategory]) {
         seenSub[p.subcategory] = true;
-        subcats.push({ id: p.subcategory, label: p.subcategoryLabel || p.subcategory, cat: p.category });
+        subcats.push({ id: p.subcategory, label: pLang(p, 'subcategoryLabel') || p.subcategory, cat: p.category });
       }
     });
 
@@ -106,7 +106,7 @@ var CatalogView = {
     }
     if (CatalogView._q) {
       var q = CatalogView._q.toLowerCase();
-      list = list.filter(function (p) { return p.name.toLowerCase().indexOf(q) > -1 || (p.sku || '').indexOf(q) > -1; });
+      list = list.filter(function (p) { return p.name.toLowerCase().indexOf(q) > -1 || (p.name_en || '').toLowerCase().indexOf(q) > -1 || (p.sku || '').indexOf(q) > -1; });
     }
 
     if (cust && CatalogView._section === 'personal') {
@@ -159,16 +159,16 @@ var CatalogView = {
       productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">inventory_2</span>' + product.unitsPerPackage + ' ' + t('catalog.unitsInPack') + '</span>';
     }
     if (product.soldBy) {
-      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">local_shipping</span>' + t('catalog.soldBy') + ' ' + product.soldBy + '</span>';
+      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">local_shipping</span>' + t('catalog.soldBy') + ' ' + pLang(product, 'soldBy') + '</span>';
     }
     if (product.unitsPerContainer) {
-      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">straighten</span>' + product.unitsPerContainer + ' ' + t('catalog.unitsIn') + (product.soldBy || (I18n.getLang() === 'en' ? 'pack' : 'אריזה')) + '</span>';
+      productInfoHTML += '<span class="prod-info-tag"><span class="material-icons-round">straighten</span>' + product.unitsPerContainer + ' ' + t('catalog.unitsIn') + (pLang(product, 'soldBy') || (I18n.getLang() === 'en' ? 'pack' : 'אריזה')) + '</span>';
     }
 
     var bulkDiscHTML = '';
     if (product.bulkDiscounts && product.bulkDiscounts.length && showPrice) {
       var bulkItems = product.bulkDiscounts.map(function (d) {
-        return '<span class="bulk-disc-item">' + t('catalog.from') + d.minQty + ' ' + (product.soldBy || t('common.units')) + ': <strong>-' + d.discountPct + '%</strong></span>';
+        return '<span class="bulk-disc-item">' + t('catalog.from') + d.minQty + ' ' + (pLang(product, 'soldBy') || t('common.units')) + ': <strong>-' + d.discountPct + '%</strong></span>';
       }).join('');
       bulkDiscHTML = '<div class="bulk-disc-banner"><span class="material-icons-round">local_offer</span><span>' + t('catalog.bulkDiscount') + ' ' + bulkItems + '</span></div>';
     }
@@ -221,15 +221,15 @@ var CatalogView = {
     return '<article class="product-card' + (inStock ? '' : ' oos-card') + '">' +
       '<div class="card-img-wrap" style="background:' + product.bgColor + '">' +
         (product.image
-          ? '<img src="' + CloudinaryUpload.buildCatalogUrl(product.image) + '" alt="' + product.name + '" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">'
+          ? '<img src="' + CloudinaryUpload.buildCatalogUrl(product.image) + '" alt="' + pLang(product, 'name') + '" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">'
           : '<span class="card-icon">' + product.icon + '</span>') +
         '<span class="stock-badge ' + (inStock ? 'in' : 'out') + '">' + (inStock ? t('catalog.inStock') : t('catalog.outOfStock')) + '</span>' +
         (showPersonalBadge ? '<span class="personal-badge"><span class="material-icons-round">star</span> ' + t('catalog.specialPrice') + '</span>' : '') +
       '</div>' +
       '<div class="card-body">' +
-        '<div class="card-meta"><span class="card-sku">' + t('common.sku') + ' ' + App.escHTML(product.sku) + '</span><span class="card-cat">' + App.escHTML(product.categoryLabel) + (product.subcategoryLabel ? ' / ' + App.escHTML(product.subcategoryLabel) : '') + '</span></div>' +
-        '<h3 class="card-name">' + App.escHTML(product.name) + '</h3>' +
-        '<p class="card-desc">' + App.escHTML(product.description) + '</p>' +
+        '<div class="card-meta"><span class="card-sku">' + t('common.sku') + ' ' + App.escHTML(product.sku) + '</span><span class="card-cat">' + App.escHTML(pLang(product, 'categoryLabel')) + (pLang(product, 'subcategoryLabel') ? ' / ' + App.escHTML(pLang(product, 'subcategoryLabel')) : '') + '</span></div>' +
+        '<h3 class="card-name">' + App.escHTML(pLang(product, 'name')) + '</h3>' +
+        '<p class="card-desc">' + App.escHTML(pLang(product, 'description')) + '</p>' +
         (productInfoHTML ? '<div class="prod-info-tags">' + productInfoHTML + '</div>' : '') +
         bulkDiscHTML +
         priceHTML +
@@ -269,13 +269,13 @@ var CatalogView = {
         '</div>';
         var next = App.Pricing.getNextBulkThreshold(product, qty);
         if (next) {
-          html += '<div class="next-bulk-hint"><span class="material-icons-round">local_offer</span>' + t('catalog.moreFor') + ' ' + (next.minQty - qty) + ' ' + (product.soldBy || t('common.units')) + ' ' + t('catalog.toGet') + ' ' + next.discountPct + '%</div>';
+          html += '<div class="next-bulk-hint"><span class="material-icons-round">local_offer</span>' + t('catalog.moreFor') + ' ' + (next.minQty - qty) + ' ' + (pLang(product, 'soldBy') || t('common.units')) + ' ' + t('catalog.toGet') + ' ' + next.discountPct + '%</div>';
         }
       }
     } else if (qty === 1) {
       var nextDisc = App.Pricing.getNextBulkThreshold(product, qty);
       if (nextDisc) {
-        html = '<div class="next-bulk-hint"><span class="material-icons-round">local_offer</span>' + t('catalog.order') + ' ' + nextDisc.minQty + ' ' + (product.soldBy || t('common.units')) + ' ' + t('catalog.toGet') + ' ' + nextDisc.discountPct + '%</div>';
+        html = '<div class="next-bulk-hint"><span class="material-icons-round">local_offer</span>' + t('catalog.order') + ' ' + nextDisc.minQty + ' ' + (pLang(product, 'soldBy') || t('common.units')) + ' ' + t('catalog.toGet') + ' ' + nextDisc.discountPct + '%</div>';
       }
     }
     infoEl.innerHTML = html;
@@ -364,7 +364,7 @@ var CatalogView = {
       '<div class="sys-message">' +
         '<div class="sys-icon" style="background:var(--blue-dim);color:var(--blue)"><span class="material-icons-round" style="font-size:30px">request_quote</span></div>' +
         '<h3>' + t('catalog.quoteModalTitle') + '</h3>' +
-        '<p>' + t('catalog.quoteModalText') + '<br><strong>' + App.escHTML(product.name) + '</strong></p>' +
+        '<p>' + t('catalog.quoteModalText') + '<br><strong>' + App.escHTML(pLang(product, 'name')) + '</strong></p>' +
         '<p style="font-size:13px;color:var(--text-muted)">' + t('catalog.quoteModalNote') + '</p>' +
         '<div style="display:flex;gap:10px;margin-top:12px;width:100%">' +
           '<button class="btn-primary full-width" onclick="CatalogView._confirmQuote(\'' + productId + '\')">' +
@@ -405,18 +405,18 @@ var CatalogView = {
       var waMsg = '💰 *' + t('catalog.quoteModalTitle') + '*\n' +
         '👤 ' + customer.name + '\n' +
         '📱 ' + (customer.phone || '—') + '\n' +
-        '📦 ' + product.name + ' (' + t('common.sku') + ' ' + product.sku + ')';
+        '📦 ' + pLang(product, 'name') + ' (' + t('common.sku') + ' ' + product.sku + ')';
       setTimeout(function () {
         window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
       }, 400);
     }
 
     if (settings.adminEmail) {
-      var subject = t('catalog.quoteModalTitle') + ' — ' + customer.name + ' / ' + product.name;
+      var subject = t('catalog.quoteModalTitle') + ' — ' + customer.name + ' / ' + pLang(product, 'name');
       var body    = t('catalog.quoteModalTitle') + ':\n\n' +
         customer.name + ' (' + customer.id + ')\n' +
         (customer.phone || '—') + '\n\n' +
-        product.name + '\n' +
+        pLang(product, 'name') + '\n' +
         t('common.sku') + ': ' + product.sku + '\n\n' +
         t('success.companyName');
       setTimeout(function () {

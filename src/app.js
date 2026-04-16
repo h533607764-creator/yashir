@@ -634,15 +634,15 @@ var App = (function () {
     if (product.stock > 0 && product.stock <= threshold) {
       var phone = state.settings.adminPhone || '9720552961177';
       var email = state.settings.adminEmail || 'yashir.shivuk@gmail.com';
-      var txt   = t('sys.lowStockAlert') + ': "' + escHTML(product.name) + '" (' + t('common.sku') + ' ' + escHTML(product.sku) + ') — ' + t('sys.lowStockMsg') + ' ' + product.stock + ' ' + t('common.units') + '.';
+      var txt   = t('sys.lowStockAlert') + ': "' + escHTML(pLang(product, 'name')) + '" (' + t('common.sku') + ' ' + escHTML(product.sku) + ') — ' + t('sys.lowStockMsg') + ' ' + product.stock + ' ' + t('common.units') + '.';
       var waUrl = 'https://wa.me/' + phone.replace(/\D/g,'').replace(/^0/,'972') + '?text=' + encodeURIComponent(txt);
-      var mlUrl = 'mailto:' + email + '?subject=' + encodeURIComponent(t('sys.lowStockAlert') + ' — ' + product.name) +
+      var mlUrl = 'mailto:' + email + '?subject=' + encodeURIComponent(t('sys.lowStockAlert') + ' — ' + pLang(product, 'name')) +
                   '&body=' + encodeURIComponent(txt + '\n\n' + t('success.companyName'));
       showModal(
         '<div class="sys-message">' +
           '<div class="sys-icon" style="background:var(--orange-dim);color:var(--orange)"><span class="material-icons-round" style="font-size:30px">warning_amber</span></div>' +
           '<h3>' + t('sys.lowStockTitle') + '</h3>' +
-          '<p><strong>' + escHTML(product.name) + '</strong> — ' + t('sys.lowStockMsg') + ' <strong>' + product.stock + '</strong> ' + t('sys.unitsOnly') + '</p>' +
+          '<p><strong>' + escHTML(pLang(product, 'name')) + '</strong> — ' + t('sys.lowStockMsg') + ' <strong>' + product.stock + '</strong> ' + t('sys.unitsOnly') + '</p>' +
           '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;width:100%">' +
             '<a href="' + waUrl + '" target="_blank" class="btn-primary full-width" style="text-decoration:none;justify-content:center">' +
               '<span class="material-icons-round">chat</span> ' + t('sys.sendWhatsApp') + '</a>' +

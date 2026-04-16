@@ -49,6 +49,17 @@ var I18n = (function () {
     return dict[key] !== undefined ? dict[key] : key;
   }
 
+  function pLang(product, field) {
+    if (!product) return '';
+    if (_lang === 'en') {
+      var enKey = field + '_en';
+      if (product[enKey] !== undefined && product[enKey] !== null && product[enKey] !== '') {
+        return product[enKey];
+      }
+    }
+    return product[field] !== undefined ? product[field] : '';
+  }
+
   /* ==============================
      HEBREW DICTIONARY
      ============================== */
@@ -546,6 +557,14 @@ var I18n = (function () {
     'admin.profitPct': '% רווח',
     'admin.supplierCol': 'ספק',
     'admin.notDefined': 'לא הוגדר',
+
+    /* --- Admin English Fields --- */
+    'admin.productNameEn': 'שם מוצר (אנגלית)',
+    'admin.descriptionEn': 'תיאור (אנגלית)',
+    'admin.categoryLabelEn': 'קטגוריה (אנגלית)',
+    'admin.subcategoryLabelEn': 'תת-קטגוריה (אנגלית)',
+    'admin.soldByEn': 'נמכר ב... (אנגלית)',
+    'admin.englishSection': 'שדות באנגלית (לתצוגה דו-שפתית)',
 
     /* --- Error page --- */
     'error.oops': 'אופס, משהו השתבש.',
@@ -1050,6 +1069,14 @@ var I18n = (function () {
     'admin.supplierCol': 'Supplier',
     'admin.notDefined': 'Not set',
 
+    /* --- Admin English Fields --- */
+    'admin.productNameEn': 'Product Name (English)',
+    'admin.descriptionEn': 'Description (English)',
+    'admin.categoryLabelEn': 'Category (English)',
+    'admin.subcategoryLabelEn': 'Subcategory (English)',
+    'admin.soldByEn': 'Sold By (English)',
+    'admin.englishSection': 'English Fields (bilingual display)',
+
     /* --- Error page --- */
     'error.oops': 'Oops, something went wrong.',
     'error.refresh': 'Click here to refresh'
@@ -1059,6 +1086,7 @@ var I18n = (function () {
 
   return {
     t: t,
+    pLang: pLang,
     getLang: getLang,
     setLang: setLang,
     isRemembered: isRemembered,
@@ -1067,3 +1095,4 @@ var I18n = (function () {
 })();
 
 function t(key) { return I18n.t(key); }
+function pLang(product, field) { return I18n.pLang(product, field); }

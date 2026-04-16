@@ -32,7 +32,7 @@ var SuccessView = {
       var finalTotal = App.fmtP(item.unitPrice * item.qty);
       return '<tr style="background:' + bg + '">' +
         '<td>' + App.escHTML(item.product.sku) + '</td>' +
-        '<td style="text-align:' + (isEn ? 'left' : 'right') + '">' + App.escHTML(item.product.name) + '</td>' +
+        '<td style="text-align:' + (isEn ? 'left' : 'right') + '">' + App.escHTML(pLang(item.product, 'name')) + '</td>' +
         '<td>₪' + App.fmtP(item.unitPrice) + '</td>' +
         '<td>' + item.qty + '</td>' +
         '<td>₪' + origTotal + '</td>' +

@@ -102,7 +102,7 @@ var AdminSuppliers = {
       var isThis   = costData && costData.supplierId === supplierId;
       return '<div class="personal-price-row">' +
         '<span class="sku">' + p.sku + '</span>' +
-        '<span style="flex:1">' + p.icon + ' ' + p.name + '</span>' +
+        '<span style="flex:1">' + p.icon + ' ' + pLang(p, 'name') + '</span>' +
         '<span class="base-price-hint">' + t('admin.salePrice') + ' ₪' + p.price + '</span>' +
         '<input type="number" id="sc-' + p.id + '" value="' + (isThis && costData.cost !== undefined ? costData.cost : '') + '" placeholder="' + t('admin.costPlaceholder') + '" min="0" step="0.01" style="width:85px">' +
       '</div>';
@@ -131,6 +131,7 @@ var AdminSuppliers = {
         batch.set(ref, {
           productId:    p.id,
           productName:  p.name,
+          productName_en: p.name_en || '',
           supplierId:   supplierId,
           supplierName: supplierName,
           cost:         cost,

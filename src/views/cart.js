@@ -43,7 +43,7 @@ var CartView = {
             return '<div class="cart-item' + (isOOS ? ' cart-item-oos' : '') + '">' +
               '<div class="cart-item-icon">' + item.product.icon + '</div>' +
               '<div class="cart-item-info">' +
-                '<span class="cart-item-name">' + App.escHTML(item.product.name) + '</span>' +
+                '<span class="cart-item-name">' + App.escHTML(pLang(item.product, 'name')) + '</span>' +
                 '<span class="cart-item-sku">' + t('common.sku') + ' ' + App.escHTML(item.product.sku) + '</span>' +
                 discInfo +
                 (isOOS ? '<span class="cart-item-oos-note"><span class="material-icons-round" style="font-size:13px">schedule</span> ' + t('cart.oosNote') + '</span>' : '') +
@@ -66,7 +66,7 @@ var CartView = {
           (needsShip
             ? '<div class="cart-item shipping-row">' +
                 '<div class="cart-item-icon">🚚</div>' +
-                '<div class="cart-item-info"><span class="cart-item-name">' + t('cart.shippingFee') + '</span><span class="cart-item-sku">' + t('common.sku') + ' 1000</span></div>' +
+                '<div class="cart-item-info"><span class="cart-item-name">' + pLang(SHIPPING_PRODUCT, 'name') + '</span><span class="cart-item-sku">' + t('common.sku') + ' 1000</span></div>' +
                 '<div class="cart-item-qty"><span>1</span></div>' +
                 '<div class="cart-item-price-col"><span class="cart-item-price">₪' + shipCost + '</span></div></div>'
             : '') +
@@ -113,7 +113,7 @@ var CartView = {
 
     if (App.Cart.hasOOS()) {
       var oosList  = App.state.cart.filter(function (i) { return i.outOfStock || i.product.stock === 0; });
-      var oosNames = oosList.map(function (i) { return '• ' + App.escHTML(i.product.name); }).join('<br>');
+      var oosNames = oosList.map(function (i) { return '• ' + App.escHTML(pLang(i.product, 'name')); }).join('<br>');
       App.showModal(
         '<div class="sys-message">' +
           '<div class="sys-icon" style="background:var(--orange-dim);color:var(--orange)"><span class="material-icons-round" style="font-size:30px">schedule</span></div>' +

@@ -38,7 +38,7 @@ var AdminProfit = {
 
       return '<tr>' +
         '<td><code>' + p.sku + '</code></td>' +
-        '<td>' + p.icon + ' ' + p.name + '</td>' +
+        '<td>' + p.icon + ' ' + pLang(p, 'name') + '</td>' +
         '<td>₪' + salePost + '</td>' +
         '<td>₪' + salePre + '</td>' +
         '<td>' + (cost !== null ? '₪' + cost : '<span style="color:var(--text-muted)">' + t('admin.notDefined') + '</span>') + '</td>' +

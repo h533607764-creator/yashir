@@ -178,7 +178,7 @@ var AdminView = {
           || (App.Orders.getAll()).find(function (x) { return String(x.id) === String(orderId); });
     if (!o) { App.toast(t('admin.orderNotFound'), 'error'); return; }
     var rows = o.items.map(function (i) {
-      return '<tr><td>' + i.product.sku + '</td><td>' + i.product.name + '</td><td>' + i.qty + '</td>' +
+      return '<tr><td>' + i.product.sku + '</td><td>' + pLang(i.product, 'name') + '</td><td>' + i.qty + '</td>' +
         '<td>' + App.fmtP(i.discountPct) + '%</td><td>₪' + App.fmtP(i.unitPrice * i.qty) + '</td></tr>';
     }).join('');
     App.showModal(
@@ -330,7 +330,7 @@ var AdminView = {
       var currPct   = currPrice !== '' ? Math.max(0, Math.round((1 - currPrice / p.price) * 100)) : '';
       return '<div class="personal-price-row">' +
         '<span class="sku">' + p.sku + '</span>' +
-        '<span style="flex:1">' + p.name + '</span>' +
+        '<span style="flex:1">' + pLang(p, 'name') + '</span>' +
         '<span class="base-price-hint">' + t('admin.generalLabel') + ' ₪' + p.price + '</span>' +
         '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">' +
           '<div style="display:flex;align-items:center;gap:4px">' +
@@ -393,16 +393,16 @@ var AdminView = {
   _products: function (c) {
     var rows = PRODUCTS.map(function (p) {
       var thumb = p.image
-        ? '<img src="' + CloudinaryUpload.buildThumbUrl(p.image) + '" alt="' + p.name + '" loading="lazy" style="width:60px;height:44px;object-fit:cover;border-radius:6px;display:block">'
+        ? '<img src="' + CloudinaryUpload.buildThumbUrl(p.image) + '" alt="' + pLang(p, 'name') + '" loading="lazy" style="width:60px;height:44px;object-fit:cover;border-radius:6px;display:block">'
         : '<span style="font-size:26px;display:block;text-align:center">' + p.icon + '</span>';
       var hasBulk = p.bulkDiscounts && p.bulkDiscounts.length > 0;
       return '<tr>' +
         '<td><code>' + p.sku + '</code></td>' +
-        '<td style="display:flex;align-items:center;gap:10px;padding:8px 14px">' + thumb + '<span>' + App.escHTML(p.name) + '</span></td>' +
-        '<td>' + p.categoryLabel + '</td>' +
-        '<td>' + (p.subcategoryLabel || '—') + '</td>' +
+        '<td style="display:flex;align-items:center;gap:10px;padding:8px 14px">' + thumb + '<span>' + App.escHTML(pLang(p, 'name')) + '</span></td>' +
+        '<td>' + pLang(p, 'categoryLabel') + '</td>' +
+        '<td>' + (pLang(p, 'subcategoryLabel') || '—') + '</td>' +
         '<td style="color:var(--blue);font-weight:700">₪' + p.price + '</td>' +
-        '<td>' + (p.soldBy ? p.soldBy : '—') + (p.unitsPerPackage ? ' / ' + p.unitsPerPackage + ' ' + t('common.units') : '') + '</td>' +
+        '<td>' + (p.soldBy ? pLang(p, 'soldBy') : '—') + (p.unitsPerPackage ? ' / ' + p.unitsPerPackage + ' ' + t('common.units') : '') + '</td>' +
         '<td>' + (hasBulk ? '<span style="color:var(--green);font-size:12px">' + t('admin.hasBulk') + '</span>' : '—') + '</td>' +
         '<td>' + (p.stock > 0 ? p.stock : '<span style="color:var(--red)">' + t('admin.outOfStockLabel') + '</span>') + '</td>' +
         '<td style="display:flex;gap:6px;padding:8px">' +
@@ -570,7 +570,7 @@ var AdminView = {
       }).join('');
 
     App.showModal(
-      '<h3>' + t('admin.editProductTitle') + ' ' + p.icon + ' ' + p.name + '</h3>' +
+      '<h3>' + t('admin.editProductTitle') + ' ' + p.icon + ' ' + pLang(p, 'name') + '</h3>' +
       '<div class="customer-form">' +
         AdminView._fld(t('admin.productName'), 'pf-name', p.name) +
         AdminView._fld(t('admin.priceBeforeVat'), 'pf-price', p.price, 'number') +
@@ -590,6 +590,14 @@ var AdminView = {
             '<option value="__new__">' + t('admin.newSubcategory') + '</option>' +
           '</select>' +
           '<input type="text" id="pf-subcat-new-edit" placeholder="' + t('admin.enterSubcatName') + '" style="display:none;margin-top:6px;background:var(--input-bg);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
+        '</div>' +
+        '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
+          '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.englishSection') + '</p>' +
+          AdminView._fld(t('admin.productNameEn'), 'pf-name-en', p.name_en || '') +
+          AdminView._fld(t('admin.descriptionEn'), 'pf-desc-en', p.description_en || '') +
+          AdminView._fld(t('admin.categoryLabelEn'), 'pf-catlabel-en', p.categoryLabel_en || '') +
+          AdminView._fld(t('admin.subcategoryLabelEn'), 'pf-subcatlabel-en', p.subcategoryLabel_en || '') +
+          AdminView._fld(t('admin.soldByEn'), 'pf-soldby-en', p.soldBy_en || '') +
         '</div>' +
         '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
           '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.packagingDetails') + '</p>' +
@@ -727,6 +735,14 @@ var AdminView = {
           '<input type="text" id="pf-subcat-new" placeholder="' + t('admin.enterSubcatName') + '" style="display:none;margin-top:6px;background:var(--input-bg);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
         '</div>' +
         '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
+          '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.englishSection') + '</p>' +
+          AdminView._fld(t('admin.productNameEn'), 'pf-name-en', '') +
+          AdminView._fld(t('admin.descriptionEn'), 'pf-desc-en', '') +
+          AdminView._fld(t('admin.categoryLabelEn'), 'pf-catlabel-en', '') +
+          AdminView._fld(t('admin.subcategoryLabelEn'), 'pf-subcatlabel-en', '') +
+          AdminView._fld(t('admin.soldByEn'), 'pf-soldby-en', '') +
+        '</div>' +
+        '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
           '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.packagingDetails') + '</p>' +
           AdminView._fld(t('admin.unitsInPack'), 'pf-upkg', '', 'number') +
           '<div class="form-group"><label>' + t('admin.soldBy') + '</label>' +
@@ -753,6 +769,11 @@ var AdminView = {
     p.stock             = parseInt(document.getElementById('pf-stock').value) || 0;
     p.lowStockThreshold = parseInt(document.getElementById('pf-threshold') && document.getElementById('pf-threshold').value) || 10;
     p.description       = document.getElementById('pf-desc').value || p.description;
+    p.name_en              = (document.getElementById('pf-name-en') || {}).value || p.name_en || '';
+    p.description_en       = (document.getElementById('pf-desc-en') || {}).value || p.description_en || '';
+    p.categoryLabel_en     = (document.getElementById('pf-catlabel-en') || {}).value || p.categoryLabel_en || '';
+    p.subcategoryLabel_en  = (document.getElementById('pf-subcatlabel-en') || {}).value || p.subcategoryLabel_en || '';
+    p.soldBy_en            = (document.getElementById('pf-soldby-en') || {}).value || p.soldBy_en || '';
     p.unitsPerPackage   = parseInt(document.getElementById('pf-upkg').value) || null;
     p.soldBy            = document.getElementById('pf-soldby').value || null;
     p.unitsPerContainer = parseInt(document.getElementById('pf-ucont').value) || null;
@@ -805,7 +826,7 @@ var AdminView = {
   _delProd: function (id) {
     var p = PRODUCTS.find(function (x) { return x.id === id; });
     if (!p) return;
-    if (!confirm(t('admin.deleteProductConfirm') + p.name + t('admin.cannotRestoreProduct'))) return;
+    if (!confirm(t('admin.deleteProductConfirm') + pLang(p, 'name') + t('admin.cannotRestoreProduct'))) return;
     window.PRODUCTS = PRODUCTS.filter(function (x) { return x.id !== id; });
     App.Store.set('products', window.PRODUCTS);
     if (window.DB) {
@@ -873,7 +894,12 @@ var AdminView = {
       unitsPerPackage:   parseInt(document.getElementById('pf-upkg').value) || null,
       soldBy:            document.getElementById('pf-soldby').value || null,
       unitsPerContainer: parseInt(document.getElementById('pf-ucont').value) || null,
-      bulkDiscounts:     AdminView._readBulkDiscounts('new-prod')
+      bulkDiscounts:     AdminView._readBulkDiscounts('new-prod'),
+      name_en:              (document.getElementById('pf-name-en') || {}).value || '',
+      description_en:       (document.getElementById('pf-desc-en') || {}).value || '',
+      categoryLabel_en:     (document.getElementById('pf-catlabel-en') || {}).value || '',
+      subcategoryLabel_en:  (document.getElementById('pf-subcatlabel-en') || {}).value || '',
+      soldBy_en:            (document.getElementById('pf-soldby-en') || {}).value || ''
     };
     PRODUCTS.push(newProd);
     App.Store.set('products', PRODUCTS);
@@ -934,7 +960,12 @@ var AdminView = {
         unitsPerPackage:   parseInt(item.unitsPerPackage) || null,
         soldBy:            item.soldBy || null,
         unitsPerContainer: parseInt(item.unitsPerContainer) || null,
-        bulkDiscounts:     item.bulkDiscounts || []
+        bulkDiscounts:     item.bulkDiscounts || [],
+        name_en:              item.name_en || '',
+        description_en:       item.description_en || '',
+        categoryLabel_en:     item.categoryLabel_en || '',
+        subcategoryLabel_en:  item.subcategoryLabel_en || '',
+        soldBy_en:            item.soldBy_en || ''
       };
       var existing = PRODUCTS.findIndex(function (p) { return p.id === prod.id; });
       if (existing > -1) PRODUCTS[existing] = prod; else PRODUCTS.push(prod);
