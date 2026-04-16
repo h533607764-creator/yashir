@@ -565,6 +565,11 @@ var I18n = (function () {
     'admin.subcategoryLabelEn': 'תת-קטגוריה (אנגלית)',
     'admin.soldByEn': 'נמכר ב... (אנגלית)',
     'admin.englishSection': 'שדות באנגלית (לתצוגה דו-שפתית)',
+    'admin.translateAll': 'תרגם הכל לאנגלית',
+    'admin.translateBtn': 'תרגם',
+    'admin.translateDone': 'התרגום הושלם ✓',
+    'admin.translateNoText': 'אין טקסט לתרגום',
+    'admin.translateError': 'שגיאה בתרגום — נסה שוב',
 
     /* --- Error page --- */
     'error.oops': 'אופס, משהו השתבש.',
@@ -1076,6 +1081,11 @@ var I18n = (function () {
     'admin.subcategoryLabelEn': 'Subcategory (English)',
     'admin.soldByEn': 'Sold By (English)',
     'admin.englishSection': 'English Fields (bilingual display)',
+    'admin.translateAll': 'Translate All to English',
+    'admin.translateBtn': 'Translate',
+    'admin.translateDone': 'Translation complete ✓',
+    'admin.translateNoText': 'No text to translate',
+    'admin.translateError': 'Translation error — try again',
 
     /* --- Error page --- */
     'error.oops': 'Oops, something went wrong.',
@@ -1096,3 +1106,72 @@ var I18n = (function () {
 
 function t(key) { return I18n.t(key); }
 function pLang(product, field) { return I18n.pLang(product, field); }
+
+var AutoTranslate = (function () {
+  'use strict';
+
+  function translate(text, onSuccess, onError) {
+    if (!text || !text.trim()) { onSuccess && onSuccess(''); return; }
+    var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=he&tl=en&dt=t&q=' + encodeURIComponent(text);
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        try {
+          var data = JSON.parse(xhr.responseText);
+          var result = '';
+          if (data && data[0]) {
+            data[0].forEach(function (seg) { if (seg[0]) result += seg[0]; });
+          }
+          onSuccess && onSuccess(result);
+        } catch (e) { onError && onError(e); }
+      } else { onError && onError(xhr.status); }
+    };
+    xhr.onerror = function () { onError && onError('network'); };
+    xhr.send();
+  }
+
+  function translateField(heFieldId, enFieldId) {
+    var heInp = document.getElementById(heFieldId);
+    var enInp = document.getElementById(enFieldId);
+    if (!heInp || !enInp) return;
+    var text = heInp.value.trim();
+    if (!text) { App.toast(t('admin.translateNoText'), 'warning'); return; }
+    enInp.value = '...';
+    enInp.style.opacity = '0.5';
+    translate(text, function (result) {
+      enInp.value = result;
+      enInp.style.opacity = '1';
+    }, function () {
+      enInp.value = '';
+      enInp.style.opacity = '1';
+      App.toast(t('admin.translateError'), 'error');
+    });
+  }
+
+  function translateAll(pairs) {
+    var pending = pairs.length;
+    var anyText = false;
+    pairs.forEach(function (pair) {
+      var heInp = document.getElementById(pair[0]);
+      var enInp = document.getElementById(pair[1]);
+      if (!heInp || !enInp || !heInp.value.trim()) { pending--; return; }
+      anyText = true;
+      enInp.value = '...';
+      enInp.style.opacity = '0.5';
+      translate(heInp.value.trim(), function (result) {
+        enInp.value = result;
+        enInp.style.opacity = '1';
+        pending--;
+        if (pending <= 0) App.toast(t('admin.translateDone'), 'success');
+      }, function () {
+        enInp.value = '';
+        enInp.style.opacity = '1';
+        pending--;
+      });
+    });
+    if (!anyText) App.toast(t('admin.translateNoText'), 'warning');
+  }
+
+  return { translate: translate, translateField: translateField, translateAll: translateAll };
+})();

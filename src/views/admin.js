@@ -235,6 +235,81 @@ var AdminView = {
       '<input type="' + (type || 'text') + '" id="' + id + '" value="' + (value || '') + '"' + (disabled ? ' disabled style="opacity:.5"' : '') + '></div>';
   },
 
+  _fldTranslate: function (label, enId, value, heId) {
+    var btnHtml = heId
+      ? '<button type="button" onclick="AutoTranslate.translateField(\'' + heId + '\',\'' + enId + '\')" style="background:var(--blue-dim);color:var(--blue);border:1px solid var(--border-blue);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:3px"><span class="material-icons-round" style="font-size:13px">translate</span>' + t('admin.translateBtn') + '</button>'
+      : '';
+    return '<div class="form-group"><div style="display:flex;justify-content:space-between;align-items:center"><label style="margin:0">' + label + '</label>' + btnHtml + '</div>' +
+      '<input type="text" id="' + enId + '" value="' + (value || '') + '" dir="ltr" style="text-align:left"></div>';
+  },
+
+  _translateAllEdit: function () {
+    var catSel = document.getElementById('pf-cat-edit');
+    var subcatSel = document.getElementById('pf-subcat-edit');
+    var catText = catSel ? catSel.options[catSel.selectedIndex].text : '';
+    var subcatText = subcatSel ? subcatSel.options[subcatSel.selectedIndex].text : '';
+    var soldBySel = document.getElementById('pf-soldby');
+    var soldByText = soldBySel ? soldBySel.value : '';
+
+    var catEnInp = document.getElementById('pf-catlabel-en');
+    var subcatEnInp = document.getElementById('pf-subcatlabel-en');
+    var soldByEnInp = document.getElementById('pf-soldby-en');
+
+    var pairs = [
+      ['pf-name', 'pf-name-en'],
+      ['pf-desc', 'pf-desc-en']
+    ];
+
+    var extraCount = 0;
+    if (catText && catEnInp) {
+      catEnInp.value = '...'; catEnInp.style.opacity = '0.5'; extraCount++;
+      AutoTranslate.translate(catText, function (r) { catEnInp.value = r; catEnInp.style.opacity = '1'; extraCount--; }, function () { catEnInp.value = ''; catEnInp.style.opacity = '1'; extraCount--; });
+    }
+    if (subcatText && subcatEnInp) {
+      subcatEnInp.value = '...'; subcatEnInp.style.opacity = '0.5'; extraCount++;
+      AutoTranslate.translate(subcatText, function (r) { subcatEnInp.value = r; subcatEnInp.style.opacity = '1'; extraCount--; }, function () { subcatEnInp.value = ''; subcatEnInp.style.opacity = '1'; extraCount--; });
+    }
+    if (soldByText && soldByEnInp) {
+      soldByEnInp.value = '...'; soldByEnInp.style.opacity = '0.5'; extraCount++;
+      AutoTranslate.translate(soldByText, function (r) { soldByEnInp.value = r; soldByEnInp.style.opacity = '1'; extraCount--; }, function () { soldByEnInp.value = ''; soldByEnInp.style.opacity = '1'; extraCount--; });
+    }
+
+    AutoTranslate.translateAll(pairs);
+  },
+
+  _translateAllAdd: function () {
+    var catSel = document.getElementById('pf-cat');
+    var subcatSel = document.getElementById('pf-subcat');
+    var catText = catSel ? catSel.options[catSel.selectedIndex].text : '';
+    var subcatText = subcatSel ? subcatSel.options[subcatSel.selectedIndex].text : '';
+    var soldBySel = document.getElementById('pf-soldby');
+    var soldByText = soldBySel ? soldBySel.value : '';
+
+    var catEnInp = document.getElementById('pf-catlabel-en');
+    var subcatEnInp = document.getElementById('pf-subcatlabel-en');
+    var soldByEnInp = document.getElementById('pf-soldby-en');
+
+    var pairs = [
+      ['pf-name', 'pf-name-en'],
+      ['pf-desc', 'pf-desc-en']
+    ];
+
+    if (catText && catEnInp) {
+      catEnInp.value = '...'; catEnInp.style.opacity = '0.5';
+      AutoTranslate.translate(catText, function (r) { catEnInp.value = r; catEnInp.style.opacity = '1'; }, function () { catEnInp.value = ''; catEnInp.style.opacity = '1'; });
+    }
+    if (subcatText && subcatEnInp) {
+      subcatEnInp.value = '...'; subcatEnInp.style.opacity = '0.5';
+      AutoTranslate.translate(subcatText, function (r) { subcatEnInp.value = r; subcatEnInp.style.opacity = '1'; }, function () { subcatEnInp.value = ''; subcatEnInp.style.opacity = '1'; });
+    }
+    if (soldByText && soldByEnInp) {
+      soldByEnInp.value = '...'; soldByEnInp.style.opacity = '0.5';
+      AutoTranslate.translate(soldByText, function (r) { soldByEnInp.value = r; soldByEnInp.style.opacity = '1'; }, function () { soldByEnInp.value = ''; soldByEnInp.style.opacity = '1'; });
+    }
+
+    AutoTranslate.translateAll(pairs);
+  },
+
   _editCust: function (id) {
     var isNew = !id;
     var cu = isNew
@@ -592,12 +667,15 @@ var AdminView = {
           '<input type="text" id="pf-subcat-new-edit" placeholder="' + t('admin.enterSubcatName') + '" style="display:none;margin-top:6px;background:var(--input-bg);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
         '</div>' +
         '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
-          '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.englishSection') + '</p>' +
-          AdminView._fld(t('admin.productNameEn'), 'pf-name-en', p.name_en || '') +
-          AdminView._fld(t('admin.descriptionEn'), 'pf-desc-en', p.description_en || '') +
-          AdminView._fld(t('admin.categoryLabelEn'), 'pf-catlabel-en', p.categoryLabel_en || '') +
-          AdminView._fld(t('admin.subcategoryLabelEn'), 'pf-subcatlabel-en', p.subcategoryLabel_en || '') +
-          AdminView._fld(t('admin.soldByEn'), 'pf-soldby-en', p.soldBy_en || '') +
+          '<div style="display:flex;justify-content:space-between;align-items:center">' +
+            '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.englishSection') + '</p>' +
+            '<button type="button" onclick="AdminView._translateAllEdit()" style="background:var(--blue);color:#fff;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px;border:none;cursor:pointer"><span class="material-icons-round" style="font-size:15px">translate</span> ' + t('admin.translateAll') + '</button>' +
+          '</div>' +
+          AdminView._fldTranslate(t('admin.productNameEn'), 'pf-name-en', p.name_en || '', 'pf-name') +
+          AdminView._fldTranslate(t('admin.descriptionEn'), 'pf-desc-en', p.description_en || '', 'pf-desc') +
+          AdminView._fldTranslate(t('admin.categoryLabelEn'), 'pf-catlabel-en', p.categoryLabel_en || '', null) +
+          AdminView._fldTranslate(t('admin.subcategoryLabelEn'), 'pf-subcatlabel-en', p.subcategoryLabel_en || '', null) +
+          AdminView._fldTranslate(t('admin.soldByEn'), 'pf-soldby-en', p.soldBy_en || '', null) +
         '</div>' +
         '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
           '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.packagingDetails') + '</p>' +
@@ -735,12 +813,15 @@ var AdminView = {
           '<input type="text" id="pf-subcat-new" placeholder="' + t('admin.enterSubcatName') + '" style="display:none;margin-top:6px;background:var(--input-bg);border:1.5px solid var(--border-blue);border-radius:var(--radius-sm);color:var(--text);padding:12px 14px;font-size:15px;width:100%">' +
         '</div>' +
         '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
-          '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.englishSection') + '</p>' +
-          AdminView._fld(t('admin.productNameEn'), 'pf-name-en', '') +
-          AdminView._fld(t('admin.descriptionEn'), 'pf-desc-en', '') +
-          AdminView._fld(t('admin.categoryLabelEn'), 'pf-catlabel-en', '') +
-          AdminView._fld(t('admin.subcategoryLabelEn'), 'pf-subcatlabel-en', '') +
-          AdminView._fld(t('admin.soldByEn'), 'pf-soldby-en', '') +
+          '<div style="display:flex;justify-content:space-between;align-items:center">' +
+            '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.englishSection') + '</p>' +
+            '<button type="button" onclick="AdminView._translateAllAdd()" style="background:var(--blue);color:#fff;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px;border:none;cursor:pointer"><span class="material-icons-round" style="font-size:15px">translate</span> ' + t('admin.translateAll') + '</button>' +
+          '</div>' +
+          AdminView._fldTranslate(t('admin.productNameEn'), 'pf-name-en', '', 'pf-name') +
+          AdminView._fldTranslate(t('admin.descriptionEn'), 'pf-desc-en', '', 'pf-desc') +
+          AdminView._fldTranslate(t('admin.categoryLabelEn'), 'pf-catlabel-en', '', null) +
+          AdminView._fldTranslate(t('admin.subcategoryLabelEn'), 'pf-subcatlabel-en', '', null) +
+          AdminView._fldTranslate(t('admin.soldByEn'), 'pf-soldby-en', '', null) +
         '</div>' +
         '<div style="background:var(--navy-dark);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:12px;">' +
           '<p style="font-size:13px;font-weight:700;color:var(--blue);margin:0">' + t('admin.packagingDetails') + '</p>' +
