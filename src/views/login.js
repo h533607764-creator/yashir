@@ -15,7 +15,7 @@ var LoginView = {
             '<button class="btn-primary full-width" onclick="LoginView.doLogin()">' +
               '<span class="material-icons-round">login</span> כניסה' +
             '</button>' +
-            '<p class="login-guest-note">אורח? <a onclick="App.navigate(\'catalog\')" style="cursor:pointer;color:var(--orange)">לקטלוג</a> (ללא מחירים)</p>' +
+            '<p class="login-guest-note">אורח? <a onclick="App.navigate(\'catalog\')" style="cursor:pointer;color:var(--orange)">לקטלוג</a></p>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -23,8 +23,6 @@ var LoginView = {
     setTimeout(function () {
       var hp = document.getElementById('lv-hp');
       if (hp) hp.addEventListener('keydown', function (e) { if (e.key === 'Enter') LoginView.doLogin(); });
-      var pin = document.getElementById('lv-pin');
-      if (pin) pin.addEventListener('keydown', function (e) { if (e.key === 'Enter') LoginView.doAdmin(); });
     }, 50);
   },
 
@@ -42,7 +40,7 @@ var LoginView = {
     App.showModal(
       '<div class="sys-message">' +
         '<div class="sys-icon success"><span class="material-icons-round" style="font-size:30px">waving_hand</span></div>' +
-        '<h3>שלום, ' + c.name + '!</h3>' +
+        '<h3>שלום, ' + App.escHTML(c.name) + '!</h3>' +
         '<p>ברוכים הבאים לישיר.<br>משלוח חינם בהזמנות מעל <strong>₪' + App.state.settings.minOrderAmount + '</strong></p>' +
         '<div style="display:flex;gap:10px">' +
           '<button class="btn-primary" onclick="App.closeModal();App.navigate(\'catalog\')">' +
@@ -54,18 +52,10 @@ var LoginView = {
   },
 
   doAdmin: function () {
-    var pin = document.getElementById('lv-pin').value;
-    if (!App.Auth.loginAdmin(pin)) { App.toast('קוד מנהל שגוי', 'error'); return; }
+    var pin = document.getElementById('lv-pin');
+    if (!pin) return;
+    if (!App.Auth.loginAdmin(pin.value)) { App.toast('קוד מנהל שגוי', 'error'); return; }
     App.renderHeader();
     App.navigate('admin');
-  },
-
-  toggleAdmin: function () {
-    var a = document.getElementById('lv-admin');
-    var c = document.getElementById('lv-customer');
-    var show = a.style.display === 'none';
-    a.style.display = show ? 'flex' : 'none';
-    c.style.display = show ? 'none' : 'flex';
-    c.style.flexDirection = 'column'; c.style.gap = '16px';
   }
 };

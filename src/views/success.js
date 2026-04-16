@@ -14,10 +14,6 @@ var SuccessView = {
             '<button class="btn-primary" onclick="App.navigate(\'catalog\')">' +
               '<span class="material-icons-round">menu_book</span> הזמנה חדשה' +
             '</button>' +
-            (order.id ?
-              '<button class="btn-secondary" onclick="SuccessView.printNote(' + order.id + ')">' +
-                '<span class="material-icons-round">print</span> תעודת משלוח' +
-              '</button>' : '') +
           '</div>' +
         '</div>' +
       '</div>';
@@ -30,17 +26,23 @@ var SuccessView = {
     if (!order.items) { App.toast('לא נמצאו פרטי הזמנה', 'error'); return; }
     var rows = order.items.map(function (item, i) {
       var bg = i % 2 === 0 ? '#ffffff' : '#ffe0c4';
+      /* מחיר מקורי לפני הנחה: נשתמש בשדה price של המוצר (מחיר מחירון) */
+      var basePrice  = (item.product && item.product.price) ? item.product.price : item.unitPrice;
+      var origTotal  = App.fmtP(basePrice * item.qty);
+      var finalTotal = App.fmtP(item.unitPrice * item.qty);
+      /* סדר עמודות: מק"ט, שם מוצר, מחיר יחי', כמות, סה"כ, הנחה, סה"כ לתשלום */
       return '<tr style="background:' + bg + '">' +
-        '<td>' + item.product.sku + '</td>' +
-        '<td>' + item.product.name + '</td>' +
+        '<td>' + App.escHTML(item.product.sku) + '</td>' +
+        '<td style="text-align:right">' + App.escHTML(item.product.name) + '</td>' +
+        '<td>₪' + App.fmtP(item.unitPrice) + '</td>' +
         '<td>' + item.qty + '</td>' +
-        '<td>₪' + item.unitPrice + '</td>' +
-        '<td>₪' + (item.unitPrice * item.qty) + '</td>' +
-        '<td>' + item.discountPct + '%</td>' +
-        '<td>₪' + (item.unitPrice * item.qty) + '</td></tr>';
+        '<td>₪' + origTotal + '</td>' +
+        '<td>' + App.fmtP(item.discountPct) + '%</td>' +
+        '<td>₪' + finalTotal + '</td></tr>';
     }).join('');
 
     var win = window.open('', '_blank', 'width=800,height=700');
+    if (!win) { App.toast('חלון נחסם — אפשר חלונות קופצים בדפדפן', 'error'); return; }
     win.document.write(
       '<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">' +
       '<title>תעודת משלוח ORD-' + order.id + '</title>' +
@@ -61,12 +63,12 @@ var SuccessView = {
       '<h2>ישיר שיווק והפצה</h2>' +
       '<p class="sub">תעודת משלוח</p>' +
       '<div class="info">' +
-        '<span><strong>לקוח:</strong> ' + order.customerName + '</span>' +
+        '<span><strong>לקוח:</strong> ' + App.escHTML(order.customerName) + '</span>' +
         '<span><strong>מספר הזמנה:</strong> ORD-' + order.id + '</span>' +
         '<span><strong>תאריך:</strong> ' + new Date(order.timestamp).toLocaleDateString('he-IL') + '</span>' +
       '</div>' +
       '<table><thead><tr>' +
-        '<th>מק"ט</th><th>שם מוצר</th><th>כמות</th><th>מחיר יח׳</th><th>סה"כ</th><th>הנחה</th><th>סה"כ לתשלום</th>' +
+        '<th>מק"ט</th><th>שם מוצר</th><th>מחיר יחי\'</th><th>כמות</th><th>סה"כ</th><th>הנחה</th><th>סה"כ לתשלום</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table>' +
       '<table class="totals"><tbody>' +
         '<tr><td>סה"כ לפני מע"מ:</td><td>₪' + order.subtotal + '</td></tr>' +

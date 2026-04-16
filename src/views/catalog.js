@@ -18,10 +18,19 @@ var CatalogView = {
               '<input type="text" id="cv-search" placeholder="חיפוש לפי שם מוצר או מק&quot;ט..." oninput="CatalogView.onSearch(this.value)" value="' + CatalogView._q + '">' +
             '</div>' +
             '<div class="cat-scroll">' +
-              ['all','cups','plates','napkins'].map(function (c) {
-                var labels = { all:'הכל', cups:'☕ כוסות', plates:'🍽️ צלחות', napkins:'🗒️ מפיות' };
-                return '<button class="cat-btn' + (CatalogView._cat === c ? ' active' : '') + '" onclick="CatalogView.filterCat(\'' + c + '\',this)">' + labels[c] + '</button>';
-              }).join('') +
+              (function () {
+                var cats = [{ id: 'all', label: 'הכל' }];
+                var seen = {};
+                PRODUCTS.forEach(function (p) {
+                  if (p.category && p.category !== 'shipping' && !seen[p.category]) {
+                    seen[p.category] = true;
+                    cats.push({ id: p.category, label: (p.icon ? p.icon + ' ' : '') + (p.categoryLabel || p.category) });
+                  }
+                });
+                return cats.map(function (c) {
+                  return '<button class="cat-btn' + (CatalogView._cat === c.id ? ' active' : '') + '" onclick="CatalogView.filterCat(\'' + c.id + '\',this)">' + c.label + '</button>';
+                }).join('');
+              })() +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -137,7 +146,7 @@ var CatalogView = {
     } else if (cust && section === 'full') {
       priceHTML = '<div class="card-price-row guest-quote">מחיר בהצעה אישית</div>';
     } else if (!cust && !isAdmin) {
-      priceHTML = '<div class="card-price-row guest">התחבר לצפייה במחיר</div>';
+      priceHTML = '<div class="card-price-row guest">התחבר בכדי להזמין</div>';
     }
 
     var orderHTML = '';
@@ -149,22 +158,23 @@ var CatalogView = {
     } else if (cust) {
       /* לקוח עם מחיר */
       var qtyId = 'qty-' + product.id;
-      var addBtn = inStock
-        ? '<button class="btn-add-cart" onclick="CatalogView._add(\'' + product.id + '\')">' +
-            '<span class="material-icons-round">add_shopping_cart</span> הוסף' +
-          '</button>'
-        : '<button class="btn-add-cart oos" onclick="CatalogView._add(\'' + product.id + '\')">' +
-            '<span class="material-icons-round">add_shopping_cart</span> הוסף' +
-          '</button>';
+      var cartItem = App.state.cart.find(function (i) { return i.product.id === product.id; });
+      var cartQty  = cartItem ? cartItem.qty : 0;
+      var inCartBadge = cartQty > 0
+        ? '<div class="in-cart-badge"><span class="material-icons-round">shopping_cart</span> ' + cartQty + ' בעגלה</div>'
+        : '';
 
       orderHTML =
+        inCartBadge +
         '<div class="card-order-row">' +
           '<div class="qty-wrap">' +
             '<button class="qty-btn" onclick="CatalogView._qty(\'' + product.id + '\',-1)">−</button>' +
-            '<input class="qty-input" type="number" id="' + qtyId + '" value="1" min="1" max="999" oninput="CatalogView._updateLineTotal(\'' + product.id + '\')">' +
+            '<input class="qty-input' + (cartQty > 0 ? ' in-cart' : '') + '" type="number" id="' + qtyId + '" value="' + cartQty + '" min="0" max="999" oninput="CatalogView._updateLineTotal(\'' + product.id + '\')">' +
             '<button class="qty-btn" onclick="CatalogView._qty(\'' + product.id + '\',1)">+</button>' +
           '</div>' +
-          addBtn +
+          '<button class="btn-add-cart' + (!inStock ? ' oos' : '') + '" onclick="CatalogView._add(\'' + product.id + '\')">' +
+            '<span class="material-icons-round">' + (cartQty > 0 ? 'shopping_cart' : 'add_shopping_cart') + '</span> ' + (cartQty > 0 ? 'עדכן' : 'הוסף') +
+          '</button>' +
         '</div>' +
         /* סה"כ שורה + הנחת כמות */
         '<div id="line-info-' + product.id + '" class="line-total-wrap"></div>' +
@@ -183,9 +193,9 @@ var CatalogView = {
         (showPersonalBadge ? '<span class="personal-badge"><span class="material-icons-round">star</span> מחיר מיוחד בשבילך</span>' : '') +
       '</div>' +
       '<div class="card-body">' +
-        '<div class="card-meta"><span class="card-sku">מק"ט ' + product.sku + '</span><span class="card-cat">' + product.categoryLabel + '</span></div>' +
-        '<h3 class="card-name">' + product.name + '</h3>' +
-        '<p class="card-desc">' + product.description + '</p>' +
+        '<div class="card-meta"><span class="card-sku">מק"ט ' + App.escHTML(product.sku) + '</span><span class="card-cat">' + App.escHTML(product.categoryLabel) + '</span></div>' +
+        '<h3 class="card-name">' + App.escHTML(product.name) + '</h3>' +
+        '<p class="card-desc">' + App.escHTML(product.description) + '</p>' +
         (productInfoHTML ? '<div class="prod-info-tags">' + productInfoHTML + '</div>' : '') +
         bulkDiscHTML +
         priceHTML +
@@ -250,18 +260,37 @@ var CatalogView = {
   onSearch: function (q) { CatalogView._q = q; CatalogView._renderGrid(); },
   _qty: function (id, d) {
     var inp = document.getElementById('qty-' + id);
-    if (inp) {
-      inp.value = Math.max(1, Math.min(999, parseInt(inp.value || 1) + d));
-      CatalogView._updateLineTotal(id);
+    if (!inp) return;
+    var newVal = Math.max(0, Math.min(999, parseInt(inp.value || 0) + d));
+    inp.value = newVal;
+    inp.classList.toggle('in-cart', newVal > 0);
+    CatalogView._updateLineTotal(id);
+    if (newVal === 0) {
+      App.Cart.remove(id);
+    } else {
+      var p = PRODUCTS.find(function (x) { return x.id === id; });
+      if (!p) return;
+      var cItem = App.state.cart.find(function (i) { return i.product.id === id; });
+      if (cItem) {
+        App.Cart.updateQty(id, newVal);
+      } else {
+        App.Cart.add(p, newVal);
+      }
     }
   },
   _add: function (id) {
     var p = PRODUCTS.find(function (x) { return x.id === id; });
     if (!p) return;
     var inp = document.getElementById('qty-' + id);
-    var qty = inp ? parseInt(inp.value) || 1 : 1;
-    App.Cart.add(p, qty);
-    if (inp) { inp.value = 1; CatalogView._updateLineTotal(id); }
+    var qty = inp ? parseInt(inp.value) || 0 : 0;
+    if (qty <= 0) return;
+    var cItem = App.state.cart.find(function (i) { return i.product.id === id; });
+    if (cItem) {
+      App.Cart.updateQty(id, qty);
+      App.toast('כמות עודכנה ✓', 'success');
+    } else {
+      App.Cart.add(p, qty);
+    }
   },
 
   goFullCatalog: function () {
@@ -279,7 +308,7 @@ var CatalogView = {
       '<div class="sys-message">' +
         '<div class="sys-icon" style="background:var(--blue-dim);color:var(--blue)"><span class="material-icons-round" style="font-size:30px">request_quote</span></div>' +
         '<h3>בקשת הצעת מחיר</h3>' +
-        '<p>האם לשלוח בקשת הצעת מחיר עבור:<br><strong>' + product.name + '</strong>?</p>' +
+        '<p>האם לשלוח בקשת הצעת מחיר עבור:<br><strong>' + App.escHTML(product.name) + '</strong>?</p>' +
         '<p style="font-size:13px;color:var(--text-muted)">הנציג שלנו יחזור אליך עם מחיר אישי בהקדם.</p>' +
         '<div style="display:flex;gap:10px;margin-top:12px;width:100%">' +
           '<button class="btn-primary full-width" onclick="CatalogView._confirmQuote(\'' + productId + '\')">' +

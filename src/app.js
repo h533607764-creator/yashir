@@ -7,8 +7,13 @@ var App = (function () {
   /* ===== HELPERS ===== */
   function fmtP(n) {
     var r = Math.round(n * 100) / 100;
-    if (r % 1 === 0) return String(r | 0);
+    if (r % 1 === 0) return String(Math.round(r));
     return r.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  function escHTML(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
   /* ===== STATE ===== */
@@ -50,6 +55,14 @@ var App = (function () {
     if (p && p.length) window.PRODUCTS = p;
     if (!Store.get('orders'))   Store.set('orders', []);
     if (!Store.get('expenses')) Store.set('expenses', []);
+
+    /* ניקוי הזמנות ישנות מעל 6 חודשים מ-localStorage */
+    var sixMonthsAgo = Date.now() - 180 * 864e5;
+    var localOrders = Store.get('orders');
+    if (localOrders && localOrders.length > 200) {
+      var trimmed = localOrders.filter(function (o) { return new Date(o.timestamp).getTime() > sixMonthsAgo; });
+      Store.set('orders', trimmed);
+    }
   }
 
   /* ===== AUTH ===== */
@@ -271,10 +284,19 @@ var App = (function () {
       var cid = state.currentUser.customer.id;
       var saved = Store.get('cart_' + cid);
       if (!saved || !saved.length) return;
+      var customer = state.currentUser.customer;
       state.cart = saved.map(function (s) {
         var p = PRODUCTS.find(function (x) { return x.id === s.pid; });
         if (!p) return null;
-        return { product: p, qty: s.qty, unitPrice: s.unitPrice, discountPct: s.discountPct, outOfStock: p.stock === 0 };
+        var freshPrice = Pricing.getEffectiveUnitPrice(p, customer, s.qty);
+        var freshDisc  = Pricing.getTotalDiscountPct(p, customer, s.qty);
+        return {
+          product: p,
+          qty: s.qty,
+          unitPrice: freshPrice !== null ? freshPrice : s.unitPrice,
+          discountPct: freshDisc,
+          outOfStock: p.stock === 0
+        };
       }).filter(Boolean);
     }
   };
@@ -290,7 +312,7 @@ var App = (function () {
         items.push({ product: Object.assign({}, SHIPPING_PRODUCT, { price: sc }), qty: 1, unitPrice: sc, discountPct: 0 });
       }
       var totals = Pricing.calcTotals(items);
-      var id = state.settings.nextOrderId;
+      var id = Date.now() + '-' + Math.random().toString(36).substring(2, 6);
       var order = {
         id: id,
         customerId: customer.id,
@@ -319,50 +341,6 @@ var App = (function () {
           .catch(function (e) { console.warn('Firestore order error:', e); });
       }
 
-      var adminPhone = state.settings.adminPhone;
-      var adminEmail = state.settings.adminEmail;
-
-      var itemsList = items.filter(function(i){ return i.product.sku !== '1000'; })
-        .map(function(i){ return '• ' + i.product.name + ' ×' + i.qty + ' ₪' + fmtP(i.unitPrice * i.qty); }).join('\n');
-
-      var waMsg = '🛒 *הזמנה חדשה #' + id + '*\n' +
-        '👤 ' + customer.name + '\n' +
-        '📱 ' + (customer.phone || '—') + '\n' +
-        '📦 ' + state.cart.length + ' פריטים\n' +
-        itemsList + '\n' +
-        '💰 לפני מע"מ: ₪' + totals.subtotal + '\n' +
-        '💰 סה"כ כולל מע"מ: ₪' + totals.total +
-        (notes ? '\n📝 ' + notes : '');
-
-      // WhatsApp למנהל
-      if (adminPhone) {
-        var ph = adminPhone.replace(/\D/g, '');
-        if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-        setTimeout(function () {
-          window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
-        }, 900);
-      }
-
-      // מייל למנהל
-      if (adminEmail) {
-        var mailSubject = 'הזמנה חדשה #' + id + ' — ' + customer.name;
-        var mailBody = 'הזמנה חדשה התקבלה:\n\n' +
-          'מספר הזמנה: #' + id + '\n' +
-          'לקוח: ' + customer.name + '\n' +
-          'טלפון: ' + (customer.phone || '—') + '\n' +
-          'מייל: ' + (customer.email || '—') + '\n\n' +
-          'פריטים:\n' + itemsList + '\n\n' +
-          'סה"כ לפני מע"מ: ₪' + totals.subtotal + '\n' +
-          'מע"מ: ₪' + totals.vat + '\n' +
-          'סה"כ כולל מע"מ: ₪' + totals.total +
-          (notes ? '\n\nהערות: ' + notes : '') +
-          '\n\nישיר שיווק והפצה';
-        setTimeout(function () {
-          window.open('mailto:' + adminEmail + '?subject=' + encodeURIComponent(mailSubject) + '&body=' + encodeURIComponent(mailBody), '_blank');
-        }, 1800);
-      }
-
-      state.settings.nextOrderId++;
       Store.set('settings', state.settings);
       Cart.clear();
       closeCart();
@@ -384,7 +362,8 @@ var App = (function () {
         if (ph.startsWith('0')) ph = '972' + ph.substring(1);
         var msg = '✅ *הזמנה #' + orderId + ' סופקה!*\n' +
           'שלום! ההזמנה שלך הגיעה.\nתודה שהזמנת מישיר שיווק והפצה 🙏';
-        window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(msg), '_blank');
+        var w = window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(msg), '_blank');
+        if (!w) toast('חלון WhatsApp נחסם — אפשר חלונות קופצים', 'warning');
       }
     },
 
@@ -401,6 +380,9 @@ var App = (function () {
 
   /* ===== ROUTING ===== */
   function navigate(view, params) {
+    if (state.currentView === 'admin' && view !== 'admin' && window.AdminView && AdminView._ordersUnsub) {
+      AdminView._ordersUnsub(); AdminView._ordersUnsub = null;
+    }
     state.currentView = view;
     params = params || {};
     window.scrollTo(0, 0);
@@ -431,7 +413,7 @@ var App = (function () {
         '</div>';
     } else if (Auth.isCustomer()) {
       user = '<div class="header-user">' +
-        '<span class="header-welcome">שלום, <strong>' + state.currentUser.customer.name + '</strong></span>' +
+        '<span class="header-welcome">שלום, <strong>' + escHTML(state.currentUser.customer.name) + '</strong></span>' +
         '<button class="btn-logout orange" onclick="App.Auth.logout()">התנתק</button>' +
         '</div>';
     } else {
@@ -530,11 +512,12 @@ var App = (function () {
   function showSystemMsg() {
     var msg = state.settings.systemMessage;
     if (!msg) return;
-    var key = 'sysmsg_' + msg.substring(0, 30);
+    var hash = 0; for (var i = 0; i < msg.length; i++) { hash = ((hash << 5) - hash + msg.charCodeAt(i)) & 0x7fffffff; }
+    var key = 'sysmsg_' + hash;
     if (Store.get(key)) return;
     showModal('<div class="sys-message">' +
       '<div class="sys-icon"><span class="material-icons-round" style="font-size:30px">campaign</span></div>' +
-      '<h3>הודעת מערכת</h3><p>' + msg + '</p>' +
+      '<h3>הודעת מערכת</h3><p>' + escHTML(msg) + '</p>' +
       '<button class="btn-primary full-width" onclick="App.closeModal()">הבנתי, תודה</button></div>');
     Store.set(key, 1);
   }
@@ -606,7 +589,7 @@ var App = (function () {
     if (product.stock > 0 && product.stock <= threshold) {
       var phone = state.settings.adminPhone || '9720552961177';
       var email = state.settings.adminEmail || 'yashir.shivuk@gmail.com';
-      var txt   = 'התראת מלאי נמוך: מוצר "' + product.name + '" (מק"ט ' + product.sku + ') — נשארו ' + product.stock + ' יחידות.';
+      var txt   = 'התראת מלאי נמוך: מוצר "' + escHTML(product.name) + '" (מק"ט ' + escHTML(product.sku) + ') — נשארו ' + product.stock + ' יחידות.';
       var waUrl = 'https://wa.me/' + phone.replace(/\D/g,'').replace(/^0/,'972') + '?text=' + encodeURIComponent(txt);
       var mlUrl = 'mailto:' + email + '?subject=' + encodeURIComponent('התראת מלאי נמוך — ' + product.name) +
                   '&body=' + encodeURIComponent(txt + '\n\nישיר שיווק והפצה');
@@ -614,7 +597,7 @@ var App = (function () {
         '<div class="sys-message">' +
           '<div class="sys-icon" style="background:var(--orange-dim);color:var(--orange)"><span class="material-icons-round" style="font-size:30px">warning_amber</span></div>' +
           '<h3>מלאי נמוך!</h3>' +
-          '<p><strong>' + product.name + '</strong> — נשארו <strong>' + product.stock + '</strong> יחידות בלבד.</p>' +
+          '<p><strong>' + escHTML(product.name) + '</strong> — נשארו <strong>' + product.stock + '</strong> יחידות בלבד.</p>' +
           '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;width:100%">' +
             '<a href="' + waUrl + '" target="_blank" class="btn-primary full-width" style="text-decoration:none;justify-content:center">' +
               '<span class="material-icons-round">chat</span> שלח התראה ב-WhatsApp</a>' +
@@ -679,7 +662,7 @@ var App = (function () {
 
   /* ===== PUBLIC API ===== */
   return {
-    state: state, Auth: Auth, Cart: Cart, Orders: Orders, Pricing: Pricing, Store: Store, fmtP: fmtP,
+    state: state, Auth: Auth, Cart: Cart, Orders: Orders, Pricing: Pricing, Store: Store, fmtP: fmtP, escHTML: escHTML,
     navigate: navigate, toggleCart: toggleCart, openCart: openCart, closeCart: closeCart,
     showModal: showModal, closeModal: closeModal, toast: toast,
     showSystemMsg: showSystemMsg, startOrder: startOrder,
