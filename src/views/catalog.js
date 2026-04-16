@@ -80,6 +80,7 @@ var CatalogView = {
 
     CatalogView._renderGrid();
     App.updateFloatBtns();
+    try { sessionStorage.setItem('yashir_cat_section', CatalogView._section); } catch (e) {}
   },
 
   _sectionLabel: function (isCust, isAdmin) {
@@ -89,7 +90,7 @@ var CatalogView = {
       return '<div class="section-label"><span class="material-icons-round">star</span> ' + t('catalog.personalProducts') + '</div>';
     }
     return '<div class="section-label full"><span class="material-icons-round">menu_book</span> ' + t('catalog.fullCatalog') +
-      '<button class="btn-back-personal" onclick="CatalogView.render(document.getElementById(\'view-content\'),{section:\'personal\'})">' +
+      '<button class="btn-back-personal" onclick="App.navigate(\'catalog\',{section:\'personal\'})">' +
         '<span class="material-icons-round">' + (I18n.getLang() === 'en' ? 'arrow_back' : 'arrow_forward') + '</span> ' + t('catalog.backToPersonal') +
       '</button></div>';
   },
@@ -138,7 +139,7 @@ var CatalogView = {
 
     var fullLink = document.getElementById('cv-full-link');
     if (fullLink && App.Auth.isCustomer() && section === 'personal') {
-      fullLink.innerHTML = '<div class="full-catalog-card" onclick="CatalogView.render(document.getElementById(\'view-content\'),{section:\'full\'})">' +
+      fullLink.innerHTML = '<div class="full-catalog-card" onclick="App.navigate(\'catalog\',{section:\'full\'})">' +
         '<span class="material-icons-round">expand_more</span><span>' + t('catalog.toFullCatalog') + '</span><span class="material-icons-round">menu_book</span></div>';
     }
   },
@@ -322,36 +323,32 @@ var CatalogView = {
     inp.value = newVal;
     inp.classList.toggle('in-cart', newVal > 0);
     CatalogView._updateLineTotal(id);
-    if (newVal === 0) {
-      App.Cart.remove(id);
-    } else {
-      var p = PRODUCTS.find(function (x) { return x.id === id; });
-      if (!p) return;
-      var cItem = App.state.cart.find(function (i) { return i.product.id === id; });
-      if (cItem) {
-        App.Cart.updateQty(id, newVal);
-      } else {
-        App.Cart.add(p, newVal);
-      }
-    }
   },
   _add: function (id) {
     var p = PRODUCTS.find(function (x) { return x.id === id; });
     if (!p) return;
     var inp = document.getElementById('qty-' + id);
     var qty = inp ? parseInt(inp.value) || 0 : 0;
-    if (qty <= 0) return;
     var cItem = App.state.cart.find(function (i) { return i.product.id === id; });
+    if (qty <= 0) {
+      if (cItem) {
+        App.Cart.remove(id);
+        App.toast(t('catalog.removedFromCart'), 'success');
+        CatalogView._renderGrid();
+      }
+      return;
+    }
     if (cItem) {
       App.Cart.updateQty(id, qty);
       App.toast(t('catalog.qtyUpdated'), 'success');
     } else {
       App.Cart.add(p, qty);
     }
+    CatalogView._renderGrid();
   },
 
   goFullCatalog: function () {
-    CatalogView.render(document.getElementById('view-content'), { section: 'full' });
+    App.navigate('catalog', { section: 'full' });
   },
 
   requestQuote: function (productId) {
@@ -395,38 +392,56 @@ var CatalogView = {
       status:       'pending'
     };
 
-    if (window.DB) {
-      window.DB.collection('quote_requests').add(reqData)
-        .catch(function (e) { console.warn('quote_request save error:', e); });
-    }
+    function sendQuoteAlerts() {
+      if (settings.adminPhone) {
+        var ph = settings.adminPhone.replace(/\D/g,'');
+        if (ph.startsWith('0')) ph = '972' + ph.substring(1);
+        var waMsg = '💰 *' + t('catalog.quoteModalTitle') + '*\n' +
+          '👤 ' + pLang(customer, 'name') + '\n' +
+          '📱 ' + (customer.phone || '—') + '\n' +
+          '📦 ' + pLang(product, 'name') + ' (' + t('common.sku') + ' ' + product.sku + ')';
+        setTimeout(function () {
+          window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
+        }, 400);
+      }
 
-    if (settings.adminPhone) {
-      var ph = settings.adminPhone.replace(/\D/g,'');
-      if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-      var waMsg = '💰 *' + t('catalog.quoteModalTitle') + '*\n' +
-        '👤 ' + pLang(customer, 'name') + '\n' +
-        '📱 ' + (customer.phone || '—') + '\n' +
-        '📦 ' + pLang(product, 'name') + ' (' + t('common.sku') + ' ' + product.sku + ')';
-      setTimeout(function () {
-        window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
-      }, 400);
-    }
+      if (settings.adminEmail) {
+        var subject = t('catalog.quoteModalTitle') + ' — ' + pLang(customer, 'name') + ' / ' + pLang(product, 'name');
+        var body    = t('catalog.quoteModalTitle') + ':\n\n' +
+          pLang(customer, 'name') + ' (' + customer.id + ')\n' +
+          (customer.phone || '—') + '\n\n' +
+          pLang(product, 'name') + '\n' +
+          t('common.sku') + ': ' + product.sku + '\n\n' +
+          t('success.companyName');
+        setTimeout(function () {
+          window.open('mailto:' + settings.adminEmail + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
+        }, 1000);
+      }
 
-    if (settings.adminEmail) {
-      var subject = t('catalog.quoteModalTitle') + ' — ' + pLang(customer, 'name') + ' / ' + pLang(product, 'name');
-      var body    = t('catalog.quoteModalTitle') + ':\n\n' +
-        pLang(customer, 'name') + ' (' + customer.id + ')\n' +
-        (customer.phone || '—') + '\n\n' +
-        pLang(product, 'name') + '\n' +
-        t('common.sku') + ': ' + product.sku + '\n\n' +
-        t('success.companyName');
-      setTimeout(function () {
-        window.open('mailto:' + settings.adminEmail + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
-      }, 1000);
+      App.toast(t('catalog.requestSent'), 'success');
     }
 
     App.closeModal();
-    App.toast(t('catalog.requestSent'), 'success');
+
+    if (window.DB) {
+      var docId = 'qr_' + String(customer.id) + '_' + String(product.id);
+      var ref = window.DB.collection('quote_requests').doc(docId);
+      ref.get()
+        .then(function (snap) {
+          var existed = snap.exists;
+          return ref.set(reqData, { merge: true }).then(function () { return existed; });
+        })
+        .then(function (existed) {
+          if (existed) App.toast(t('catalog.quoteDuplicateMerged'), 'info');
+          else sendQuoteAlerts();
+        })
+        .catch(function (e) {
+          console.warn('quote_request save error:', e);
+          App.toast(t('catalog.requestSent'), 'success');
+        });
+    } else {
+      sendQuoteAlerts();
+    }
   },
 
   requestNewProduct: function () {

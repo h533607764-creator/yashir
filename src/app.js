@@ -83,6 +83,7 @@ var App = (function () {
       state.currentUser = { role: 'customer', customer: c };
       state.cart = [];
       Cart._restore();
+      try { sessionStorage.setItem('yashir_sess_hp', hp); } catch (e) {}
       if (remember) Store.set('remember', { hp: hp, exp: Date.now() + 30 * 864e5 });
       return true;
     },
@@ -90,12 +91,21 @@ var App = (function () {
       if (pin !== (state.settings.adminPin || ADMIN_CREDENTIALS.pin)) return false;
       state.currentUser = { role: 'admin' };
       state.cart = [];
+      try { sessionStorage.setItem('yashir_sess_admin', '1'); } catch (e) {}
       return true;
     },
     logout: function () {
       state.currentUser = null;
       state.cart = [];
       Store.del('remember');
+      try {
+        sessionStorage.removeItem('yashir_sess_hp');
+        sessionStorage.removeItem('yashir_sess_admin');
+        sessionStorage.removeItem('yashir_last_view');
+        sessionStorage.removeItem('yashir_last_params');
+        sessionStorage.removeItem('yashir_last_order_id');
+        sessionStorage.removeItem('yashir_cat_section');
+      } catch (e) {}
       closeCart();
       navigate('landing');
     },
@@ -376,6 +386,64 @@ var App = (function () {
   };
 
   /* ===== ROUTING ===== */
+  function persistRoute(view, params) {
+    try {
+      sessionStorage.setItem('yashir_last_view', view);
+      if (view === 'success' && params && params.order && params.order.id) {
+        sessionStorage.setItem('yashir_last_order_id', String(params.order.id));
+        sessionStorage.setItem('yashir_last_params', '{}');
+      } else {
+        sessionStorage.removeItem('yashir_last_order_id');
+        var pp = {};
+        if (params) {
+          Object.keys(params).forEach(function (k) {
+            if (k !== 'order') pp[k] = params[k];
+          });
+        }
+        sessionStorage.setItem('yashir_last_params', JSON.stringify(pp));
+      }
+    } catch (e) {}
+  }
+
+  function restoreSession() {
+    if (state.currentUser) return;
+    if (Auth.tryAuto()) return;
+    try {
+      var hp = sessionStorage.getItem('yashir_sess_hp');
+      if (hp && typeof CUSTOMERS_DB !== 'undefined' && CUSTOMERS_DB.some(function (x) { return x.id === hp; })) {
+        Auth.login(hp, false);
+        return;
+      }
+      if (sessionStorage.getItem('yashir_sess_admin') === '1') {
+        state.currentUser = { role: 'admin' };
+        state.cart = [];
+      }
+    } catch (e) {}
+  }
+
+  function restoreRoute() {
+    var view = 'landing';
+    try { view = sessionStorage.getItem('yashir_last_view') || 'landing'; } catch (e1) {}
+    var params = {};
+    try { params = JSON.parse(sessionStorage.getItem('yashir_last_params') || '{}'); } catch (e2) {}
+    if (view === 'admin' && !Auth.isAdmin()) view = 'landing';
+    if ((view === 'catalog' || view === 'success' || view === 'admin') && Auth.isGuest()) view = 'landing';
+    if (view === 'success') {
+      var oid = sessionStorage.getItem('yashir_last_order_id');
+      var order = null;
+      if (oid) {
+        var all = Store.get('orders') || [];
+        order = all.find(function (o) { return String(o.id) === String(oid); });
+      }
+      if (order) params = { order: order };
+      else {
+        view = Auth.isCustomer() ? 'catalog' : 'landing';
+        params = {};
+      }
+    }
+    navigate(view, params);
+  }
+
   function navigate(view, params) {
     if (state.currentView === 'admin' && view !== 'admin' && window.AdminView && AdminView._ordersUnsub) {
       AdminView._ordersUnsub(); AdminView._ordersUnsub = null;
@@ -390,11 +458,29 @@ var App = (function () {
     switch (view) {
       case 'landing':  LandingView.render(el); break;
       case 'login':    LoginView.render(el); break;
-      case 'catalog':  CatalogView.render(el, params); break;
+      case 'catalog': {
+        var catParams = params || {};
+        if (!catParams.section) {
+          try {
+            var sec = sessionStorage.getItem('yashir_cat_section');
+            if (sec === 'full' || sec === 'personal') catParams.section = sec;
+          } catch (e3) {}
+        }
+        CatalogView.render(el, catParams);
+        persistRoute('catalog', catParams);
+        return;
+      }
       case 'success':  SuccessView.render(el, params); break;
-      case 'admin':    Auth.isAdmin() ? AdminView.render(el, params) : navigate('landing'); break;
+      case 'admin':
+        if (!Auth.isAdmin()) {
+          navigate('landing');
+          return;
+        }
+        AdminView.render(el, params);
+        break;
       default:         LandingView.render(el);
     }
+    persistRoute(view, params);
   }
 
   /* ===== HEADER ===== */
@@ -485,7 +571,15 @@ var App = (function () {
       switch (state.currentView) {
         case 'landing':  LandingView.render(el); break;
         case 'login':    LoginView.render(el); break;
-        case 'catalog':  CatalogView.render(el); break;
+        case 'catalog': {
+          var _cpLang = {};
+          try {
+            var _sLang = sessionStorage.getItem('yashir_cat_section');
+            if (_sLang === 'full' || _sLang === 'personal') _cpLang.section = _sLang;
+          } catch (_eLang) {}
+          CatalogView.render(el, _cpLang);
+          break;
+        }
         case 'success':  SuccessView.render(el); break;
         case 'admin':    AdminView.render(el); break;
       }
@@ -498,24 +592,31 @@ var App = (function () {
     var wrap = document.getElementById('floating-btns');
     if (!wrap) return;
 
+    var homeBtn =
+      '<button type="button" class="float-btn float-home-btn" onclick="App.navigate(\'landing\')">' +
+        '<span class="material-icons-round">home</span><span class="float-btn-text">' + t('float.home') + '</span>' +
+      '</button>';
+
     if (state.currentView === 'landing') {
       wrap.innerHTML =
-        '<button class="float-btn order-btn" onclick="App.startOrder()">' +
+        homeBtn +
+        '<button type="button" class="float-btn order-btn" onclick="App.startOrder()">' +
           '<span class="material-icons-round">shopping_bag</span><span class="float-btn-text">' + t('float.startOrder') + '</span>' +
         '</button>' +
-        '<button class="float-btn catalog-btn" onclick="App.navigate(\'catalog\')">' +
+        '<button type="button" class="float-btn catalog-btn" onclick="App.navigate(\'catalog\')">' +
           '<span class="material-icons-round">menu_book</span><span class="float-btn-text">' + t('float.catalog') + '</span>' +
         '</button>';
     } else if (state.currentView === 'catalog' && Auth.isCustomer()) {
       wrap.innerHTML =
-        '<button class="float-btn request-btn" onclick="CatalogView.requestNewProduct()">' +
+        homeBtn +
+        '<button type="button" class="float-btn request-btn" onclick="CatalogView.requestNewProduct()">' +
           '<span class="material-icons-round">add_circle</span><span class="float-btn-text">' + t('float.requestProduct') + '</span>' +
         '</button>' +
-        '<button class="float-btn catalog-btn" onclick="CatalogView.goFullCatalog()">' +
+        '<button type="button" class="float-btn catalog-btn" onclick="CatalogView.goFullCatalog()">' +
           '<span class="material-icons-round">menu_book</span><span class="float-btn-text">' + t('float.fullCatalog') + '</span>' +
         '</button>';
     } else {
-      wrap.innerHTML = '';
+      wrap.innerHTML = homeBtn;
     }
   }
 
@@ -686,8 +787,8 @@ var App = (function () {
       if (!document.getElementById('modal-wrap').classList.contains('hidden')) { closeModal(); return; }
       if (state.cartOpen) closeCart();
     });
-    Auth.tryAuto();
-    navigate('landing');
+    restoreSession();
+    restoreRoute();
     if (Auth.isCustomer()) {
       renderCartFab();
       setTimeout(showSystemMsg, 800);
@@ -699,7 +800,14 @@ var App = (function () {
         function () {
           App.Store.set('products', window.PRODUCTS);
           var el = document.getElementById('view-content');
-          if (el && state.currentView === 'catalog') CatalogView.render(el);
+          if (el && state.currentView === 'catalog') {
+            var _cp = {};
+            try {
+              var _s = sessionStorage.getItem('yashir_cat_section');
+              if (_s === 'full' || _s === 'personal') _cp.section = _s;
+            } catch (_e) {}
+            CatalogView.render(el, _cp);
+          }
         },
         function () {}
       );

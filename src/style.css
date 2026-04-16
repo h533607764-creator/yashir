@@ -265,6 +265,11 @@ html[dir="ltr"] .form-group label { text-align: left; }
 .float-btn.order-btn:hover { background: var(--orange-dark); transform: translateY(-2px); }
 .float-btn.request-btn { background: var(--green); }
 .float-btn.request-btn:hover { background: #1e8449; transform: translateY(-2px); }
+.float-btn.float-home-btn {
+  background: var(--white); color: var(--blue);
+  border: 2px solid var(--blue);
+}
+.float-btn.float-home-btn:hover { background: var(--blue-dim); color: var(--navy); }
 
 /* ===== CART FAB (bottom-right) ===== */
 #cart-fab-wrap {

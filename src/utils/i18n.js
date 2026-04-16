@@ -123,6 +123,7 @@ var I18n = (function () {
     'float.catalog': 'הקטלוג שלנו',
     'float.requestProduct': 'בקשת מוצר חדש',
     'float.fullCatalog': 'קטלוג מלא',
+    'float.home': 'דף הבית',
 
     /* --- Landing --- */
     'landing.companyName': 'ישיר שיווק והפצה',
@@ -184,6 +185,7 @@ var I18n = (function () {
     'catalog.quoteModalNote': 'הנציג שלנו יחזור אליך עם מחיר אישי בהקדם.',
     'catalog.sendRequest': 'שלח בקשה',
     'catalog.requestSent': 'הבקשה נשלחה! ניצור איתך קשר בהקדם',
+    'catalog.quoteDuplicateMerged': 'עודכנה בקשה קיימת לאותו מוצר (ללא כפילות)',
     'catalog.newProductTitle': 'בקשת מוצר חדש',
     'catalog.newProductText': 'לא מצאת מה שחיפשת? תכתוב לנו ונשלח הצעת מחיר.',
     'catalog.productNameLabel': 'שם המוצר / תיאור',
@@ -195,6 +197,7 @@ var I18n = (function () {
     'catalog.enterProductName': 'נא להזין שם מוצר',
     'catalog.loginFirst': 'יש להתחבר תחילה',
     'catalog.qtyUpdated': 'כמות עודכנה ✓',
+    'catalog.removedFromCart': 'הפריט הוסר מהעגלה',
 
     /* --- Cart --- */
     'cart.empty': 'העגלה ריקה',
@@ -647,6 +650,7 @@ var I18n = (function () {
     'float.catalog': 'Our Catalog',
     'float.requestProduct': 'Request New Product',
     'float.fullCatalog': 'Full Catalog',
+    'float.home': 'Home',
 
     /* --- Landing --- */
     'landing.companyName': 'Yashir Marketing & Distribution',
@@ -708,6 +712,7 @@ var I18n = (function () {
     'catalog.quoteModalNote': 'Our representative will get back to you with a personal price soon.',
     'catalog.sendRequest': 'Send Request',
     'catalog.requestSent': 'Request sent! We\'ll contact you soon',
+    'catalog.quoteDuplicateMerged': 'Existing request for this product was updated (no duplicate)',
     'catalog.newProductTitle': 'Request New Product',
     'catalog.newProductText': 'Couldn\'t find what you\'re looking for? Write to us and we\'ll send a quote.',
     'catalog.productNameLabel': 'Product Name / Description',
@@ -719,6 +724,7 @@ var I18n = (function () {
     'catalog.enterProductName': 'Please enter product name',
     'catalog.loginFirst': 'Please log in first',
     'catalog.qtyUpdated': 'Quantity updated ✓',
+    'catalog.removedFromCart': 'Removed from cart',
 
     /* --- Cart --- */
     'cart.empty': 'Cart is empty',
