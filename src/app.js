@@ -872,6 +872,27 @@ var App = (function () {
         }
       });
 
+      if (DBSync.listenCustomers) {
+        DBSync.listenCustomers(function () {
+          if (state.currentUser && state.currentUser.role === 'customer') {
+            var freshCu = (window.CUSTOMERS_DB || []).find(function (c) {
+              return c.id === state.currentUser.customer.id;
+            });
+            if (freshCu) state.currentUser.customer = freshCu;
+            Cart._repriceAll();
+          }
+          var elCat = document.getElementById('view-content');
+          if (elCat && state.currentView === 'catalog') {
+            var _cpLive = {};
+            try {
+              var _secLive = sessionStorage.getItem('yashir_cat_section');
+              if (_secLive === 'full' || _secLive === 'personal') _cpLive.section = _secLive;
+            } catch (_eLive) {}
+            CatalogView.render(elCat, _cpLive);
+          }
+        });
+      }
+
       DBSync.loadSettings(function () {
         renderHeader();
       });

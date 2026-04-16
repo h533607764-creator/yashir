@@ -127,38 +127,34 @@ var SHIPPING_PRODUCT = {
 function loadProductsFromFirestore(onSuccess, onError) {
   var TIMEOUT_MS = 6000;
   var done = false;
+  var seeding = false;
 
   var timer = setTimeout(function () {
     if (!done) { done = true; onError && onError(); }
   }, TIMEOUT_MS);
 
-  window.DB.collection('products').orderBy('sku').get()
-    .then(function (snapshot) {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
+  window.DB.collection('products').orderBy('sku').onSnapshot(function (snapshot) {
+      if (!done) { done = true; clearTimeout(timer); }
 
       if (snapshot.empty) {
-        var batch = window.DB.batch();
-        PRODUCTS_STATIC.forEach(function (p) {
-          var ref = window.DB.collection('products').doc(p.id);
-          batch.set(ref, p);
-        });
-        batch.commit().then(function () {
-          window.PRODUCTS = PRODUCTS_STATIC.slice();
-          onSuccess && onSuccess();
-        }).catch(function () {
-          window.PRODUCTS = PRODUCTS_STATIC.slice();
-          onSuccess && onSuccess();
-        });
-      } else {
-        var loaded = [];
-        snapshot.forEach(function (doc) { loaded.push(doc.data()); });
-        window.PRODUCTS = loaded;
-        onSuccess && onSuccess();
+        if (!seeding) {
+          seeding = true;
+          var batch = window.DB.batch();
+          PRODUCTS_STATIC.forEach(function (p) {
+            batch.set(window.DB.collection('products').doc(p.id), p);
+          });
+          batch.commit().catch(function () { seeding = false; });
+        }
+        return;
       }
-    })
-    .catch(function (err) {
+
+      var loaded = [];
+      snapshot.forEach(function (doc) { loaded.push(doc.data()); });
+      window.PRODUCTS = loaded;
+      try { localStorage.setItem('yashir_products', JSON.stringify(loaded)); } catch (e) {}
+      onSuccess && onSuccess();
+    },
+    function (err) {
       if (done) return;
       done = true;
       clearTimeout(timer);

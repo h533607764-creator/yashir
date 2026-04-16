@@ -122,7 +122,9 @@ var AdminView = {
     if (window.DB) {
       AdminView._ordersUnsub = window.DB.collection('orders').orderBy('timestamp', 'desc')
         .onSnapshot(function (snap) {
-          var all = []; snap.forEach(function (d) { all.push(d.data()); }); renderOrders(all);
+          var all = []; snap.forEach(function (d) { all.push(d.data()); });
+          App.Store.set('orders', all);
+          renderOrders(all);
         }, function () { renderOrders(App.Orders.getAll()); });
     } else {
       renderOrders(App.Orders.getAll());
@@ -1230,7 +1232,22 @@ var AdminView = {
 
   /* ===== STATISTICS ===== */
   _stats: function (c) {
-    var orders = App.Orders.getAll();
+    if (window.DB) {
+      c.innerHTML = '<div class="admin-section"><div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div></div>';
+      window.DB.collection('orders').orderBy('timestamp', 'desc').get()
+        .then(function (snap) {
+          var orders = [];
+          snap.forEach(function (d) { orders.push(d.data()); });
+          App.Store.set('orders', orders);
+          AdminView._statsRender(c, orders);
+        })
+        .catch(function () { AdminView._statsRender(c, App.Orders.getAll()); });
+      return;
+    }
+    AdminView._statsRender(c, App.Orders.getAll());
+  },
+
+  _statsRender: function (c, orders) {
     var now = new Date();
     var m = now.getMonth(), y = now.getFullYear();
     var monthly = orders.filter(function (o) { var d = new Date(o.timestamp); return d.getMonth() === m && d.getFullYear() === y; });

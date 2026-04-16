@@ -19,6 +19,19 @@ var DBSync = (function () {
      לקוחות
      ────────────────────────────────────────── */
 
+  function listenCustomers(onUpdate) {
+    if (!db()) return function () {};
+    return db().collection(COLLECTIONS.CUSTOMERS).onSnapshot(function (snap) {
+      var list = [];
+      snap.forEach(function (d) { list.push(d.data()); });
+      window.CUSTOMERS_DB = list;
+      try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
+      onUpdate && onUpdate();
+    }, function (err) {
+      console.warn('DBSync.listenCustomers error:', err);
+    });
+  }
+
   function loadCustomers(onDone) {
     if (!db()) { onDone && onDone(false); return; }
     db().collection(COLLECTIONS.CUSTOMERS).get()
@@ -179,6 +192,7 @@ var DBSync = (function () {
 
   return {
     loadAll:            loadAll,
+    listenCustomers:    listenCustomers,
     loadCustomers:      loadCustomers,
     saveCustomer:       saveCustomer,
     deleteCustomer:     deleteCustomer,
