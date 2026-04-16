@@ -33,8 +33,6 @@ var App = (function () {
       vatRate: 0.18,
       nextOrderId: 352436352,
       adminPin: '1234',
-      adminPhone: '',
-      adminEmail: '',
       systemMessage: 'ברוכים הבאים לישיר! הזמינו עד יום ג׳ לאספקה ביום ה׳.',
       landingTitle: 'רמה אחת מעל, דאגה אחת פחות',
       landingSubtitle: 'ישיר שיווק והפצה — מוצרים חד-פעמיים לעסקים ואירועים',
@@ -363,16 +361,6 @@ var App = (function () {
         window.DB.collection('orders').doc(String(orderId)).update({ status: newStatus })
           .catch(function (e) { console.warn('status update error:', e); });
       }
-      if (newStatus === 'delivered' && customerPhone) {
-        var ph = customerPhone.replace(/\D/g, '');
-        if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-        var msg = '✅ *' + t('admin.order') + ' #' + orderId + '*\n' +
-          (I18n.getLang() === 'en'
-            ? 'Hello! Your order has been delivered.\nThank you for ordering from Yashir! 🙏'
-            : 'שלום! ההזמנה שלך הגיעה.\nתודה שהזמנת מישיר שיווק והפצה 🙏');
-        var w = window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(msg), '_blank');
-        if (!w) toast(t('sys.popupBlocked'), 'warning');
-      }
     },
 
     updatePayment: function (orderId, paymentStatus) {
@@ -594,7 +582,7 @@ var App = (function () {
     if (!wrap) return;
 
     var homeBtn =
-      '<button type="button" class="float-btn float-home-btn" onclick="App.navigate(\'landing\')">' +
+      '<button type="button" class="float-btn float-home-btn" onclick="App.goHome()">' +
         '<span class="material-icons-round">home</span><span class="float-btn-text">' + t('float.home') + '</span>' +
       '</button>';
 
@@ -696,10 +684,15 @@ var App = (function () {
     navigate('catalog');
   }
 
-  /* ===== SECRET ADMIN LOGIN (5× logo click) ===== */
-  var _logoClicks = 0;
+  /* ===== SECRET ADMIN LOGIN (5× logo click within 2.5s) ===== */
+  var LOGO_SECRET_WINDOW_MS = 2500;
+  var _logoClickTimes = [];
   var _logoTimer  = null;
   var _secretAdminAwayHandler = null;
+
+  function goHome() {
+    Auth.logout();
+  }
 
   function _tearDownSecretAdmin() {
     var box = document.getElementById('secret-admin');
@@ -711,11 +704,14 @@ var App = (function () {
   }
 
   function _logoClick() {
-    _logoClicks++;
+    var now = Date.now();
+    _logoClickTimes.push(now);
+    _logoClickTimes = _logoClickTimes.filter(function (t) { return now - t <= LOGO_SECRET_WINDOW_MS; });
     clearTimeout(_logoTimer);
-    _logoTimer = setTimeout(function () { _logoClicks = 0; }, 3000);
-    if (_logoClicks >= 5) {
-      _logoClicks = 0;
+    _logoTimer = setTimeout(function () { _logoClickTimes = []; }, LOGO_SECRET_WINDOW_MS);
+    if (_logoClickTimes.length >= 5) {
+      _logoClickTimes = [];
+      clearTimeout(_logoTimer);
       _showSecretAdmin();
       return;
     }
@@ -764,24 +760,12 @@ var App = (function () {
   function checkLowStock(product) {
     var threshold = product.lowStockThreshold != null ? product.lowStockThreshold : 10;
     if (product.stock > 0 && product.stock <= threshold) {
-      var phone = state.settings.adminPhone || '9720552961177';
-      var email = state.settings.adminEmail || 'yashir.shivuk@gmail.com';
-      var txt   = t('sys.lowStockAlert') + ': "' + escHTML(pLang(product, 'name')) + '" (' + t('common.sku') + ' ' + escHTML(product.sku) + ') — ' + t('sys.lowStockMsg') + ' ' + product.stock + ' ' + t('common.units') + '.';
-      var waUrl = 'https://wa.me/' + phone.replace(/\D/g,'').replace(/^0/,'972') + '?text=' + encodeURIComponent(txt);
-      var mlUrl = 'mailto:' + email + '?subject=' + encodeURIComponent(t('sys.lowStockAlert') + ' — ' + pLang(product, 'name')) +
-                  '&body=' + encodeURIComponent(txt + '\n\n' + t('success.companyName'));
       showModal(
         '<div class="sys-message">' +
           '<div class="sys-icon" style="background:var(--orange-dim);color:var(--orange)"><span class="material-icons-round" style="font-size:30px">warning_amber</span></div>' +
           '<h3>' + t('sys.lowStockTitle') + '</h3>' +
           '<p><strong>' + escHTML(pLang(product, 'name')) + '</strong> — ' + t('sys.lowStockMsg') + ' <strong>' + product.stock + '</strong> ' + t('sys.unitsOnly') + '</p>' +
-          '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;width:100%">' +
-            '<a href="' + waUrl + '" target="_blank" class="btn-primary full-width" style="text-decoration:none;justify-content:center">' +
-              '<span class="material-icons-round">chat</span> ' + t('sys.sendWhatsApp') + '</a>' +
-            '<a href="' + mlUrl + '" class="btn-secondary full-width" style="text-decoration:none;justify-content:center">' +
-              '<span class="material-icons-round">email</span> ' + t('sys.sendEmail') + '</a>' +
-            '<button class="btn-secondary" onclick="App.closeModal()">' + t('common.close') + '</button>' +
-          '</div>' +
+          '<button class="btn-primary full-width" onclick="App.closeModal()">' + t('common.close') + '</button>' +
         '</div>'
       );
     }
@@ -844,7 +828,7 @@ var App = (function () {
   return {
     state: state, Auth: Auth, Cart: Cart, Orders: Orders, Pricing: Pricing, Store: Store, fmtP: fmtP, escHTML: escHTML,
     dateFmt: dateFmt,
-    navigate: navigate, toggleCart: toggleCart, openCart: openCart, closeCart: closeCart,
+    navigate: navigate, goHome: goHome, toggleCart: toggleCart, openCart: openCart, closeCart: closeCart,
     showModal: showModal, closeModal: closeModal, toast: toast,
     showSystemMsg: showSystemMsg, startOrder: startOrder, orderCustomerDisplay: orderCustomerDisplay,
     renderHeader: renderHeader, updateFloatBtns: updateFloatBtns,

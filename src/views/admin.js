@@ -106,7 +106,6 @@ var AdminView = {
           '<td style="display:flex;gap:4px;padding:8px;flex-wrap:wrap">' +
             '<button class="btn-sm" title="' + t('admin.view') + '" onclick="AdminView._viewOrder(\'' + o.id + '\')"><span class="material-icons-round">visibility</span></button>' +
             '<button class="btn-sm" title="' + t('admin.deliveryNote') + '" onclick="SuccessView.printNote(\'' + o.id + '\')"><span class="material-icons-round">print</span></button>' +
-            (ph ? '<button class="btn-sm" title="WhatsApp" onclick="AdminView._waOrder(\'' + o.id + '\',\'' + ph + '\')" style="background:#25d366;color:#fff"><span class="material-icons-round">chat</span></button>' : '') +
             '<button class="btn-sm danger" title="' + t('admin.deleteOrder') + '" onclick="AdminView._delOrder(\'' + o.id + '\')"><span class="material-icons-round">delete</span></button>' +
           '</td></tr>';
       }).join('') : '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">' + t('admin.noOrders') + '</td></tr>';
@@ -139,17 +138,6 @@ var AdminView = {
     var next = current === 'paid' ? 'unpaid' : 'paid';
     App.updateOrderPayment(orderId, next);
     App.toast(next === 'paid' ? t('admin.markedPaid') : t('admin.markedPending'), next === 'paid' ? 'success' : 'info');
-  },
-
-  _waOrder: function (orderId, phone) {
-    var SL = { new: t('admin.statusNew'), processing: t('admin.statusProcessing'), ready: t('admin.statusReady'), shipped: t('admin.statusShipped'), delivered: t('admin.statusDelivered') };
-    var o = (AdminView._lastOrders || []).find(function (x) { return String(x.id) === String(orderId); })
-          || (App.Orders.getAll()).find(function (x) { return String(x.id) === String(orderId); });
-    var ph = phone.replace(/\D/g, '');
-    if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-    var msg = o ? '📦 ' + t('admin.order') + ' #' + o.id + '\n' + t('admin.customerCol') + ': ' + App.orderCustomerDisplay(o) + '\n' + t('common.total') + ': ₪' + o.total + '\n' + t('common.status') + ': ' + (SL[o.status] || o.status)
-                : t('admin.order') + ' #' + orderId;
-    window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(msg), '_blank');
   },
 
   _checkNewOrders: function () {
@@ -1324,8 +1312,6 @@ var AdminView = {
               '<textarea id="sv-sub-en" rows="2" dir="ltr" style="text-align:left">' + (s.landingSubtitle_en || '') + '</textarea></div>' +
           '</div>' +
           AdminView._fld(t('admin.adminPin'), 'sv-pin', s.adminPin, 'password') +
-          AdminView._fld(t('admin.adminPhone'), 'sv-phone', s.adminPhone || '', 'tel') +
-          AdminView._fld(t('admin.adminEmail'), 'sv-email', s.adminEmail || '', 'email') +
         '</div>' +
         '<button class="btn-primary" onclick="AdminView._saveSettings()">' +
           '<span class="material-icons-round">save</span> ' + t('admin.saveSettings') +
@@ -1351,8 +1337,6 @@ var AdminView = {
     s.systemMessage_en     = (document.getElementById('sv-sysmsg-en') || {}).value || '';
     s.landingTitle_en      = (document.getElementById('sv-title-en') || {}).value || '';
     s.landingSubtitle_en   = (document.getElementById('sv-sub-en') || {}).value || '';
-    s.adminPhone           = document.getElementById('sv-phone').value;
-    s.adminEmail           = document.getElementById('sv-email').value;
     var pin = document.getElementById('sv-pin').value;
     if (pin && pin.length >= 4) {
       s.adminPin = pin;

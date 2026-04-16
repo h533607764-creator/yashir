@@ -264,9 +264,6 @@ var I18n = (function () {
     'sys.lowStockTitle': 'מלאי נמוך!',
     'sys.lowStockMsg': 'נשארו',
     'sys.unitsOnly': 'יחידות בלבד.',
-    'sys.sendWhatsApp': 'שלח התראה ב-WhatsApp',
-    'sys.sendEmail': 'שלח התראה במייל',
-    'sys.popupBlocked': 'חלון WhatsApp נחסם — אפשר חלונות קופצים',
 
     /* --- Admin Common --- */
     'admin.panelTitle': 'פאנל ניהול — ישיר',
@@ -473,8 +470,6 @@ var I18n = (function () {
     'admin.landingTitle': 'כותרת ראשית בדף נחיתה',
     'admin.landingSubtitle': 'תת-כותרת / תיאור בדף נחיתה',
     'admin.adminPin': 'קוד מנהל (PIN)',
-    'admin.adminPhone': 'WhatsApp מנהל לקבלת התראות (כולל קידומת 972)',
-    'admin.adminEmail': 'מייל מנהל לקבלת התראות',
     'admin.saveSettings': 'שמור הגדרות',
     'admin.pinTooShort': 'קוד מנהל חייב להכיל לפחות 4 תווים',
     'admin.settingsSaved': 'ההגדרות נשמרו',
@@ -791,9 +786,6 @@ var I18n = (function () {
     'sys.lowStockTitle': 'Low Stock!',
     'sys.lowStockMsg': 'Remaining:',
     'sys.unitsOnly': 'units only.',
-    'sys.sendWhatsApp': 'Send WhatsApp Alert',
-    'sys.sendEmail': 'Send Email Alert',
-    'sys.popupBlocked': 'WhatsApp window blocked — allow popups',
 
     /* --- Admin Common --- */
     'admin.panelTitle': 'Admin Panel — Yashir',
@@ -1000,8 +992,6 @@ var I18n = (function () {
     'admin.landingTitle': 'Main title on landing page',
     'admin.landingSubtitle': 'Subtitle / description on landing page',
     'admin.adminPin': 'Admin Code (PIN)',
-    'admin.adminPhone': 'Admin WhatsApp for alerts (incl. 972 prefix)',
-    'admin.adminEmail': 'Admin email for alerts',
     'admin.saveSettings': 'Save Settings',
     'admin.pinTooShort': 'Admin code must be at least 4 characters',
     'admin.settingsSaved': 'Settings saved',

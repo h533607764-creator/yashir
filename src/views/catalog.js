@@ -378,7 +378,6 @@ var CatalogView = {
     var customer = App.Auth.isCustomer() ? App.state.currentUser.customer : null;
     if (!product || !customer) return;
 
-    var settings = App.state.settings;
     var reqData  = {
       customerId:   customer.id,
       customerName: customer.name,
@@ -393,31 +392,6 @@ var CatalogView = {
     };
 
     function sendQuoteAlerts() {
-      if (settings.adminPhone) {
-        var ph = settings.adminPhone.replace(/\D/g,'');
-        if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-        var waMsg = '💰 *' + t('catalog.quoteModalTitle') + '*\n' +
-          '👤 ' + pLang(customer, 'name') + '\n' +
-          '📱 ' + (customer.phone || '—') + '\n' +
-          '📦 ' + pLang(product, 'name') + ' (' + t('common.sku') + ' ' + product.sku + ')';
-        setTimeout(function () {
-          window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
-        }, 400);
-      }
-
-      if (settings.adminEmail) {
-        var subject = t('catalog.quoteModalTitle') + ' — ' + pLang(customer, 'name') + ' / ' + pLang(product, 'name');
-        var body    = t('catalog.quoteModalTitle') + ':\n\n' +
-          pLang(customer, 'name') + ' (' + customer.id + ')\n' +
-          (customer.phone || '—') + '\n\n' +
-          pLang(product, 'name') + '\n' +
-          t('common.sku') + ': ' + product.sku + '\n\n' +
-          t('success.companyName');
-        setTimeout(function () {
-          window.open('mailto:' + settings.adminEmail + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
-        }, 1000);
-      }
-
       App.toast(t('catalog.requestSent'), 'success');
     }
 
@@ -476,7 +450,6 @@ var CatalogView = {
     if (!name || !name.value.trim()) { App.toast(t('catalog.enterProductName'), 'warning'); return; }
 
     var customer = App.Auth.isCustomer() ? App.state.currentUser.customer : null;
-    var settings = App.state.settings;
 
     var reqData = {
       customerId:   customer.id,
@@ -493,34 +466,6 @@ var CatalogView = {
     if (window.DB) {
       window.DB.collection('product_requests').add(reqData)
         .catch(function (e) { console.warn('product_request save error:', e); });
-    }
-
-    if (settings.adminPhone) {
-      var ph = settings.adminPhone.replace(/\D/g,'');
-      if (ph.startsWith('0')) ph = '972' + ph.substring(1);
-      var waMsg = '📦 *' + t('catalog.newProductTitle') + '*\n' +
-        '👤 ' + pLang(customer, 'name') + '\n' +
-        '📱 ' + (customer.phone || '—') + '\n' +
-        '🛒 ' + name.value.trim() +
-        (qty && qty.value ? '\n📊 ' + qty.value : '') +
-        (notes && notes.value.trim() ? '\n📝 ' + notes.value.trim() : '');
-      setTimeout(function () {
-        window.open('https://wa.me/' + ph + '?text=' + encodeURIComponent(waMsg), '_blank');
-      }, 400);
-    }
-
-    if (settings.adminEmail) {
-      var subject = t('catalog.newProductTitle') + ' — ' + pLang(customer, 'name');
-      var body    = t('catalog.newProductTitle') + ':\n\n' +
-        pLang(customer, 'name') + ' (' + customer.id + ')\n' +
-        (customer.phone || '—') + '\n\n' +
-        name.value.trim() + '\n' +
-        (qty && qty.value ? qty.value + '\n' : '') +
-        (notes && notes.value.trim() ? notes.value.trim() + '\n' : '') +
-        '\n' + t('success.companyName');
-      setTimeout(function () {
-        window.open('mailto:' + settings.adminEmail + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body), '_blank');
-      }, 1000);
     }
 
     App.closeModal();
