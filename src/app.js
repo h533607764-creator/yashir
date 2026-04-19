@@ -61,7 +61,10 @@ var App = (function () {
     var c = Store.get('customers');
     if (c) window.CUSTOMERS_DB = c;
     var p = Store.get('products');
-    if (p && p.length) window.PRODUCTS = p;
+    if (p && p.length) {
+      if (window.setYashirProductsList) window.setYashirProductsList(p);
+      else window.PRODUCTS = p;
+    }
     if (!Store.get('orders'))   Store.set('orders', []);
     if (!Store.get('expenses')) Store.set('expenses', []);
 
@@ -319,7 +322,7 @@ var App = (function () {
       if (!saved || !saved.length) return;
       var customer = state.currentUser.customer;
       state.cart = saved.map(function (s) {
-        var p = PRODUCTS.find(function (x) { return x.id === s.pid; });
+        var p = (window.PRODUCTS || []).find(function (x) { return x.id === s.pid; });
         if (!p) return null;
         var q = parseInt(s.qty, 10);
         if (isNaN(q) || q < 1) q = 1;
@@ -340,7 +343,7 @@ var App = (function () {
       if (!Auth.isCustomer() || !state.cart.length) return;
       var customer = state.currentUser.customer;
       state.cart.forEach(function (item) {
-        var fresh = PRODUCTS.find(function (x) { return x.id === item.product.id; });
+        var fresh = (window.PRODUCTS || []).find(function (x) { return x.id === item.product.id; });
         if (fresh) item.product = fresh;
         var ep = Pricing.getEffectiveUnitPrice(item.product, customer, item.qty);
         if (ep !== null) item.unitPrice = ep;

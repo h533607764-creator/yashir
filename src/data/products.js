@@ -113,6 +113,14 @@ var PRODUCTS_STATIC = [
 // המערך הפעיל — מתעדכן מ-Firestore בזמן טעינה
 var PRODUCTS = PRODUCTS_STATIC.slice();
 
+/** Keeps global PRODUCTS and window.PRODUCTS identical (localStorage + Firestore paths). */
+function setYashirProductsList(arr) {
+  if (!arr || !arr.length) return;
+  PRODUCTS = arr.slice();
+  window.PRODUCTS = PRODUCTS;
+}
+window.setYashirProductsList = setYashirProductsList;
+
 var SHIPPING_PRODUCT = {
   id:'ship-1000', sku:'1000', name:'דמי משלוח', category:'shipping',
   categoryLabel:'משלוח', price:45, stock:999, icon:'🚚', bgColor:'#141414', description:'',
@@ -133,7 +141,8 @@ function loadProductsFromFirestore(onSuccess, onError) {
     if (!done) { done = true; onError && onError(); }
   }, TIMEOUT_MS);
 
-  window.DB.collection('products').orderBy('sku').onSnapshot(function (snapshot) {
+  /* No orderBy: Firestore excludes docs missing the ordered field; cart/catalog need every product. */
+  window.DB.collection('products').onSnapshot(function (snapshot) {
       if (!done) { done = true; clearTimeout(timer); }
 
       if (snapshot.empty) {
@@ -150,16 +159,18 @@ function loadProductsFromFirestore(onSuccess, onError) {
 
       var loaded = [];
       snapshot.forEach(function (doc) { loaded.push(doc.data()); });
-      window.PRODUCTS = loaded;
+      loaded.sort(function (a, b) { return String(a.sku || '').localeCompare(String(b.sku || ''), undefined, { numeric: true }); });
+      setYashirProductsList(loaded);
       try { localStorage.setItem('yashir_products', JSON.stringify(loaded)); } catch (e) {}
       onSuccess && onSuccess();
+      if (window.App && App.Cart && App.Cart._repriceAll) App.Cart._repriceAll();
     },
     function (err) {
       if (done) return;
       done = true;
       clearTimeout(timer);
       console.warn('Firestore error, using static data:', err);
-      window.PRODUCTS = PRODUCTS_STATIC.slice();
+      setYashirProductsList(PRODUCTS_STATIC);
       onError && onError();
     });
 }

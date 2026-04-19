@@ -120,9 +120,15 @@ var AdminView = {
     }
 
     if (window.DB) {
-      AdminView._ordersUnsub = window.DB.collection('orders').orderBy('timestamp', 'desc')
+      /* orderBy(timestamp) omits docs without that field — stats/list would show a subset */
+      AdminView._ordersUnsub = window.DB.collection('orders')
         .onSnapshot(function (snap) {
           var all = []; snap.forEach(function (d) { all.push(d.data()); });
+          all.sort(function (a, b) {
+            var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return tb - ta;
+          });
           App.Store.set('orders', all);
           renderOrders(all);
         }, function () { renderOrders(App.Orders.getAll()); });
@@ -1234,10 +1240,15 @@ var AdminView = {
   _stats: function (c) {
     if (window.DB) {
       c.innerHTML = '<div class="admin-section"><div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div></div>';
-      window.DB.collection('orders').orderBy('timestamp', 'desc').get()
+      window.DB.collection('orders').get()
         .then(function (snap) {
           var orders = [];
           snap.forEach(function (d) { orders.push(d.data()); });
+          orders.sort(function (a, b) {
+            var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return tb - ta;
+          });
           App.Store.set('orders', orders);
           AdminView._statsRender(c, orders);
         })

@@ -81,25 +81,51 @@ var SuccessView = {
       win.document.close();
     }
 
-    var order = App.Orders.getAll().find(function (o) { return String(o.id) === String(orderId); });
-    if (!order && typeof AdminView !== 'undefined' && AdminView._lastOrders) {
-      order = AdminView._lastOrders.find(function (o) { return String(o.id) === String(orderId); });
+    var oid = String(orderId);
+    function fromMemory() {
+      var o = App.Orders.getAll().find(function (x) { return String(x.id) === oid; });
+      if (!o && typeof AdminView !== 'undefined' && AdminView._lastOrders) {
+        o = AdminView._lastOrders.find(function (x) { return String(x.id) === oid; });
+      }
+      if (!o && SuccessView._lastOrder && String(SuccessView._lastOrder.id) === oid) {
+        o = SuccessView._lastOrder;
+      }
+      return (o && o.items) ? o : null;
     }
-    if (!order && SuccessView._lastOrder && String(SuccessView._lastOrder.id) === String(orderId)) {
-      order = SuccessView._lastOrder;
-    }
-    order = order || {};
-    if (order.items) { doPrint(order); return; }
+
     if (window.DB) {
-      window.DB.collection('orders').doc(String(orderId)).get()
+      window.DB.collection('orders').doc(oid).get({ source: 'server' })
         .then(function (doc) {
-          if (doc.exists) doPrint(doc.data());
+          if (doc.exists && doc.data().items) {
+            doPrint(doc.data());
+            return;
+          }
+          var mem = fromMemory();
+          if (mem) doPrint(mem);
           else App.toast(t('success.orderNotFound'), 'error');
         })
-        .catch(function () { App.toast(t('success.orderNotFound'), 'error'); });
+        .catch(function () {
+          window.DB.collection('orders').doc(oid).get({ source: 'cache' })
+            .then(function (doc) {
+              if (doc.exists && doc.data().items) doPrint(doc.data());
+              else {
+                var mem = fromMemory();
+                if (mem) doPrint(mem);
+                else App.toast(t('success.orderNotFound'), 'error');
+              }
+            })
+            .catch(function () {
+              var mem = fromMemory();
+              if (mem) doPrint(mem);
+              else App.toast(t('success.orderNotFound'), 'error');
+            });
+        });
       return;
     }
-    App.toast(t('success.orderNotFound'), 'error');
+
+    var mem = fromMemory();
+    if (mem) doPrint(mem);
+    else App.toast(t('success.orderNotFound'), 'error');
   },
 
   _lastOrder: null
