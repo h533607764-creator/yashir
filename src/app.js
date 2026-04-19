@@ -381,10 +381,13 @@ var App = (function () {
         total: totals.total,
         savings: totals.savings,
         notes: notes || '',
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(Date.now()).toISOString(),
         status: 'new',
         paymentStatus: 'unpaid'
       };
+      if (!order.timestamp || isNaN(Date.parse(order.timestamp))) {
+        order.timestamp = new Date(Date.now()).toISOString();
+      }
 
       function persistLocalAndFinish() {
         var all = Store.get('orders') || [];

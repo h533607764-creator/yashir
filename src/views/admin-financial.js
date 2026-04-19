@@ -9,7 +9,10 @@ var AdminFinancial = {
   render: function (c) {
     c.innerHTML = '<div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div>';
 
-    var loadO = window.DB ? window.DB.collection('orders').get() : Promise.resolve({ docs: [] });
+    var ordLim = (typeof AdminView !== 'undefined' && AdminView._ORDERS_QUERY_LIMIT) ? AdminView._ORDERS_QUERY_LIMIT : 50;
+    var loadO = window.DB
+      ? window.DB.collection('orders').orderBy('timestamp', 'desc').limit(ordLim).get()
+      : Promise.resolve({ docs: [] });
     var loadT = window.DB ? window.DB.collection('transactions').get() : Promise.resolve({ docs: [] });
 
     Promise.all([loadO, loadT]).then(function (res) {
@@ -125,7 +128,11 @@ var AdminFinancial = {
     if (period === 'year')     { start = new Date(now.getFullYear(), 0, 1); }
 
     var fO = start
-      ? AdminFinancial._orders.filter(function (o) { return new Date(o.timestamp) >= start; })
+      ? AdminFinancial._orders.filter(function (o) {
+          var ms = typeof AdminView !== 'undefined' && AdminView._orderTimestampMs ? AdminView._orderTimestampMs(o) : 0;
+          if (!ms) return false;
+          return new Date(ms) >= start;
+        })
       : AdminFinancial._orders;
     var fT = start
       ? AdminFinancial._transactions.filter(function (tx) { return new Date(tx.date) >= start; })

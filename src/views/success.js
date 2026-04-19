@@ -65,7 +65,14 @@ var SuccessView = {
         '<div class="info">' +
           '<span><strong>' + t('success.customer') + '</strong> ' + App.escHTML(App.orderCustomerDisplay(order)) + '</span>' +
           '<span><strong>' + t('success.orderNumber') + '</strong> ORD-' + order.id + '</span>' +
-          '<span><strong>' + t('success.dateLabel') + '</strong> ' + new Date(order.timestamp).toLocaleDateString(locale) + '</span>' +
+          '<span><strong>' + t('success.dateLabel') + '</strong> ' + (function () {
+          var ms = typeof AdminView !== 'undefined' && AdminView._orderTimestampMs ? AdminView._orderTimestampMs(order) : 0;
+          if (!ms && order.timestamp) {
+            var d0 = new Date(order.timestamp);
+            ms = isNaN(d0.getTime()) ? 0 : d0.getTime();
+          }
+          return ms ? new Date(ms).toLocaleDateString(locale) : '—';
+        })() + '</span>' +
         '</div>' +
         '<table><thead><tr>' +
           '<th>' + t('common.sku') + '</th><th>' + t('success.productName') + '</th><th>' + t('success.unitPrice') + '</th><th>' + t('common.qty') + '</th><th>' + t('success.totalCol') + '</th><th>' + t('success.discountCol') + '</th><th>' + t('success.totalPayCol') + '</th>' +

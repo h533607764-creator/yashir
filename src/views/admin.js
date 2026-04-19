@@ -13,6 +13,24 @@ var AdminView = {
   _tab: 'orders',
   _ordersUnsub: null,
   _lastOrders: [],
+  _ORDERS_QUERY_LIMIT: 50,
+
+  _orderTimestampMs: function (o) {
+    if (!o) return 0;
+    var ts = o.timestamp;
+    if (ts == null || ts === '') return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (typeof ts === 'object' && typeof ts.seconds === 'number') {
+      return ts.seconds * 1000 + (ts.nanoseconds || 0) / 1e6;
+    }
+    var d = new Date(ts);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  },
+
+  _orderDateDisplay: function (o) {
+    var ms = AdminView._orderTimestampMs(o);
+    return ms ? App.dateFmt(new Date(ms)) : '—';
+  },
 
   render: function (el, params) {
     params = params || {};
@@ -86,7 +104,7 @@ var AdminView = {
       AdminView._lastOrders = all;
       var newCount = all.filter(function (o) { return o.status === 'new'; }).length;
       var rows = all.length ? all.map(function (o) {
-        var d = App.dateFmt(o.timestamp);
+        var d = AdminView._orderDateDisplay(o);
         var paid = o.paymentStatus === 'paid';
         var ph = (o.customerPhone || '').replace(/'/g, '');
         var sOpts = Object.keys(SL).map(function (s) {
@@ -120,15 +138,11 @@ var AdminView = {
     }
 
     if (window.DB) {
-      /* orderBy(timestamp) omits docs without that field — stats/list would show a subset */
       AdminView._ordersUnsub = window.DB.collection('orders')
+        .orderBy('timestamp', 'desc')
+        .limit(AdminView._ORDERS_QUERY_LIMIT)
         .onSnapshot(function (snap) {
           var all = []; snap.forEach(function (d) { all.push(d.data()); });
-          all.sort(function (a, b) {
-            var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-            var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-            return tb - ta;
-          });
           App.Store.set('orders', all);
           renderOrders(all);
         }, function () { renderOrders(App.Orders.getAll()); });
@@ -150,7 +164,11 @@ var AdminView = {
 
   _checkNewOrders: function () {
     if (!window.DB) return;
-    window.DB.collection('orders').where('status', '==', 'new').get()
+    window.DB.collection('orders')
+      .where('status', '==', 'new')
+      .orderBy('timestamp', 'desc')
+      .limit(AdminView._ORDERS_QUERY_LIMIT)
+      .get()
       .then(function (snap) {
         if (snap.empty) return;
         App.showModal(
@@ -1240,15 +1258,13 @@ var AdminView = {
   _stats: function (c) {
     if (window.DB) {
       c.innerHTML = '<div class="admin-section"><div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div></div>';
-      window.DB.collection('orders').get()
+      window.DB.collection('orders')
+        .orderBy('timestamp', 'desc')
+        .limit(AdminView._ORDERS_QUERY_LIMIT)
+        .get()
         .then(function (snap) {
           var orders = [];
           snap.forEach(function (d) { orders.push(d.data()); });
-          orders.sort(function (a, b) {
-            var ta = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-            var tb = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-            return tb - ta;
-          });
           App.Store.set('orders', orders);
           AdminView._statsRender(c, orders);
         })
@@ -1261,7 +1277,12 @@ var AdminView = {
   _statsRender: function (c, orders) {
     var now = new Date();
     var m = now.getMonth(), y = now.getFullYear();
-    var monthly = orders.filter(function (o) { var d = new Date(o.timestamp); return d.getMonth() === m && d.getFullYear() === y; });
+    var monthly = orders.filter(function (o) {
+      var ms = AdminView._orderTimestampMs(o);
+      if (!ms) return false;
+      var d = new Date(ms);
+      return d.getMonth() === m && d.getFullYear() === y;
+    });
     var allTime  = orders;
 
     function topProduct(list) {
