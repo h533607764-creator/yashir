@@ -14,6 +14,12 @@ var AdminView = {
   _ordersUnsub: null,
   _lastOrders: [],
   _ORDERS_QUERY_LIMIT: 50,
+  /** Stats/financial: rolling window; ISO lower bound matches string timestamps on orders. */
+  _STATS_QUERY_LOOKBACK_DAYS: 90,
+
+  _statsOrdersStartISO: function () {
+    return new Date(Date.now() - AdminView._STATS_QUERY_LOOKBACK_DAYS * 864e5).toISOString();
+  },
 
   _orderTimestampMs: function (o) {
     if (!o) return 0;
@@ -1258,9 +1264,10 @@ var AdminView = {
   _stats: function (c) {
     if (window.DB) {
       c.innerHTML = '<div class="admin-section"><div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div></div>';
+      var START_DATE = AdminView._statsOrdersStartISO();
       window.DB.collection('orders')
+        .where('timestamp', '>=', START_DATE)
         .orderBy('timestamp', 'desc')
-        .limit(AdminView._ORDERS_QUERY_LIMIT)
         .get()
         .then(function (snap) {
           var orders = [];
@@ -1275,6 +1282,7 @@ var AdminView = {
   },
 
   _statsRender: function (c, orders) {
+    orders = (orders || []).filter(function (o) { return AdminView._orderTimestampMs(o) > 0; });
     var now = new Date();
     var m = now.getMonth(), y = now.getFullYear();
     var monthly = orders.filter(function (o) {

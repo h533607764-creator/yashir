@@ -9,18 +9,26 @@ var AdminFinancial = {
   render: function (c) {
     c.innerHTML = '<div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div>';
 
-    var ordLim = (typeof AdminView !== 'undefined' && AdminView._ORDERS_QUERY_LIMIT) ? AdminView._ORDERS_QUERY_LIMIT : 50;
+    var startISO = (typeof AdminView !== 'undefined' && AdminView._statsOrdersStartISO)
+      ? AdminView._statsOrdersStartISO()
+      : new Date(Date.now() - 90 * 864e5).toISOString();
     var loadO = window.DB
-      ? window.DB.collection('orders').orderBy('timestamp', 'desc').limit(ordLim).get()
+      ? window.DB.collection('orders')
+          .where('timestamp', '>=', startISO)
+          .orderBy('timestamp', 'desc')
+          .get()
       : Promise.resolve({ docs: [] });
     var loadT = window.DB ? window.DB.collection('transactions').get() : Promise.resolve({ docs: [] });
 
     Promise.all([loadO, loadT]).then(function (res) {
-      AdminFinancial._orders = res[0].docs.map(function (d) { return d.data(); });
+      AdminFinancial._orders = res[0].docs.map(function (d) { return d.data(); })
+        .filter(function (o) { return typeof AdminView !== 'undefined' && AdminView._orderTimestampMs ? AdminView._orderTimestampMs(o) > 0 : true; });
       AdminFinancial._transactions = res[1].docs.map(function (d) { return Object.assign({ _id: d.id }, d.data()); });
       AdminFinancial._renderPanel(c);
     }).catch(function () {
-      AdminFinancial._orders = App.Orders.getAll();
+      AdminFinancial._orders = App.Orders.getAll().filter(function (o) {
+        return typeof AdminView !== 'undefined' && AdminView._orderTimestampMs ? AdminView._orderTimestampMs(o) > 0 : true;
+      });
       AdminFinancial._transactions = [];
       AdminFinancial._renderPanel(c);
     });
