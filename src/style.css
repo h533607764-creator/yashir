@@ -762,6 +762,31 @@ html[dir="ltr"] .form-group label { text-align: left; }
 .sys-message h3 { font-size: 20px; font-weight: 800; }
 .sys-message p  { font-size: 15px; color: var(--text-muted); line-height: 1.6; }
 
+/* Price update acknowledgement (plan is computed before modal; UI is display-only) */
+.price-plan-modal { align-items: stretch; text-align: start; width: 100%; max-width: 100%; }
+.price-plan-modal > h3,
+.price-plan-intro { text-align: center; align-self: center; }
+.price-plan-intro { font-size: 15px; color: var(--text-muted); line-height: 1.45; margin: 0 0 12px; }
+.price-plan-row { padding: 12px 0; font-size: 15px; line-height: 1.65; }
+.price-plan-row-border { border-top: 1px solid var(--border); }
+.price-plan-name { margin: 0 0 6px; }
+.price-plan-qty { margin: 0 0 8px; font-size: 14px; color: var(--text-muted); }
+.price-plan-prices { margin: 0 0 6px; }
+.price-plan-old { text-decoration: line-through; color: var(--text-muted); font-weight: 600; }
+.price-plan-new { color: var(--orange); font-weight: 800; }
+.price-plan-arrow { color: var(--text-muted); font-weight: 600; }
+.price-plan-diff-line { margin: 0; font-size: 14px; }
+.price-plan-diff-up { color: var(--orange); font-weight: 800; }
+.price-plan-diff-down { color: var(--green); font-weight: 800; }
+.price-plan-line-impact { color: var(--text-muted); font-size: 13px; font-weight: 500; }
+.price-plan-total-impact {
+  margin-top: 14px; padding: 14px; border-radius: var(--radius-sm);
+  background: var(--navy-light); border: 1px solid var(--border);
+  font-size: 16px; text-align: center;
+}
+.price-plan-total-note { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-top: 8px; }
+.price-plan-confirm-btn { margin-top: 18px; }
+
 /* ===== TOAST ===== */
 #toast-wrap { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 500; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .toast {

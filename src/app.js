@@ -109,6 +109,8 @@ var App = (function () {
       state.currentUser = null;
       state.cart = [];
       state.pricingPlan = null;
+      _deferredSubmitAfterPricingAck = false;
+      _deferredOrderNotes = '';
       Store.del('remember');
       try {
         sessionStorage.removeItem('yashir_sess_hp');
@@ -386,6 +388,11 @@ var App = (function () {
   var Orders = {
     submit: function (notes) {
       if (!Auth.isCustomer() || state.cart.length === 0) return;
+      if (_cartRepricePromptPromise) {
+        _deferredOrderNotes = notes;
+        _deferredSubmitAfterPricingAck = true;
+        return;
+      }
       var customer = state.currentUser.customer;
       var PR = window.PRODUCTS || [];
       var PRICE_EPS = 0.02;
@@ -405,19 +412,29 @@ var App = (function () {
         if (Math.abs(exp - cl.unitPrice) > PRICE_EPS) {
           var submitPlan = buildPricingPlanFromCart();
           if (!submitPlan.hasChanges) {
+            var _sq = parseInt(cl.qty, 10);
+            if (isNaN(_sq) || _sq < 1) _sq = 1;
+            _sq = Math.min(999, _sq);
+            var _sd = parseFloat((exp - cl.unitPrice).toFixed(2));
+            var _sImpact = parseFloat((_sd * _sq).toFixed(2));
             submitPlan = {
               hasChanges: true,
               changes: [{
                 product: fr,
                 oldPrice: cl.unitPrice,
                 newPrice: exp,
-                diff: parseFloat((exp - cl.unitPrice).toFixed(2))
-              }]
+                diff: _sd,
+                qty: _sq,
+                lineTotalImpact: _sImpact
+              }],
+              totalCartImpact: _sImpact
             };
           }
+          _deferredOrderNotes = notes;
+          _deferredSubmitAfterPricingAck = true;
           state.pricingPlan = submitPlan;
-          modalShowPricingPlan(submitPlan).then(function () {
-            applyPricingPlan(submitPlan);
+          _cartRepricePromptPromise = modalShowPricingPlan(submitPlan).then(function () {
+            _afterPricingModalAck(submitPlan);
           });
           return;
         }
@@ -872,10 +889,11 @@ var App = (function () {
 
   var _priceChangeAckResolve = null;
 
-  /** Display-only: shows precomputed pricing plan; does not compute or apply prices. */
+  /** Display-only: shows precomputed pricing plan; does not compute or apply prices. Blocking until dismissed. */
   function modalShowPricingPlan(plan) {
-    plan = plan || { changes: [] };
+    plan = plan || { changes: [], totalCartImpact: 0 };
     var list = plan.changes || [];
+    var totalImpact = typeof plan.totalCartImpact === 'number' && !Number.isNaN(plan.totalCartImpact) ? plan.totalCartImpact : 0;
     return new Promise(function (resolve) {
       _priceChangeAckResolve = resolve;
       var rows = '';
@@ -886,23 +904,49 @@ var App = (function () {
         if (Number.isNaN(diff)) diff = 0;
         var diffSign = diff >= 0 ? '+' : '−';
         var diffBody = diffSign + '₪' + fmtP(Math.abs(diff));
+        var lineImp = c.lineTotalImpact;
+        if (lineImp === undefined || lineImp === null) {
+          var qx = c.qty != null ? c.qty : 1;
+          lineImp = parseFloat((diff * qx).toFixed(2));
+        }
+        var lineImpSign = lineImp >= 0 ? '+' : '−';
+        var lineImpStr = lineImpSign + '₪' + fmtP(Math.abs(lineImp));
+        var qtyVal = c.qty != null ? c.qty : 1;
         rows +=
-          '<div style="' + (i > 0 ? 'border-top:1px solid var(--border);' : '') + 'padding:10px 0;line-height:1.65;font-size:15px">' +
-            '<p style="margin:6px 0"><strong>' + escHTML(t('cart.priceAckProduct')) + '</strong> ' + escHTML(name) + '</p>' +
-            '<p style="margin:6px 0"><strong>' + escHTML(t('cart.priceAckOld')) + '</strong> ₪' + fmtP(c.oldPrice) + '</p>' +
-            '<p style="margin:6px 0"><strong>' + escHTML(t('cart.priceAckNew')) + '</strong> ₪' + fmtP(c.newPrice) + '</p>' +
-            '<p style="margin:6px 0"><strong>' + escHTML(t('cart.priceAckDiff')) + '</strong> ' + escHTML(diffBody) + '</p>' +
+          '<div class="price-plan-row' + (i > 0 ? ' price-plan-row-border' : '') + '">' +
+            '<p class="price-plan-name"><strong>' + escHTML(t('cart.priceAckProduct')) + '</strong> ' + escHTML(name) + '</p>' +
+            '<p class="price-plan-qty"><strong>' + escHTML(t('cart.pricePlanQty')) + '</strong> ' + escHTML(String(qtyVal)) + '</p>' +
+            '<p class="price-plan-prices">' +
+              '<strong>' + escHTML(t('cart.priceAckOld')) + '</strong> ' +
+              '<span class="price-plan-old">₪' + fmtP(c.oldPrice) + t('cart.perUnit') + '</span>' +
+              ' <span class="price-plan-arrow" aria-hidden="true">→</span> ' +
+              '<strong>' + escHTML(t('cart.priceAckNew')) + '</strong> ' +
+              '<span class="price-plan-new">₪' + fmtP(c.newPrice) + t('cart.perUnit') + '</span>' +
+            '</p>' +
+            '<p class="price-plan-diff-line"><strong>' + escHTML(t('cart.priceAckDiff')) + '</strong> ' +
+              '<span class="' + (diff >= 0 ? 'price-plan-diff-up' : 'price-plan-diff-down') + '">' + escHTML(diffBody) + '</span>' +
+              ' <span class="price-plan-line-impact">(' + escHTML(t('cart.pricePlanLineImpact')) + ' ' + escHTML(lineImpStr) + ')</span></p>' +
           '</div>';
       }
+      var totalSign = totalImpact >= 0 ? '+' : '−';
+      var totalStr = totalSign + '₪' + fmtP(Math.abs(totalImpact));
+      var totalRow =
+        list.length > 0
+          ? '<div class="price-plan-total-impact"><strong>' + escHTML(t('cart.pricePlanTotalImpact')) + '</strong> ' +
+            '<span class="' + (totalImpact >= 0 ? 'price-plan-diff-up' : 'price-plan-diff-down') + '">' + escHTML(totalStr) + '</span>' +
+            '<span class="price-plan-total-note">' + escHTML(t('cart.pricePlanTotalNote')) + '</span></div>'
+          : '';
       showModal(
-        '<div class="sys-message">' +
+        '<div class="sys-message price-plan-modal">' +
           '<h3 style="margin-top:0">' + escHTML(t('cart.priceAckTitle')) + '</h3>' +
-          '<p style="text-align:center;margin:0 0 8px;font-size:15px;line-height:1.45">' + escHTML(t('cart.pricePlanIntro')) + '</p>' +
+          '<p class="price-plan-intro">' + escHTML(t('cart.pricePlanIntro')) + '</p>' +
           rows +
-          '<button type="button" class="btn-primary full-width" style="margin-top:16px" onclick="App._priceChangeAckDone()">' + escHTML(t('cart.priceAckContinue')) + '</button>' +
+          totalRow +
+          '<button type="button" class="btn-primary full-width price-plan-confirm-btn" onclick="App._priceChangeAckDone()">' + escHTML(t('cart.priceAckContinue')) + '</button>' +
         '</div>',
         { priceAckClose: true }
       );
+      if (state.cartOpen && typeof CartView !== 'undefined' && CartView.renderPanel) CartView.renderPanel();
     });
   }
 
@@ -1087,7 +1131,7 @@ var App = (function () {
           : parseFloat(rawPrev != null ? String(rawPrev).replace(',', '.') : '0');
       if (Number.isNaN(prevNum)) prevNum = 0;
       if (Math.abs(prevNum - ep) > threshold) {
-        out.push({ product: p, oldPrice: prevNum, newPrice: ep });
+        out.push({ product: p, oldPrice: prevNum, newPrice: ep, qty: q });
       }
     }
     return out;
@@ -1101,14 +1145,26 @@ var App = (function () {
   function buildPricingPlanFromCart() {
     var lines = getCartDriftLines();
     var changes = lines.map(function (d) {
+      var qty = d.qty != null ? d.qty : 1;
+      var diff = parseFloat((d.newPrice - d.oldPrice).toFixed(2));
+      var lineTotalImpact = parseFloat((diff * qty).toFixed(2));
       return {
         product: d.product,
         oldPrice: d.oldPrice,
         newPrice: d.newPrice,
-        diff: parseFloat((d.newPrice - d.oldPrice).toFixed(2))
+        diff: diff,
+        qty: qty,
+        lineTotalImpact: lineTotalImpact
       };
     });
-    return { hasChanges: changes.length > 0, changes: changes };
+    var totalCartImpact = changes.reduce(function (s, c) {
+      return s + c.lineTotalImpact;
+    }, 0);
+    return {
+      hasChanges: changes.length > 0,
+      changes: changes,
+      totalCartImpact: parseFloat(totalCartImpact.toFixed(2))
+    };
   }
 
   /** Apply system prices to cart; clears pending pricingPlan. */
@@ -1118,9 +1174,27 @@ var App = (function () {
   }
 
   var _cartRepricePromptPromise = null;
+  var _deferredOrderNotes = '';
+  var _deferredSubmitAfterPricingAck = false;
+
+  function _afterPricingModalAck(plan) {
+    applyPricingPlan(plan);
+    _cartRepricePromptPromise = null;
+    if (state.cartOpen && typeof CartView !== 'undefined' && CartView.renderPanel) CartView.renderPanel();
+    if (_deferredSubmitAfterPricingAck) {
+      _deferredSubmitAfterPricingAck = false;
+      var n = _deferredOrderNotes;
+      _deferredOrderNotes = '';
+      Orders.submit(typeof n === 'string' ? n : '');
+    }
+  }
+
+  function pricingAckPending() {
+    return !!_cartRepricePromptPromise;
+  }
 
   /**
-   * Firestore/customer pricing context: build plan first; if drift, store plan + show display-only ack, then applyPricingPlan(plan).
+   * Firestore/customer pricing context: build plan first; if drift, store plan + blocking ack UI, then applyPricingPlan(plan).
    */
   function maybeRepriceCartAfterPricingChange() {
     if (!Auth.isCustomer() || !state.cart.length) {
@@ -1135,8 +1209,7 @@ var App = (function () {
     if (_cartRepricePromptPromise) return _cartRepricePromptPromise;
     state.pricingPlan = plan;
     _cartRepricePromptPromise = modalShowPricingPlan(plan).then(function () {
-      _cartRepricePromptPromise = null;
-      applyPricingPlan(plan);
+      _afterPricingModalAck(plan);
     });
     return _cartRepricePromptPromise;
   }
@@ -1239,6 +1312,7 @@ var App = (function () {
     buildPricingPlanFromCart: buildPricingPlanFromCart,
     applyPricingPlan: applyPricingPlan,
     maybeRepriceCartAfterPricingChange: maybeRepriceCartAfterPricingChange,
+    pricingAckPending: pricingAckPending,
     _priceChangeAckDone: _priceChangeAckDone
   };
 })();

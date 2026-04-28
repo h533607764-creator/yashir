@@ -104,7 +104,10 @@ var CartView = {
         ? '<div class="shipping-notice"><span class="material-icons-round">info</span> ' + t('cart.moreForFreeShipping') + ' ₪' + remaining + ' ' + t('cart.forFreeShipping') + '</div>'
         : (App.state.cart.length > 0 ? '<div class="free-shipping-notice"><span class="material-icons-round">local_shipping</span> ' + t('cart.freeShipping') + '</div>' : '')) +
       '<div class="cart-notes"><label>' + t('cart.orderNotes') + '</label><textarea id="cv-notes" placeholder="' + t('cart.notesPlaceholder') + '" rows="2"></textarea></div>' +
-      '<button class="btn-submit-order" onclick="CartView.submit()" ' + (App.state.cart.length === 0 ? 'disabled style="opacity:.4"' : '') + '>' +
+      '<button class="btn-submit-order" onclick="CartView.submit()" ' +
+        (App.state.cart.length === 0 || (typeof App.pricingAckPending === 'function' && App.pricingAckPending())
+          ? 'disabled style="opacity:.4"'
+          : '') + '>' +
         '<span class="material-icons-round">send</span> ' + t('cart.submitOrder') +
       '</button>';
   },
