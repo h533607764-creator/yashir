@@ -27,6 +27,8 @@ var App = (function () {
     currentView: 'landing',
     cart: [],
     cartOpen: false,
+    /** Last computed pricing drift plan { hasChanges, changes[] }; set before ack UI, cleared in applyPricingPlan. */
+    pricingPlan: null,
     settings: {
       minOrderAmount: 300,
       defaultShippingCost: 45,
@@ -88,6 +90,7 @@ var App = (function () {
       if (!c) return false;
       state.currentUser = { role: 'customer', customer: c };
       state.cart = [];
+      state.pricingPlan = null;
       Cart._restore();
       try { sessionStorage.setItem('yashir_sess_hp', hp); } catch (e) {}
       if (remember) Store.set('remember', { hp: hp, exp: Date.now() + 30 * 864e5 });
@@ -97,6 +100,7 @@ var App = (function () {
       if (pin !== (state.settings.adminPin || ADMIN_CREDENTIALS.pin)) return false;
       state.currentUser = { role: 'admin' };
       state.cart = [];
+      state.pricingPlan = null;
       try { sessionStorage.setItem('yashir_sess_admin', '1'); } catch (e) {}
       return true;
     },
@@ -104,6 +108,7 @@ var App = (function () {
       _tearDownSecretAdmin();
       state.currentUser = null;
       state.cart = [];
+      state.pricingPlan = null;
       Store.del('remember');
       try {
         sessionStorage.removeItem('yashir_sess_hp');
@@ -358,8 +363,10 @@ var App = (function () {
       }).filter(Boolean);
     },
 
-    _repriceAll: function () {
+    /** appliedPlan: optional snapshot from pricing engine (for callers); prices always taken from Pricing + PRODUCTS. */
+    _repriceAll: function (appliedPlan) {
       if (!Auth.isCustomer() || !state.cart.length) return;
+      void appliedPlan;
       var customer = state.currentUser.customer;
       state.cart.forEach(function (item) {
         var fresh = (window.PRODUCTS || []).find(function (x) { return x.id === item.product.id; });
@@ -396,8 +403,21 @@ var App = (function () {
           return;
         }
         if (Math.abs(exp - cl.unitPrice) > PRICE_EPS) {
-          modalInfoPriceChange({ product: fr, oldPrice: cl.unitPrice, newPrice: exp }).then(function () {
-            Cart._repriceAll();
+          var submitPlan = buildPricingPlanFromCart();
+          if (!submitPlan.hasChanges) {
+            submitPlan = {
+              hasChanges: true,
+              changes: [{
+                product: fr,
+                oldPrice: cl.unitPrice,
+                newPrice: exp,
+                diff: parseFloat((exp - cl.unitPrice).toFixed(2))
+              }]
+            };
+          }
+          state.pricingPlan = submitPlan;
+          modalShowPricingPlan(submitPlan).then(function () {
+            applyPricingPlan(submitPlan);
           });
           return;
         }
@@ -852,31 +872,34 @@ var App = (function () {
 
   var _priceChangeAckResolve = null;
 
-  /** Mandatory acknowledgement: X / backdrop / button all continue (no reject). Resolves when dismissed. */
-  function modalInfoPriceChange(payload) {
-    var product = payload && payload.product;
-    var oldPrice = payload && payload.oldPrice;
-    var newPrice = payload && payload.newPrice;
+  /** Display-only: shows precomputed pricing plan; does not compute or apply prices. */
+  function modalShowPricingPlan(plan) {
+    plan = plan || { changes: [] };
+    var list = plan.changes || [];
     return new Promise(function (resolve) {
       _priceChangeAckResolve = resolve;
-      var name = pLang(product, 'name') || '—';
-      var oldNum = typeof oldPrice === 'number' ? oldPrice : parseFloat(oldPrice);
-      var newNum = typeof newPrice === 'number' ? newPrice : parseFloat(newPrice);
-      if (Number.isNaN(oldNum)) oldNum = 0;
-      if (Number.isNaN(newNum)) newNum = 0;
-      var diff = newNum - oldNum;
-      var diffSign = diff >= 0 ? '+' : '−';
-      var diffBody = diffSign + '₪' + fmtP(Math.abs(diff));
+      var rows = '';
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        var name = pLang(c.product, 'name') || '—';
+        var diff = c.diff !== undefined && c.diff !== null ? c.diff : (Number(c.newPrice) - Number(c.oldPrice));
+        if (Number.isNaN(diff)) diff = 0;
+        var diffSign = diff >= 0 ? '+' : '−';
+        var diffBody = diffSign + '₪' + fmtP(Math.abs(diff));
+        rows +=
+          '<div style="' + (i > 0 ? 'border-top:1px solid var(--border);' : '') + 'padding:10px 0;line-height:1.65;font-size:15px">' +
+            '<p style="margin:6px 0"><strong>' + escHTML(t('cart.priceAckProduct')) + '</strong> ' + escHTML(name) + '</p>' +
+            '<p style="margin:6px 0"><strong>' + escHTML(t('cart.priceAckOld')) + '</strong> ₪' + fmtP(c.oldPrice) + '</p>' +
+            '<p style="margin:6px 0"><strong>' + escHTML(t('cart.priceAckNew')) + '</strong> ₪' + fmtP(c.newPrice) + '</p>' +
+            '<p style="margin:6px 0"><strong>' + escHTML(t('cart.priceAckDiff')) + '</strong> ' + escHTML(diffBody) + '</p>' +
+          '</div>';
+      }
       showModal(
         '<div class="sys-message">' +
           '<h3 style="margin-top:0">' + escHTML(t('cart.priceAckTitle')) + '</h3>' +
-          '<div style="width:100%;line-height:1.65;font-size:15px;margin-bottom:16px">' +
-            '<p style="margin:8px 0"><strong>' + escHTML(t('cart.priceAckProduct')) + '</strong> ' + escHTML(name) + '</p>' +
-            '<p style="margin:8px 0"><strong>' + escHTML(t('cart.priceAckOld')) + '</strong> ₪' + fmtP(oldNum) + '</p>' +
-            '<p style="margin:8px 0"><strong>' + escHTML(t('cart.priceAckNew')) + '</strong> ₪' + fmtP(newNum) + '</p>' +
-            '<p style="margin:8px 0"><strong>' + escHTML(t('cart.priceAckDiff')) + '</strong> ' + escHTML(diffBody) + '</p>' +
-          '</div>' +
-          '<button type="button" class="btn-primary full-width" onclick="App._priceChangeAckDone()">' + escHTML(t('cart.priceAckContinue')) + '</button>' +
+          '<p style="text-align:center;margin:0 0 8px;font-size:15px;line-height:1.45">' + escHTML(t('cart.pricePlanIntro')) + '</p>' +
+          rows +
+          '<button type="button" class="btn-primary full-width" style="margin-top:16px" onclick="App._priceChangeAckDone()">' + escHTML(t('cart.priceAckContinue')) + '</button>' +
         '</div>',
         { priceAckClose: true }
       );
@@ -898,7 +921,7 @@ var App = (function () {
     _hideModalLayer();
   }
 
-  var Modal = { infoPriceChange: modalInfoPriceChange };
+  var Modal = { showPricingPlan: modalShowPricingPlan };
 
   /* ===== TOAST ===== */
   function toast(msg, type) {
@@ -1074,33 +1097,47 @@ var App = (function () {
     return getCartDriftLines().length > 0;
   }
 
+  /** Pure pricing engine output: drift vs getEffectiveUnitPrice (no UI). */
+  function buildPricingPlanFromCart() {
+    var lines = getCartDriftLines();
+    var changes = lines.map(function (d) {
+      return {
+        product: d.product,
+        oldPrice: d.oldPrice,
+        newPrice: d.newPrice,
+        diff: parseFloat((d.newPrice - d.oldPrice).toFixed(2))
+      };
+    });
+    return { hasChanges: changes.length > 0, changes: changes };
+  }
+
+  /** Apply system prices to cart; clears pending pricingPlan. */
+  function applyPricingPlan(plan) {
+    state.pricingPlan = null;
+    Cart._repriceAll(plan);
+  }
+
   var _cartRepricePromptPromise = null;
 
   /**
-   * After Firestore/customer pricing changes: reprice immediately if cart matches system prices;
-   * otherwise show mandatory acknowledgement (per drift line), then always Cart._repriceAll().
+   * Firestore/customer pricing context: build plan first; if drift, store plan + show display-only ack, then applyPricingPlan(plan).
    */
   function maybeRepriceCartAfterPricingChange() {
     if (!Auth.isCustomer() || !state.cart.length) {
       Cart._repriceAll();
       return Promise.resolve();
     }
-    var drifts = getCartDriftLines();
-    if (!drifts.length) {
+    var plan = buildPricingPlanFromCart();
+    if (!plan.hasChanges) {
       Cart._repriceAll();
       return Promise.resolve();
     }
     if (_cartRepricePromptPromise) return _cartRepricePromptPromise;
-    _cartRepricePromptPromise = drifts
-      .reduce(function (seq, d) {
-        return seq.then(function () {
-          return modalInfoPriceChange({ product: d.product, oldPrice: d.oldPrice, newPrice: d.newPrice });
-        });
-      }, Promise.resolve())
-      .then(function () {
-        _cartRepricePromptPromise = null;
-        Cart._repriceAll();
-      });
+    state.pricingPlan = plan;
+    _cartRepricePromptPromise = modalShowPricingPlan(plan).then(function () {
+      _cartRepricePromptPromise = null;
+      applyPricingPlan(plan);
+    });
     return _cartRepricePromptPromise;
   }
 
@@ -1199,6 +1236,8 @@ var App = (function () {
     updateOrderPayment: Orders.updatePayment,
     hasCartLineDriftVersusEffectivePricing: hasCartLineDriftVersusEffectivePricing,
     getCartDriftLines: getCartDriftLines,
+    buildPricingPlanFromCart: buildPricingPlanFromCart,
+    applyPricingPlan: applyPricingPlan,
     maybeRepriceCartAfterPricingChange: maybeRepriceCartAfterPricingChange,
     _priceChangeAckDone: _priceChangeAckDone
   };

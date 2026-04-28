@@ -128,7 +128,7 @@ var SHIPPING_PRODUCT = {
   bulkDiscounts:[]
 };
 
-/* Addon: cart unitPrice vs effective — App.maybeRepriceCartAfterPricingChange (mandatory price-ack modal before _repriceAll). See app.js */
+/* Addon: pricing plan + display-only ack — App.maybeRepriceCartAfterPricingChange. See app.js */
 var _productsInitialSnapshotPending = true;
 
 /* ===================================================
