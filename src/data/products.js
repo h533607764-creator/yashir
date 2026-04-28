@@ -128,43 +128,8 @@ var SHIPPING_PRODUCT = {
   bulkDiscounts:[]
 };
 
-/* Addon: detect catalog price changes before Cart._repriceAll (does not replace Pricing). */
-/* First non-empty products snapshot = initial sync only — no cart pricing toast. */
+/* Addon: toast if cart unitPrice stale vs effective (before Cart._repriceAll). Exported on App — see app.js */
 var _productsInitialSnapshotPending = true;
-
-function _notifyCartIfEffectivePriceChangedFromCatalog(previousProducts, incomingLoaded) {
-  if (!window.App || !App.Auth || !App.Auth.isCustomer()) return;
-  if (!App.state || !App.state.cart || !App.state.cart.length) return;
-  if (!previousProducts || !previousProducts.length || !incomingLoaded || !incomingLoaded.length) return;
-
-  var customer = App.state.currentUser.customer;
-  var pricing = App.Pricing;
-  var threshold = 0.01;
-  var lineChanged = false;
-
-  for (var i = 0; i < App.state.cart.length; i++) {
-    var item = App.state.cart[i];
-    var pid = item.product && item.product.id;
-    if (!pid) continue;
-    var oldP = previousProducts.find(function (x) { return x.id === pid; });
-    var newP = incomingLoaded.find(function (x) { return x.id === pid; });
-    if (!oldP || !newP) continue;
-    var q = parseInt(item.qty, 10);
-    if (isNaN(q) || q < 1) q = 1;
-    q = Math.min(999, q);
-    var epOld = pricing.getEffectiveUnitPrice(oldP, customer, q);
-    var epNew = pricing.getEffectiveUnitPrice(newP, customer, q);
-    if (epOld === null || epNew === null) continue;
-    if (Math.abs(epOld - epNew) > threshold) {
-      lineChanged = true;
-      break;
-    }
-  }
-
-  if (lineChanged && typeof App.toast === 'function' && typeof t === 'function') {
-    App.toast(t('cart.priceUpdatedPerPriceList'), 'warning');
-  }
-}
 
 /* ===================================================
    טעינת מוצרים מ-Firestore
@@ -198,14 +163,12 @@ function loadProductsFromFirestore(onSuccess, onError) {
       var loaded = [];
       snapshot.forEach(function (doc) { loaded.push(doc.data()); });
       loaded.sort(function (a, b) { return String(a.sku || '').localeCompare(String(b.sku || ''), undefined, { numeric: true }); });
-      var previousProductsShallow =
-        window.PRODUCTS && window.PRODUCTS.length ? window.PRODUCTS.slice() : [];
       setYashirProductsList(loaded);
       try { localStorage.setItem('yashir_products', JSON.stringify(loaded)); } catch (e) {}
       if (_productsInitialSnapshotPending) {
         _productsInitialSnapshotPending = false;
       } else {
-        _notifyCartIfEffectivePriceChangedFromCatalog(previousProductsShallow, loaded);
+        if (window.App && typeof App.toastIfCartLineDriftVersusEffectivePricing === 'function') App.toastIfCartLineDriftVersusEffectivePricing();
       }
       if (window.App && App.Cart && App.Cart._repriceAll) App.Cart._repriceAll();
       onSuccess && onSuccess();

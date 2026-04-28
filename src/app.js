@@ -980,6 +980,48 @@ var App = (function () {
     }
   }
 
+  var _cartStalePriceWarnTimer = null;
+
+  /** Compare stored cart line unitPrice vs Pricing.getEffectiveUnitPrice (current PRODUCTS + customer). Call before Cart._repriceAll. */
+  function toastIfCartLineDriftVersusEffectivePricing() {
+    if (!Auth.isCustomer() || !state.cart.length) return;
+    var customer = state.currentUser.customer;
+    var PR = window.PRODUCTS || [];
+    if (!PR.length) return;
+    var threshold = 0.01;
+    var drift = false;
+    for (var i = 0; i < state.cart.length; i++) {
+      var item = state.cart[i];
+      var pid = item.product && item.product.id;
+      if (!pid) continue;
+      var p = PR.find(function (x) {
+        return x.id === pid;
+      });
+      if (!p) continue;
+      var q = parseInt(item.qty, 10);
+      if (isNaN(q) || q < 1) q = 1;
+      q = Math.min(999, q);
+      var ep = Pricing.getEffectiveUnitPrice(p, customer, q);
+      if (ep === null) continue;
+      var raw = item.unitPrice;
+      var cartLine =
+        typeof raw === 'number' && !Number.isNaN(raw)
+          ? raw
+          : parseFloat(raw != null ? String(raw).replace(',', '.') : '0');
+      if (Number.isNaN(cartLine)) cartLine = 0;
+      if (Math.abs(cartLine - ep) > threshold) {
+        drift = true;
+        break;
+      }
+    }
+    if (!drift) return;
+    clearTimeout(_cartStalePriceWarnTimer);
+    _cartStalePriceWarnTimer = setTimeout(function () {
+      _cartStalePriceWarnTimer = null;
+      toast(t('cart.priceUpdatedPerPriceList'), 'warning');
+    }, 120);
+  }
+
   /* ===== INIT ===== */
   function init() {
     loadData();
@@ -1021,6 +1063,7 @@ var App = (function () {
               return c.id === state.currentUser.customer.id;
             });
             if (fresh) state.currentUser.customer = fresh;
+            toastIfCartLineDriftVersusEffectivePricing();
             Cart._repriceAll();
           }
         }
@@ -1033,6 +1076,7 @@ var App = (function () {
               return c.id === state.currentUser.customer.id;
             });
             if (freshCu) state.currentUser.customer = freshCu;
+            toastIfCartLineDriftVersusEffectivePricing();
             Cart._repriceAll();
           }
           var elCat = document.getElementById('view-content');
@@ -1072,6 +1116,7 @@ var App = (function () {
     checkLowStock: checkLowStock,
     _logoClick: _logoClick, _showSecretAdmin: _showSecretAdmin, _secretLogin: _secretLogin,
     updateOrderStatus: Orders.updateStatus,
-    updateOrderPayment: Orders.updatePayment
+    updateOrderPayment: Orders.updatePayment,
+    toastIfCartLineDriftVersusEffectivePricing: toastIfCartLineDriftVersusEffectivePricing
   };
 })();
