@@ -162,8 +162,10 @@ function loadProductsFromFirestore(onSuccess, onError) {
       loaded.sort(function (a, b) { return String(a.sku || '').localeCompare(String(b.sku || ''), undefined, { numeric: true }); });
       setYashirProductsList(loaded);
       try { localStorage.setItem('yashir_products', JSON.stringify(loaded)); } catch (e) {}
-      onSuccess && onSuccess();
+      /* Cart must reprices ONCE before onSuccess — init callback used to call _repriceAll too,
+         so the second pass saw identical old/new unitPrice and swallowed the price warning. */
       if (window.App && App.Cart && App.Cart._repriceAll) App.Cart._repriceAll();
+      onSuccess && onSuccess();
       if (
         window.App &&
         App.state &&

@@ -1025,7 +1025,6 @@ var App = (function () {
       loadProductsFromFirestore(
         function () {
           App.Store.set('products', window.PRODUCTS);
-          Cart._repriceAll();
           var el = document.getElementById('view-content');
           if (el && state.currentView === 'catalog') {
             var _cp = {};
