@@ -235,7 +235,12 @@ var I18n = (function () {
     'cart.orderSaveFailed': 'לא ניתן לשמור את ההזמנה. בדוק את החיבור לרשת ונסה שוב.',
     'cart.priceMismatchRepriced': 'המחירים עודכנו — בדקו את העגלה ונסו שוב.',
     'cart.priceUpdatedPerPriceList': 'מחיר מוצר עודכן לפי המחירון העדכני',
-    'cart.priceDriftConfirm': 'מחיר מוצר עודכן. האם לעדכן את המחיר בעגלה?',
+    'cart.priceAckTitle': 'עדכון מחיר',
+    'cart.priceAckProduct': 'המוצר:',
+    'cart.priceAckOld': 'מחיר קודם:',
+    'cart.priceAckNew': 'מחיר חדש:',
+    'cart.priceAckDiff': 'שינוי:',
+    'cart.priceAckContinue': 'הבנתי / המשך',
     'cart.productMissing': 'מוצר כבר לא זמין. רעננו את הקטלוג.',
 
     /* --- Success --- */
@@ -762,7 +767,12 @@ var I18n = (function () {
     'cart.orderSaveFailed': 'Could not save your order. Check your connection and try again.',
     'cart.priceMismatchRepriced': 'Prices were updated — please review your cart and try again.',
     'cart.priceUpdatedPerPriceList': 'Product price was updated to match the current price list.',
-    'cart.priceDriftConfirm': 'A product price was updated. Update the price in your cart?',
+    'cart.priceAckTitle': 'Price update',
+    'cart.priceAckProduct': 'Product:',
+    'cart.priceAckOld': 'Previous price:',
+    'cart.priceAckNew': 'New price:',
+    'cart.priceAckDiff': 'Change:',
+    'cart.priceAckContinue': 'Got it / Continue',
     'cart.productMissing': 'A product is no longer available. Refresh the catalog.',
 
     /* --- Success --- */

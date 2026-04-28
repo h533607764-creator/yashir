@@ -396,8 +396,8 @@ var App = (function () {
           return;
         }
         if (Math.abs(exp - cl.unitPrice) > PRICE_EPS) {
-          modalConfirm(t('cart.priceDriftConfirm')).then(function (ok) {
-            if (ok) Cart._repriceAll();
+          modalInfoPriceChange({ product: fr, oldPrice: cl.unitPrice, newPrice: exp }).then(function () {
+            Cart._repriceAll();
           });
           return;
         }
@@ -836,10 +836,12 @@ var App = (function () {
   }
 
   /* ===== MODAL ===== */
-  function showModal(html) {
+  function showModal(html, opts) {
+    opts = opts || {};
     var wrap = document.getElementById('modal-wrap');
     var bd   = document.getElementById('overlay-backdrop');
-    wrap.innerHTML = '<div class="modal-box"><button class="modal-close" onclick="App.closeModal()"><span class="material-icons-round">close</span></button>' + html + '</div>';
+    var closeAttr = opts.priceAckClose ? 'App._priceChangeAckDone()' : 'App.closeModal()';
+    wrap.innerHTML = '<div class="modal-box"><button type="button" class="modal-close" onclick="' + closeAttr + '"><span class="material-icons-round">close</span></button>' + html + '</div>';
     wrap.classList.remove('hidden');
     bd.classList.remove('hidden');
   }
@@ -848,52 +850,55 @@ var App = (function () {
     if (!state.cartOpen) document.getElementById('overlay-backdrop').classList.add('hidden');
   }
 
-  var _modalConfirmWaiting = [];
-  var _modalConfirmFinish = null;
+  var _priceChangeAckResolve = null;
 
-  function _pumpModalConfirm() {
-    if (_modalConfirmFinish !== null) return;
-    if (!_modalConfirmWaiting.length) return;
-    var item = _modalConfirmWaiting.shift();
-    _modalConfirmFinish = function (ok) {
-      _modalConfirmFinish = null;
-      item.resolve(ok);
-      _hideModalLayer();
-      _pumpModalConfirm();
-    };
-    showModal(
-      '<div class="sys-message">' +
-        '<p style="text-align:center;margin:0 0 18px;font-size:16px;line-height:1.45">' + escHTML(item.message) + '</p>' +
-        '<div class="modal-confirm-actions" style="display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:12px;justify-content:center;width:100%">' +
-          '<button type="button" class="btn-primary" onclick="App._modalConfirmDone(true)">' + escHTML(t('common.confirm')) + '</button>' +
-          '<button type="button" class="btn-secondary" onclick="App._modalConfirmDone(false)">' + escHTML(t('common.cancel')) + '</button>' +
-        '</div>' +
-      '</div>'
-    );
-  }
-
-  /** Promise-based confirm; same overlay/modal UI as the rest of the app (not window.confirm). */
-  function modalConfirm(message) {
+  /** Mandatory acknowledgement: X / backdrop / button all continue (no reject). Resolves when dismissed. */
+  function modalInfoPriceChange(payload) {
+    var product = payload && payload.product;
+    var oldPrice = payload && payload.oldPrice;
+    var newPrice = payload && payload.newPrice;
     return new Promise(function (resolve) {
-      _modalConfirmWaiting.push({ message: message, resolve: resolve });
-      _pumpModalConfirm();
+      _priceChangeAckResolve = resolve;
+      var name = pLang(product, 'name') || '—';
+      var oldNum = typeof oldPrice === 'number' ? oldPrice : parseFloat(oldPrice);
+      var newNum = typeof newPrice === 'number' ? newPrice : parseFloat(newPrice);
+      if (Number.isNaN(oldNum)) oldNum = 0;
+      if (Number.isNaN(newNum)) newNum = 0;
+      var diff = newNum - oldNum;
+      var diffSign = diff >= 0 ? '+' : '−';
+      var diffBody = diffSign + '₪' + fmtP(Math.abs(diff));
+      showModal(
+        '<div class="sys-message">' +
+          '<h3 style="margin-top:0">' + escHTML(t('cart.priceAckTitle')) + '</h3>' +
+          '<div style="width:100%;line-height:1.65;font-size:15px;margin-bottom:16px">' +
+            '<p style="margin:8px 0"><strong>' + escHTML(t('cart.priceAckProduct')) + '</strong> ' + escHTML(name) + '</p>' +
+            '<p style="margin:8px 0"><strong>' + escHTML(t('cart.priceAckOld')) + '</strong> ₪' + fmtP(oldNum) + '</p>' +
+            '<p style="margin:8px 0"><strong>' + escHTML(t('cart.priceAckNew')) + '</strong> ₪' + fmtP(newNum) + '</p>' +
+            '<p style="margin:8px 0"><strong>' + escHTML(t('cart.priceAckDiff')) + '</strong> ' + escHTML(diffBody) + '</p>' +
+          '</div>' +
+          '<button type="button" class="btn-primary full-width" onclick="App._priceChangeAckDone()">' + escHTML(t('cart.priceAckContinue')) + '</button>' +
+        '</div>',
+        { priceAckClose: true }
+      );
     });
   }
 
-  function _modalConfirmDone(ok) {
-    if (_modalConfirmFinish) _modalConfirmFinish(ok);
-    else _hideModalLayer();
+  function _priceChangeAckDone() {
+    var r = _priceChangeAckResolve;
+    _priceChangeAckResolve = null;
+    _hideModalLayer();
+    if (r) r();
   }
 
   function closeModal() {
-    if (_modalConfirmFinish) {
-      _modalConfirmFinish(false);
+    if (_priceChangeAckResolve) {
+      _priceChangeAckDone();
       return;
     }
     _hideModalLayer();
   }
 
-  var Modal = { confirm: modalConfirm };
+  var Modal = { infoPriceChange: modalInfoPriceChange };
 
   /* ===== TOAST ===== */
   function toast(msg, type) {
@@ -1028,16 +1033,17 @@ var App = (function () {
     }
   }
 
-  /** True if any cart line unitPrice differs from getEffectiveUnitPrice(product, customer, qty). */
-  function hasCartLineDriftVersusEffectivePricing() {
-    if (!Auth.isCustomer() || !state.cart.length) return false;
+  /** Cart lines where unitPrice !== getEffectiveUnitPrice (system price). */
+  function getCartDriftLines() {
+    var out = [];
+    if (!Auth.isCustomer() || !state.cart.length) return out;
     var prevCartPrices = {};
     state.cart.forEach(function (item) {
       if (item.product && item.product.id) prevCartPrices[item.product.id] = item.unitPrice;
     });
     var customer = state.currentUser.customer;
     var PR = window.PRODUCTS || [];
-    if (!PR.length) return false;
+    if (!PR.length) return out;
     var threshold = 0.01;
     for (var i = 0; i < state.cart.length; i++) {
       var item = state.cart[i];
@@ -1057,31 +1063,44 @@ var App = (function () {
           ? rawPrev
           : parseFloat(rawPrev != null ? String(rawPrev).replace(',', '.') : '0');
       if (Number.isNaN(prevNum)) prevNum = 0;
-      if (Math.abs(prevNum - ep) > threshold) return true;
+      if (Math.abs(prevNum - ep) > threshold) {
+        out.push({ product: p, oldPrice: prevNum, newPrice: ep });
+      }
     }
-    return false;
+    return out;
+  }
+
+  function hasCartLineDriftVersusEffectivePricing() {
+    return getCartDriftLines().length > 0;
   }
 
   var _cartRepricePromptPromise = null;
 
   /**
-   * After Firestore/customer pricing context changes: reprice immediately if cart matches effective prices;
-   * otherwise ask for confirmation before Cart._repriceAll().
+   * After Firestore/customer pricing changes: reprice immediately if cart matches system prices;
+   * otherwise show mandatory acknowledgement (per drift line), then always Cart._repriceAll().
    */
   function maybeRepriceCartAfterPricingChange() {
     if (!Auth.isCustomer() || !state.cart.length) {
       Cart._repriceAll();
       return Promise.resolve();
     }
-    if (!hasCartLineDriftVersusEffectivePricing()) {
+    var drifts = getCartDriftLines();
+    if (!drifts.length) {
       Cart._repriceAll();
       return Promise.resolve();
     }
     if (_cartRepricePromptPromise) return _cartRepricePromptPromise;
-    _cartRepricePromptPromise = modalConfirm(t('cart.priceDriftConfirm')).then(function (ok) {
-      _cartRepricePromptPromise = null;
-      if (ok) Cart._repriceAll();
-    });
+    _cartRepricePromptPromise = drifts
+      .reduce(function (seq, d) {
+        return seq.then(function () {
+          return modalInfoPriceChange({ product: d.product, oldPrice: d.oldPrice, newPrice: d.newPrice });
+        });
+      }, Promise.resolve())
+      .then(function () {
+        _cartRepricePromptPromise = null;
+        Cart._repriceAll();
+      });
     return _cartRepricePromptPromise;
   }
 
@@ -1179,7 +1198,8 @@ var App = (function () {
     updateOrderStatus: Orders.updateStatus,
     updateOrderPayment: Orders.updatePayment,
     hasCartLineDriftVersusEffectivePricing: hasCartLineDriftVersusEffectivePricing,
+    getCartDriftLines: getCartDriftLines,
     maybeRepriceCartAfterPricingChange: maybeRepriceCartAfterPricingChange,
-    _modalConfirmDone: _modalConfirmDone
+    _priceChangeAckDone: _priceChangeAckDone
   };
 })();
