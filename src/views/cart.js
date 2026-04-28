@@ -18,7 +18,11 @@ var CartView = {
           '<button class="btn-primary" onclick="App.closeCart();App.navigate(\'catalog\')">' + t('cart.toCatalog') + '</button></div>'
       : '<div class="cart-items">' +
           cart.map(function (item) {
-            var isOOS      = item.outOfStock || item.product.stock === 0;
+            var isOOS      = item.outOfStock || (function () {
+              var q = parseInt(item.qty, 10);
+              var s = typeof item.product.stock === 'number' && !isNaN(item.product.stock) ? item.product.stock : 0;
+              return !isNaN(q) && q > s;
+            })();
             var lineTotal  = item.unitPrice * item.qty;
             var cust       = App.Auth.isCustomer() ? App.state.currentUser.customer : null;
             var basePrice  = cust ? App.Pricing.getUnitPrice(item.product, cust) : item.product.price;
@@ -112,7 +116,11 @@ var CartView = {
     CartView._pendingNotes = notes ? notes.value : '';
 
     if (App.Cart.hasOOS()) {
-      var oosList  = App.state.cart.filter(function (i) { return i.outOfStock || i.product.stock === 0; });
+      var oosList  = App.state.cart.filter(function (i) {
+        var q = parseInt(i.qty, 10);
+        var s = typeof i.product.stock === 'number' && !isNaN(i.product.stock) ? i.product.stock : 0;
+        return !isNaN(q) && q > s;
+      });
       var oosNames = oosList.map(function (i) { return '• ' + App.escHTML(pLang(i.product, 'name')); }).join('<br>');
       App.showModal(
         '<div class="sys-message">' +

@@ -532,7 +532,12 @@ var AdminView = {
         '<td style="color:var(--blue);font-weight:700">₪' + p.price + '</td>' +
         '<td>' + (p.soldBy ? pLang(p, 'soldBy') : '—') + (p.unitsPerPackage ? ' / ' + p.unitsPerPackage + ' ' + t('common.units') : '') + '</td>' +
         '<td>' + (hasBulk ? '<span style="color:var(--green);font-size:12px">' + t('admin.hasBulk') + '</span>' : '—') + '</td>' +
-        '<td>' + (p.stock > 0 ? p.stock : '<span style="color:var(--red)">' + t('admin.outOfStockLabel') + '</span>') + '</td>' +
+        '<td>' + (function () {
+          var stk = typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : 0;
+          if (stk > 0) return String(stk);
+          if (stk < 0) return '<span style="color:var(--red);font-weight:700">' + stk + '</span>';
+          return '<span style="color:var(--red)">' + t('admin.outOfStockLabel') + '</span>';
+        })() + '</td>' +
         '<td style="display:flex;gap:6px;padding:8px">' +
           '<button class="btn-sm" onclick="AdminView._editProd(\'' + p.id + '\')" title="' + t('common.edit') + '">' +
             '<span class="material-icons-round">edit</span></button>' +

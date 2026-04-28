@@ -207,6 +207,19 @@ var App = (function () {
     fmt: fmtP
   };
 
+  /* Shipping row / stock UI — shared cart + checkout */
+  function _isShippingLineProduct(p) {
+    return !!(p && (p.id === 'ship-1000' || p.category === 'shipping'));
+  }
+
+  function _lineNeedsStockDelay(product, qty) {
+    if (_isShippingLineProduct(product)) return false;
+    var q = parseInt(qty, 10);
+    if (isNaN(q) || q < 1) q = 1;
+    var s = typeof product.stock === 'number' && !isNaN(product.stock) ? product.stock : 0;
+    return q > s;
+  }
+
   /* ===== CART ===== */
   var Cart = {
     add: function (product, qty) {
@@ -215,9 +228,9 @@ var App = (function () {
       if (isNaN(qty) || qty < 1) qty = 1;
       qty = Math.min(999, qty);
       var customer = state.currentUser.customer;
-      var isOOS = product.stock === 0;
+      var zeroStock = product.stock <= 0;
 
-      if (isOOS) {
+      if (zeroStock) {
         toast(t('cart.oosToast'), 'warning');
       }
 
@@ -228,6 +241,7 @@ var App = (function () {
         var newEffective = Pricing.getEffectiveUnitPrice(product, customer, existing.qty);
         if (newEffective !== null) existing.unitPrice = newEffective;
         existing.discountPct = Pricing.getTotalDiscountPct(product, customer, existing.qty);
+        existing.outOfStock = _lineNeedsStockDelay(product, existing.qty);
       } else {
         var effectivePrice = Pricing.getEffectiveUnitPrice(product, customer, qty);
         var totalDisc      = Pricing.getTotalDiscountPct(product, customer, qty);
@@ -236,13 +250,13 @@ var App = (function () {
           qty:         qty,
           unitPrice:   effectivePrice !== null ? effectivePrice : product.price,
           discountPct: totalDisc,
-          outOfStock:  isOOS
+          outOfStock:  _lineNeedsStockDelay(product, qty)
         });
       }
 
       Cart._save();
       Cart.updateBadge();
-      toast(isOOS ? t('cart.addedOos') : t('cart.addedToCart'), isOOS ? 'warning' : 'success');
+      toast(zeroStock ? t('cart.addedOos') : t('cart.addedToCart'), zeroStock ? 'warning' : 'success');
     },
 
     remove: function (id) {
@@ -265,6 +279,7 @@ var App = (function () {
           if (newPrice !== null) item.unitPrice = newPrice;
           item.discountPct = Pricing.getTotalDiscountPct(item.product, customer, qty);
         }
+        item.outOfStock = _lineNeedsStockDelay(item.product, item.qty);
       }
       Cart._save();
       Cart.updateBadge();
@@ -295,7 +310,11 @@ var App = (function () {
       var c = state.currentUser && state.currentUser.customer;
       return c ? (c.shippingCost || state.settings.defaultShippingCost) : state.settings.defaultShippingCost;
     },
-    hasOOS: function () { return state.cart.some(function (i) { return i.outOfStock || i.product.stock === 0; }); },
+    hasOOS: function () {
+      return state.cart.some(function (i) {
+        return _lineNeedsStockDelay(i.product, i.qty);
+      });
+    },
 
     updateBadge: function () {
       var badge = document.getElementById('cart-badge');
@@ -334,7 +353,7 @@ var App = (function () {
           qty: q,
           unitPrice: freshPrice !== null ? freshPrice : s.unitPrice,
           discountPct: freshDisc,
-          outOfStock: p.stock === 0
+          outOfStock: _lineNeedsStockDelay(p, q)
         };
       }).filter(Boolean);
     },
@@ -348,7 +367,7 @@ var App = (function () {
         var ep = Pricing.getEffectiveUnitPrice(item.product, customer, item.qty);
         if (ep !== null) item.unitPrice = ep;
         item.discountPct = Pricing.getTotalDiscountPct(item.product, customer, item.qty);
-        item.outOfStock = item.product.stock === 0;
+        item.outOfStock = _lineNeedsStockDelay(item.product, item.qty);
       });
       Cart._save();
       Cart.updateBadge();
@@ -361,35 +380,78 @@ var App = (function () {
     submit: function (notes) {
       if (!Auth.isCustomer() || state.cart.length === 0) return;
       var customer = state.currentUser.customer;
-      var items = JSON.parse(JSON.stringify(state.cart));
+      var PR = window.PRODUCTS || [];
+      var PRICE_EPS = 0.02;
+
+      for (var vi = 0; vi < state.cart.length; vi++) {
+        var cl = state.cart[vi];
+        var fr = PR.find(function (p) { return p.id === cl.product.id; });
+        if (!fr) {
+          toast(t('cart.productMissing'), 'error');
+          return;
+        }
+        var exp = Pricing.getEffectiveUnitPrice(fr, customer, cl.qty);
+        if (exp === null) {
+          toast(t('cart.orderSaveFailed'), 'error');
+          return;
+        }
+        if (Math.abs(exp - cl.unitPrice) > PRICE_EPS) {
+          toast(t('cart.priceMismatchRepriced'), 'warning');
+          Cart._repriceAll();
+          return;
+        }
+      }
+
+      var items = [];
+      for (var j = 0; j < state.cart.length; j++) {
+        var line = state.cart[j];
+        var fresh = PR.find(function (p) { return p.id === line.product.id; });
+        var q = parseInt(line.qty, 10);
+        if (isNaN(q) || q < 1) q = 1;
+        q = Math.min(999, q);
+        var up = Pricing.getEffectiveUnitPrice(fresh, customer, q);
+        var disc = Pricing.getTotalDiscountPct(fresh, customer, q);
+        var stockSnap = typeof fresh.stock === 'number' && !isNaN(fresh.stock) ? fresh.stock : 0;
+        items.push({
+          product: JSON.parse(JSON.stringify(fresh)),
+          qty: q,
+          unitPrice: up,
+          discountPct: disc,
+          outOfStock: q > stockSnap
+        });
+      }
       if (Cart.needsShipping()) {
         var sc = Cart.getShippingCost();
         items.push({ product: Object.assign({}, SHIPPING_PRODUCT, { price: sc }), qty: 1, unitPrice: sc, discountPct: 0 });
       }
       var totals = Pricing.calcTotals(items);
-      var id = Date.now() + '-' + Math.random().toString(36).substring(2, 6);
-      var order = {
-        id: id,
-        customerId: customer.id,
-        customerName: customer.name,
-        customerName_en: customer.name_en || '',
-        customerPhone: customer.phone || '',
-        customerEmail: customer.email || '',
-        items: items,
-        subtotal: totals.subtotal,
-        vat: totals.vat,
-        total: totals.total,
-        savings: totals.savings,
-        notes: notes || '',
-        timestamp: new Date(Date.now()).toISOString(),
-        status: 'new',
-        paymentStatus: 'unpaid'
-      };
-      if (!order.timestamp || isNaN(Date.parse(order.timestamp))) {
-        order.timestamp = new Date(Date.now()).toISOString();
+      var tsIso = new Date(Date.now()).toISOString();
+
+      function makeOrderPayload(orderIdStr) {
+        var order = {
+          id: orderIdStr,
+          customerId: customer.id,
+          customerName: customer.name,
+          customerName_en: customer.name_en || '',
+          customerPhone: customer.phone || '',
+          customerEmail: customer.email || '',
+          items: items,
+          subtotal: totals.subtotal,
+          vat: totals.vat,
+          total: totals.total,
+          savings: totals.savings,
+          notes: notes || '',
+          timestamp: tsIso,
+          status: 'new',
+          paymentStatus: 'unpaid'
+        };
+        if (!order.timestamp || isNaN(Date.parse(order.timestamp))) {
+          order.timestamp = new Date(Date.now()).toISOString();
+        }
+        return order;
       }
 
-      function persistLocalAndFinish() {
+      function persistLocalAndFinish(order) {
         var all = Store.get('orders') || [];
         all.unshift(order);
         Store.set('orders', all);
@@ -399,16 +461,103 @@ var App = (function () {
         navigate('success', { order: order });
       }
 
-      if (window.DB) {
-        window.DB.collection('orders').doc(String(id)).set(order)
-          .then(function () { persistLocalAndFinish(); })
-          .catch(function (e) {
-            console.warn('Firestore order error:', e);
-            toast(t('cart.orderSaveFailed'), 'error');
-          });
-      } else {
-        persistLocalAndFinish();
+      function applyLocalStockFromCart() {
+        state.cart.forEach(function (line) {
+          if (_isShippingLineProduct(line.product)) return;
+          var p = PR.find(function (x) { return x.id === line.product.id; });
+          if (!p) return;
+          var dq = parseInt(line.qty, 10);
+          if (isNaN(dq) || dq < 1) dq = 1;
+          p.stock = (Number(p.stock) || 0) - dq;
+        });
+        try { Store.set('products', window.PRODUCTS); } catch (e0) {}
       }
+
+      if (!window.DB) {
+        var nextLocal =
+          typeof state.settings.nextOrderId === 'number' && !isNaN(state.settings.nextOrderId)
+            ? state.settings.nextOrderId
+            : 352436352;
+        var oidLoc = String(nextLocal);
+        state.settings.nextOrderId = nextLocal + 1;
+        applyLocalStockFromCart();
+        persistLocalAndFinish(makeOrderPayload(oidLoc));
+        return;
+      }
+
+      var dbRef = window.DB;
+      var settingsRef = dbRef.collection('app_settings').doc('main');
+      var fv = firebase.firestore.FieldValue;
+      var cartLinesForStock = [];
+      state.cart.forEach(function (line) {
+        if (!_isShippingLineProduct(line.product)) cartLinesForStock.push(line);
+      });
+
+      dbRef
+        .runTransaction(function (transaction) {
+          return transaction.get(settingsRef).then(function (setSnap) {
+            var d = setSnap.exists ? setSnap.data() : {};
+            var seeded =
+              typeof state.settings.nextOrderId === 'number' && !isNaN(state.settings.nextOrderId)
+                ? state.settings.nextOrderId
+                : 352436352;
+            var curSeq =
+              typeof d.nextOrderId === 'number' && !isNaN(d.nextOrderId)
+                ? d.nextOrderId
+                : seeded;
+            if (curSeq < seeded) curSeq = seeded;
+
+            function readProdSnaps(idx, acc) {
+              if (idx >= cartLinesForStock.length) return Promise.resolve(acc);
+              return transaction
+                .get(dbRef.collection('products').doc(cartLinesForStock[idx].product.id))
+                .then(function (snap) {
+                  acc.push(snap);
+                  return readProdSnaps(idx + 1, acc);
+                });
+            }
+
+            return readProdSnaps(0, []).then(function (prodSnaps) {
+              var pi;
+              for (pi = 0; pi < prodSnaps.length; pi++) {
+                if (!prodSnaps[pi].exists) throw new Error('PRODUCT_DOC_MISSING');
+              }
+
+              var assignedNum = curSeq;
+              var orderIdStr = String(assignedNum);
+              var orderPayload = makeOrderPayload(orderIdStr);
+
+              transaction.set(settingsRef, { nextOrderId: assignedNum + 1 }, { merge: true });
+              transaction.set(dbRef.collection('orders').doc(orderIdStr), orderPayload);
+
+              for (pi = 0; pi < cartLinesForStock.length; pi++) {
+                var dq = parseInt(cartLinesForStock[pi].qty, 10);
+                if (isNaN(dq) || dq < 1) dq = 1;
+                var pref = dbRef.collection('products').doc(cartLinesForStock[pi].product.id);
+                transaction.update(pref, { stock: fv.increment(-dq) });
+              }
+
+              return assignedNum + 1;
+            });
+          });
+        })
+        .then(function (nextCounter) {
+          state.settings.nextOrderId = nextCounter;
+          try {
+            Store.set('settings', state.settings);
+          } catch (e1) {}
+          if (window.DBSync) DBSync.saveSettings(state.settings);
+          /* Stock: rely on Firestore products onSnapshot — do not deduct locally here (avoids double decrement). */
+          persistLocalAndFinish(makeOrderPayload(String(nextCounter - 1)));
+        })
+        .catch(function (e) {
+          console.warn('Firestore order transaction:', e);
+          if (e && e.message === 'PRODUCT_DOC_MISSING') {
+            toast(t('cart.productMissing'), 'error');
+          } else {
+            toast(t('cart.orderSaveFailed'), 'error');
+          }
+        });
     },
 
     getAll: function () { return Store.get('orders') || []; },
