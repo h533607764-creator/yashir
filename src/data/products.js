@@ -128,7 +128,7 @@ var SHIPPING_PRODUCT = {
   bulkDiscounts:[]
 };
 
-/* Addon: toast if cart unitPrice stale vs effective (before Cart._repriceAll). Exported on App — see app.js */
+/* Addon: cart unitPrice vs effective — App.maybeRepriceCartAfterPricingChange (modal confirm before _repriceAll). See app.js */
 var _productsInitialSnapshotPending = true;
 
 /* ===================================================
@@ -167,10 +167,12 @@ function loadProductsFromFirestore(onSuccess, onError) {
       try { localStorage.setItem('yashir_products', JSON.stringify(loaded)); } catch (e) {}
       if (_productsInitialSnapshotPending) {
         _productsInitialSnapshotPending = false;
-      } else {
-        if (window.App && typeof App.toastIfCartLineDriftVersusEffectivePricing === 'function') App.toastIfCartLineDriftVersusEffectivePricing();
+        if (window.App && App.Cart && App.Cart._repriceAll) App.Cart._repriceAll();
+      } else if (window.App && typeof App.maybeRepriceCartAfterPricingChange === 'function') {
+        App.maybeRepriceCartAfterPricingChange();
+      } else if (window.App && App.Cart && App.Cart._repriceAll) {
+        App.Cart._repriceAll();
       }
-      if (window.App && App.Cart && App.Cart._repriceAll) App.Cart._repriceAll();
       onSuccess && onSuccess();
       if (
         window.App &&

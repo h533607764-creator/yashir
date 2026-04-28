@@ -396,8 +396,9 @@ var App = (function () {
           return;
         }
         if (Math.abs(exp - cl.unitPrice) > PRICE_EPS) {
-          toast(t('cart.priceMismatchRepriced'), 'warning');
-          Cart._repriceAll();
+          modalConfirm(t('cart.priceDriftConfirm')).then(function (ok) {
+            if (ok) Cart._repriceAll();
+          });
           return;
         }
       }
@@ -842,10 +843,57 @@ var App = (function () {
     wrap.classList.remove('hidden');
     bd.classList.remove('hidden');
   }
-  function closeModal() {
+  function _hideModalLayer() {
     document.getElementById('modal-wrap').classList.add('hidden');
     if (!state.cartOpen) document.getElementById('overlay-backdrop').classList.add('hidden');
   }
+
+  var _modalConfirmWaiting = [];
+  var _modalConfirmFinish = null;
+
+  function _pumpModalConfirm() {
+    if (_modalConfirmFinish !== null) return;
+    if (!_modalConfirmWaiting.length) return;
+    var item = _modalConfirmWaiting.shift();
+    _modalConfirmFinish = function (ok) {
+      _modalConfirmFinish = null;
+      item.resolve(ok);
+      _hideModalLayer();
+      _pumpModalConfirm();
+    };
+    showModal(
+      '<div class="sys-message">' +
+        '<p style="text-align:center;margin:0 0 18px;font-size:16px;line-height:1.45">' + escHTML(item.message) + '</p>' +
+        '<div class="modal-confirm-actions" style="display:flex;flex-direction:row-reverse;flex-wrap:wrap;gap:12px;justify-content:center;width:100%">' +
+          '<button type="button" class="btn-primary" onclick="App._modalConfirmDone(true)">' + escHTML(t('common.confirm')) + '</button>' +
+          '<button type="button" class="btn-secondary" onclick="App._modalConfirmDone(false)">' + escHTML(t('common.cancel')) + '</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  /** Promise-based confirm; same overlay/modal UI as the rest of the app (not window.confirm). */
+  function modalConfirm(message) {
+    return new Promise(function (resolve) {
+      _modalConfirmWaiting.push({ message: message, resolve: resolve });
+      _pumpModalConfirm();
+    });
+  }
+
+  function _modalConfirmDone(ok) {
+    if (_modalConfirmFinish) _modalConfirmFinish(ok);
+    else _hideModalLayer();
+  }
+
+  function closeModal() {
+    if (_modalConfirmFinish) {
+      _modalConfirmFinish(false);
+      return;
+    }
+    _hideModalLayer();
+  }
+
+  var Modal = { confirm: modalConfirm };
 
   /* ===== TOAST ===== */
   function toast(msg, type) {
@@ -980,30 +1028,22 @@ var App = (function () {
     }
   }
 
-  var _cartStalePriceWarnTimer = null;
-
-  /** Snapshot cart line prices first, then compare to fresh getEffectiveUnitPrice — call strictly before Cart._repriceAll. */
-  function toastIfCartLineDriftVersusEffectivePricing() {
-    if (!Auth.isCustomer() || !state.cart.length) return;
+  /** True if any cart line unitPrice differs from getEffectiveUnitPrice(product, customer, qty). */
+  function hasCartLineDriftVersusEffectivePricing() {
+    if (!Auth.isCustomer() || !state.cart.length) return false;
     var prevCartPrices = {};
     state.cart.forEach(function (item) {
-      if (item.product && item.product.id) {
-        prevCartPrices[item.product.id] = item.unitPrice;
-      }
+      if (item.product && item.product.id) prevCartPrices[item.product.id] = item.unitPrice;
     });
-
     var customer = state.currentUser.customer;
     var PR = window.PRODUCTS || [];
-    if (!PR.length) return;
+    if (!PR.length) return false;
     var threshold = 0.01;
-    var drift = false;
     for (var i = 0; i < state.cart.length; i++) {
       var item = state.cart[i];
       var pid = item.product && item.product.id;
       if (!pid) continue;
-      var p = PR.find(function (x) {
-        return x.id === pid;
-      });
+      var p = PR.find(function (x) { return x.id === pid; });
       if (!p) continue;
       var q = parseInt(item.qty, 10);
       if (isNaN(q) || q < 1) q = 1;
@@ -1017,17 +1057,32 @@ var App = (function () {
           ? rawPrev
           : parseFloat(rawPrev != null ? String(rawPrev).replace(',', '.') : '0');
       if (Number.isNaN(prevNum)) prevNum = 0;
-      if (Math.abs(prevNum - ep) > threshold) {
-        drift = true;
-        break;
-      }
+      if (Math.abs(prevNum - ep) > threshold) return true;
     }
-    if (!drift) return;
-    clearTimeout(_cartStalePriceWarnTimer);
-    _cartStalePriceWarnTimer = setTimeout(function () {
-      _cartStalePriceWarnTimer = null;
-      toast(t('cart.priceUpdatedPerPriceList'), 'warning');
-    }, 120);
+    return false;
+  }
+
+  var _cartRepricePromptPromise = null;
+
+  /**
+   * After Firestore/customer pricing context changes: reprice immediately if cart matches effective prices;
+   * otherwise ask for confirmation before Cart._repriceAll().
+   */
+  function maybeRepriceCartAfterPricingChange() {
+    if (!Auth.isCustomer() || !state.cart.length) {
+      Cart._repriceAll();
+      return Promise.resolve();
+    }
+    if (!hasCartLineDriftVersusEffectivePricing()) {
+      Cart._repriceAll();
+      return Promise.resolve();
+    }
+    if (_cartRepricePromptPromise) return _cartRepricePromptPromise;
+    _cartRepricePromptPromise = modalConfirm(t('cart.priceDriftConfirm')).then(function (ok) {
+      _cartRepricePromptPromise = null;
+      if (ok) Cart._repriceAll();
+    });
+    return _cartRepricePromptPromise;
   }
 
   /* ===== INIT ===== */
@@ -1071,8 +1126,7 @@ var App = (function () {
               return c.id === state.currentUser.customer.id;
             });
             if (fresh) state.currentUser.customer = fresh;
-            toastIfCartLineDriftVersusEffectivePricing();
-            Cart._repriceAll();
+            maybeRepriceCartAfterPricingChange();
           }
         }
       });
@@ -1084,8 +1138,7 @@ var App = (function () {
               return c.id === state.currentUser.customer.id;
             });
             if (freshCu) state.currentUser.customer = freshCu;
-            toastIfCartLineDriftVersusEffectivePricing();
-            Cart._repriceAll();
+            maybeRepriceCartAfterPricingChange();
           }
           var elCat = document.getElementById('view-content');
           if (elCat && state.currentView === 'catalog') {
@@ -1112,7 +1165,7 @@ var App = (function () {
     state: state, Auth: Auth, Cart: Cart, Orders: Orders, Pricing: Pricing, Store: Store, fmtP: fmtP, escHTML: escHTML,
     dateFmt: dateFmt,
     navigate: navigate, goHome: goHome, toggleCart: toggleCart, openCart: openCart, closeCart: closeCart,
-    showModal: showModal, closeModal: closeModal, toast: toast,
+    showModal: showModal, closeModal: closeModal, toast: toast, Modal: Modal,
     showSystemMsg: showSystemMsg, startOrder: startOrder, orderCustomerDisplay: orderCustomerDisplay,
     renderHeader: renderHeader, updateFloatBtns: updateFloatBtns,
     showLangSelector: showLangSelector,
@@ -1125,6 +1178,8 @@ var App = (function () {
     _logoClick: _logoClick, _showSecretAdmin: _showSecretAdmin, _secretLogin: _secretLogin,
     updateOrderStatus: Orders.updateStatus,
     updateOrderPayment: Orders.updatePayment,
-    toastIfCartLineDriftVersusEffectivePricing: toastIfCartLineDriftVersusEffectivePricing
+    hasCartLineDriftVersusEffectivePricing: hasCartLineDriftVersusEffectivePricing,
+    maybeRepriceCartAfterPricingChange: maybeRepriceCartAfterPricingChange,
+    _modalConfirmDone: _modalConfirmDone
   };
 })();

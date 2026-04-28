@@ -235,6 +235,7 @@ var I18n = (function () {
     'cart.orderSaveFailed': 'לא ניתן לשמור את ההזמנה. בדוק את החיבור לרשת ונסה שוב.',
     'cart.priceMismatchRepriced': 'המחירים עודכנו — בדקו את העגלה ונסו שוב.',
     'cart.priceUpdatedPerPriceList': 'מחיר מוצר עודכן לפי המחירון העדכני',
+    'cart.priceDriftConfirm': 'מחיר מוצר עודכן. האם לעדכן את המחיר בעגלה?',
     'cart.productMissing': 'מוצר כבר לא זמין. רעננו את הקטלוג.',
 
     /* --- Success --- */
@@ -761,6 +762,7 @@ var I18n = (function () {
     'cart.orderSaveFailed': 'Could not save your order. Check your connection and try again.',
     'cart.priceMismatchRepriced': 'Prices were updated — please review your cart and try again.',
     'cart.priceUpdatedPerPriceList': 'Product price was updated to match the current price list.',
+    'cart.priceDriftConfirm': 'A product price was updated. Update the price in your cart?',
     'cart.productMissing': 'A product is no longer available. Refresh the catalog.',
 
     /* --- Success --- */
