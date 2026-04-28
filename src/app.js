@@ -982,9 +982,16 @@ var App = (function () {
 
   var _cartStalePriceWarnTimer = null;
 
-  /** Compare stored cart line unitPrice vs Pricing.getEffectiveUnitPrice (current PRODUCTS + customer). Call before Cart._repriceAll. */
+  /** Snapshot cart line prices first, then compare to fresh getEffectiveUnitPrice — call strictly before Cart._repriceAll. */
   function toastIfCartLineDriftVersusEffectivePricing() {
     if (!Auth.isCustomer() || !state.cart.length) return;
+    var prevCartPrices = {};
+    state.cart.forEach(function (item) {
+      if (item.product && item.product.id) {
+        prevCartPrices[item.product.id] = item.unitPrice;
+      }
+    });
+
     var customer = state.currentUser.customer;
     var PR = window.PRODUCTS || [];
     if (!PR.length) return;
@@ -1003,13 +1010,14 @@ var App = (function () {
       q = Math.min(999, q);
       var ep = Pricing.getEffectiveUnitPrice(p, customer, q);
       if (ep === null) continue;
-      var raw = item.unitPrice;
-      var cartLine =
-        typeof raw === 'number' && !Number.isNaN(raw)
-          ? raw
-          : parseFloat(raw != null ? String(raw).replace(',', '.') : '0');
-      if (Number.isNaN(cartLine)) cartLine = 0;
-      if (Math.abs(cartLine - ep) > threshold) {
+      var rawPrev = prevCartPrices[pid];
+      if (rawPrev === undefined) continue;
+      var prevNum =
+        typeof rawPrev === 'number' && !Number.isNaN(rawPrev)
+          ? rawPrev
+          : parseFloat(rawPrev != null ? String(rawPrev).replace(',', '.') : '0');
+      if (Number.isNaN(prevNum)) prevNum = 0;
+      if (Math.abs(prevNum - ep) > threshold) {
         drift = true;
         break;
       }
