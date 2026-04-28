@@ -220,8 +220,6 @@ var App = (function () {
     return q > s;
   }
 
-  var _cartPriceWarnTimer = null;
-
   /* ===== CART ===== */
   var Cart = {
     add: function (product, qty) {
@@ -363,38 +361,16 @@ var App = (function () {
     _repriceAll: function () {
       if (!Auth.isCustomer() || !state.cart.length) return;
       var customer = state.currentUser.customer;
-      var THRESHOLD = 0.01;
-      var visibleLinePriceChanged = false;
       state.cart.forEach(function (item) {
-        var rawOld = item.unitPrice;
-        var oldPrice =
-          typeof rawOld === 'number' && !Number.isNaN(rawOld)
-            ? rawOld
-            : parseFloat(rawOld != null ? String(rawOld).replace(',', '.') : '0');
-        if (Number.isNaN(oldPrice)) oldPrice = 0;
-
         var fresh = (window.PRODUCTS || []).find(function (x) { return x.id === item.product.id; });
         if (fresh) item.product = fresh;
         var ep = Pricing.getEffectiveUnitPrice(item.product, customer, item.qty);
-        if (ep !== null) {
-          var newPrice = typeof ep === 'number' && !Number.isNaN(ep) ? ep : parseFloat(String(ep));
-          if (Number.isNaN(newPrice)) newPrice = oldPrice;
-          if (Math.abs(oldPrice - newPrice) > THRESHOLD) visibleLinePriceChanged = true;
-          item.unitPrice = ep;
-        }
+        if (ep !== null) item.unitPrice = ep;
         item.discountPct = Pricing.getTotalDiscountPct(item.product, customer, item.qty);
         item.outOfStock = _lineNeedsStockDelay(item.product, item.qty);
       });
       Cart._save();
       Cart.updateBadge();
-      /* One toast per sync burst: only schedule/clear timer when price actually moved (duplicate snapshot must not cancel). */
-      if (visibleLinePriceChanged) {
-        clearTimeout(_cartPriceWarnTimer);
-        _cartPriceWarnTimer = setTimeout(function () {
-          _cartPriceWarnTimer = null;
-          toast(t('cart.priceUpdatedPerPriceList'), 'warning');
-        }, 120);
-      }
       if (state.cartOpen && typeof CartView !== 'undefined' && CartView.renderPanel) CartView.renderPanel();
     }
   };
