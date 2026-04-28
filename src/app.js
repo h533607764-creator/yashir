@@ -361,16 +361,23 @@ var App = (function () {
     _repriceAll: function () {
       if (!Auth.isCustomer() || !state.cart.length) return;
       var customer = state.currentUser.customer;
+      var EPS = 0.02;
+      var priceLineChanged = false;
       state.cart.forEach(function (item) {
+        var prevUnit = item.unitPrice;
         var fresh = (window.PRODUCTS || []).find(function (x) { return x.id === item.product.id; });
         if (fresh) item.product = fresh;
         var ep = Pricing.getEffectiveUnitPrice(item.product, customer, item.qty);
-        if (ep !== null) item.unitPrice = ep;
+        if (ep !== null) {
+          if (prevUnit != null && Math.abs(prevUnit - ep) > EPS) priceLineChanged = true;
+          item.unitPrice = ep;
+        }
         item.discountPct = Pricing.getTotalDiscountPct(item.product, customer, item.qty);
         item.outOfStock = _lineNeedsStockDelay(item.product, item.qty);
       });
       Cart._save();
       Cart.updateBadge();
+      if (priceLineChanged) toast(t('cart.priceUpdatedPerPriceList'), 'warning');
       if (state.cartOpen && typeof CartView !== 'undefined' && CartView.renderPanel) CartView.renderPanel();
     }
   };

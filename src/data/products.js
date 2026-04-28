@@ -164,6 +164,16 @@ function loadProductsFromFirestore(onSuccess, onError) {
       try { localStorage.setItem('yashir_products', JSON.stringify(loaded)); } catch (e) {}
       onSuccess && onSuccess();
       if (window.App && App.Cart && App.Cart._repriceAll) App.Cart._repriceAll();
+      if (
+        window.App &&
+        App.state &&
+        App.state.currentView === 'admin' &&
+        window.AdminView &&
+        AdminView._tab === 'products'
+      ) {
+        var avc = document.getElementById('av-content');
+        if (avc && typeof AdminView._products === 'function') AdminView._products(avc);
+      }
     },
     function (err) {
       if (done) return;
