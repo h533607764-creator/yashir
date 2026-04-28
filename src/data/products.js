@@ -129,13 +129,13 @@ var SHIPPING_PRODUCT = {
 };
 
 /* Addon: detect catalog price changes before Cart._repriceAll (does not replace Pricing). */
-var _productSnapshotPassIndex = 0;
+/* First non-empty products snapshot = initial sync only — no cart pricing toast. */
+var _productsInitialSnapshotPending = true;
 
 function _notifyCartIfEffectivePriceChangedFromCatalog(previousProducts, incomingLoaded) {
   if (!window.App || !App.Auth || !App.Auth.isCustomer()) return;
   if (!App.state || !App.state.cart || !App.state.cart.length) return;
   if (!previousProducts || !previousProducts.length || !incomingLoaded || !incomingLoaded.length) return;
-  if (_productSnapshotPassIndex < 2) return;
 
   var customer = App.state.currentUser.customer;
   var pricing = App.Pricing;
@@ -202,8 +202,11 @@ function loadProductsFromFirestore(onSuccess, onError) {
         window.PRODUCTS && window.PRODUCTS.length ? window.PRODUCTS.slice() : [];
       setYashirProductsList(loaded);
       try { localStorage.setItem('yashir_products', JSON.stringify(loaded)); } catch (e) {}
-      _productSnapshotPassIndex += 1;
-      _notifyCartIfEffectivePriceChangedFromCatalog(previousProductsShallow, loaded);
+      if (_productsInitialSnapshotPending) {
+        _productsInitialSnapshotPending = false;
+      } else {
+        _notifyCartIfEffectivePriceChangedFromCatalog(previousProductsShallow, loaded);
+      }
       if (window.App && App.Cart && App.Cart._repriceAll) App.Cart._repriceAll();
       onSuccess && onSuccess();
       if (
