@@ -21,6 +21,9 @@ var App = (function () {
     return new Date(d).toLocaleDateString(locale);
   }
 
+  /** Single epsilon (₪) for pricing drift: cart repricing UI vs submit validation vs Firestore checks. */
+  var PRICE_DRIFT_EPSILON = 0.02;
+
   /* ===== STATE ===== */
   var state = {
     currentUser: null,
@@ -91,6 +94,7 @@ var App = (function () {
       state.currentUser = { role: 'customer', customer: c };
       state.cart = [];
       state.pricingPlan = null;
+      _pricingRefreshQueuedWhileModal = false;
       Cart._restore();
       try { sessionStorage.setItem('yashir_sess_hp', hp); } catch (e) {}
       if (remember) Store.set('remember', { hp: hp, exp: Date.now() + 30 * 864e5 });
@@ -101,6 +105,7 @@ var App = (function () {
       state.currentUser = { role: 'admin' };
       state.cart = [];
       state.pricingPlan = null;
+      _pricingRefreshQueuedWhileModal = false;
       try { sessionStorage.setItem('yashir_sess_admin', '1'); } catch (e) {}
       return true;
     },
@@ -109,6 +114,7 @@ var App = (function () {
       state.currentUser = null;
       state.cart = [];
       state.pricingPlan = null;
+      _pricingRefreshQueuedWhileModal = false;
       _deferredSubmitAfterPricingAck = false;
       _deferredOrderNotes = '';
       Store.del('remember');
@@ -363,6 +369,37 @@ var App = (function () {
           outOfStock: _lineNeedsStockDelay(p, q)
         };
       }).filter(Boolean);
+      Cart._mergeDuplicateLines();
+    },
+
+    /** Consolidate duplicate product IDs so drift, totals, and stock deduction stay consistent. */
+    _mergeDuplicateLines: function () {
+      if (!Auth.isCustomer() || !state.cart.length) return;
+      var merged = [];
+      var indexByPid = {};
+      state.cart.forEach(function (line) {
+        var pid = line.product && line.product.id;
+        if (!pid) return;
+        var existingIx = indexByPid[pid];
+        if (existingIx === undefined) {
+          indexByPid[pid] = merged.length;
+          merged.push(line);
+          return;
+        }
+        var base = merged[existingIx];
+        var q1 = parseInt(base.qty, 10);
+        var q2 = parseInt(line.qty, 10);
+        if (isNaN(q1) || q1 < 1) q1 = 1;
+        if (isNaN(q2) || q2 < 1) q2 = 1;
+        base.qty = Math.min(999, q1 + q2);
+        var customer = state.currentUser.customer;
+        var ep = Pricing.getEffectiveUnitPrice(base.product, customer, base.qty);
+        if (ep !== null) base.unitPrice = ep;
+        base.discountPct = Pricing.getTotalDiscountPct(base.product, customer, base.qty);
+        base.outOfStock = _lineNeedsStockDelay(base.product, base.qty);
+      });
+      state.cart = merged;
+      Cart._save();
     },
 
     /** appliedPlan: optional snapshot from pricing engine (for callers); prices always taken from Pricing + PRODUCTS. */
@@ -393,9 +430,9 @@ var App = (function () {
         _deferredSubmitAfterPricingAck = true;
         return;
       }
+      Cart._mergeDuplicateLines();
       var customer = state.currentUser.customer;
       var PR = window.PRODUCTS || [];
-      var PRICE_EPS = 0.02;
 
       for (var vi = 0; vi < state.cart.length; vi++) {
         var cl = state.cart[vi];
@@ -409,7 +446,7 @@ var App = (function () {
           toast(t('cart.orderSaveFailed'), 'error');
           return;
         }
-        if (Math.abs(exp - cl.unitPrice) > PRICE_EPS) {
+        if (Math.abs(exp - cl.unitPrice) > PRICE_DRIFT_EPSILON) {
           var submitPlan = buildPricingPlanFromCart();
           if (!submitPlan.hasChanges) {
             var _sq = parseInt(cl.qty, 10);
@@ -1100,18 +1137,14 @@ var App = (function () {
     }
   }
 
-  /** Cart lines where unitPrice !== getEffectiveUnitPrice (system price). */
+  /** Cart lines where unitPrice !== getEffectiveUnitPrice (per line; duplicate PIDs handled independently). */
   function getCartDriftLines() {
     var out = [];
     if (!Auth.isCustomer() || !state.cart.length) return out;
-    var prevCartPrices = {};
-    state.cart.forEach(function (item) {
-      if (item.product && item.product.id) prevCartPrices[item.product.id] = item.unitPrice;
-    });
     var customer = state.currentUser.customer;
     var PR = window.PRODUCTS || [];
     if (!PR.length) return out;
-    var threshold = 0.01;
+    var eps = PRICE_DRIFT_EPSILON;
     for (var i = 0; i < state.cart.length; i++) {
       var item = state.cart[i];
       var pid = item.product && item.product.id;
@@ -1123,14 +1156,12 @@ var App = (function () {
       q = Math.min(999, q);
       var ep = Pricing.getEffectiveUnitPrice(p, customer, q);
       if (ep === null) continue;
-      var rawPrev = prevCartPrices[pid];
-      if (rawPrev === undefined) continue;
       var prevNum =
-        typeof rawPrev === 'number' && !Number.isNaN(rawPrev)
-          ? rawPrev
-          : parseFloat(rawPrev != null ? String(rawPrev).replace(',', '.') : '0');
+        typeof item.unitPrice === 'number' && !Number.isNaN(item.unitPrice)
+          ? item.unitPrice
+          : parseFloat(item.unitPrice != null ? String(item.unitPrice).replace(',', '.') : '0');
       if (Number.isNaN(prevNum)) prevNum = 0;
-      if (Math.abs(prevNum - ep) > threshold) {
+      if (Math.abs(prevNum - ep) > eps) {
         out.push({ product: p, oldPrice: prevNum, newPrice: ep, qty: q });
       }
     }
@@ -1176,6 +1207,8 @@ var App = (function () {
   var _cartRepricePromptPromise = null;
   var _deferredOrderNotes = '';
   var _deferredSubmitAfterPricingAck = false;
+  /** Pricing snapshot changed while acknowledge modal was open; follow-up repricing after dismiss when safe. */
+  var _pricingRefreshQueuedWhileModal = false;
 
   function _afterPricingModalAck(plan) {
     applyPricingPlan(plan);
@@ -1186,6 +1219,11 @@ var App = (function () {
       var n = _deferredOrderNotes;
       _deferredOrderNotes = '';
       Orders.submit(typeof n === 'string' ? n : '');
+    } else if (_pricingRefreshQueuedWhileModal) {
+      _pricingRefreshQueuedWhileModal = false;
+      setTimeout(function () {
+        maybeRepriceCartAfterPricingChange();
+      }, 0);
     }
   }
 
@@ -1206,7 +1244,10 @@ var App = (function () {
       Cart._repriceAll();
       return Promise.resolve();
     }
-    if (_cartRepricePromptPromise) return _cartRepricePromptPromise;
+    if (_cartRepricePromptPromise) {
+      _pricingRefreshQueuedWhileModal = true;
+      return _cartRepricePromptPromise;
+    }
     state.pricingPlan = plan;
     _cartRepricePromptPromise = modalShowPricingPlan(plan).then(function () {
       _afterPricingModalAck(plan);
