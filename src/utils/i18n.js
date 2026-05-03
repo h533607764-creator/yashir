@@ -476,6 +476,20 @@ var I18n = (function () {
     'admin.topCustomer': 'לקוח מוביל',
     'admin.totalIncome': 'סה"כ הכנסות',
     'admin.ordersCount': 'הזמנות',
+    'admin.productSalesReport': 'דוח מכירות מוצרים',
+    'admin.qtySold': 'כמות נמכרה',
+    'admin.revenue': 'הכנסות',
+    'admin.currentStock': 'מלאי נוכחי',
+    'admin.salesStockRatio': 'יחס מכירות/מלאי',
+    'admin.noData': 'אין נתונים לתקופה זו',
+
+    /* --- Admin Low Stock --- */
+    'admin.lowStock': 'מלאי נמוך',
+    'admin.lowStockTitle': 'מוצרים עם מלאי נמוך',
+    'admin.minThreshold': 'סף מינימום',
+    'admin.shortage': 'חסר',
+    'admin.noLowStockProducts': 'אין מוצרים עם מלאי נמוך 😊',
+    'admin.negativeStock': 'מלאי שלילי',
 
     /* --- Admin Settings --- */
     'admin.settingsTitle': 'הגדרות מערכת',
@@ -1013,6 +1027,20 @@ var I18n = (function () {
     'admin.topCustomer': 'Top Customer',
     'admin.totalIncome': 'Total Revenue',
     'admin.ordersCount': 'orders',
+    'admin.productSalesReport': 'Product Sales Report',
+    'admin.qtySold': 'Qty Sold',
+    'admin.revenue': 'Revenue',
+    'admin.currentStock': 'Current Stock',
+    'admin.salesStockRatio': 'Sales/Stock Ratio',
+    'admin.noData': 'No data for this period',
+
+    /* --- Admin Low Stock --- */
+    'admin.lowStock': 'Low Stock',
+    'admin.lowStockTitle': 'Low Stock Products',
+    'admin.minThreshold': 'Min Threshold',
+    'admin.shortage': 'Shortage',
+    'admin.noLowStockProducts': 'No low stock products 😊',
+    'admin.negativeStock': 'Negative Stock',
 
     /* --- Admin Settings --- */
     'admin.settingsTitle': 'System Settings',

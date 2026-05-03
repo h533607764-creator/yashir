@@ -45,6 +45,7 @@ var AdminView = {
       { id: 'orders',          label: t('admin.orders'),          icon: 'list_alt' },
       { id: 'customers',       label: t('admin.customers'),       icon: 'people' },
       { id: 'products',        label: t('admin.productsTab'),     icon: 'inventory_2' },
+      { id: 'low_stock',       label: t('admin.lowStock'),        icon: 'inventory' },
       { id: 'suppliers',       label: t('admin.suppliers'),       icon: 'local_shipping' },
       { id: 'quote_requests',  label: t('admin.quoteRequests'),   icon: 'request_quote' },
       { id: 'product_requests',label: t('admin.productRequests'), icon: 'add_circle' },
@@ -86,6 +87,7 @@ var AdminView = {
       orders:          AdminView._orders,
       customers:       AdminView._customers,
       products:        AdminView._products,
+      low_stock:       AdminView._lowStock,
       suppliers:       function (c) { AdminSuppliers.render(c); },
       quote_requests:  AdminView._quoteRequests,
       product_requests:AdminView._productRequests,
@@ -1122,6 +1124,75 @@ var AdminView = {
   },
 
   /* ===== QUOTE REQUESTS ===== */
+  _lowStock: function (c) {
+    var lowStockProducts = [];
+    
+    PRODUCTS.forEach(function (p) {
+      if (p.category === 'shipping') return;
+      
+      var stock = typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : 0;
+      var threshold = p.lowStockThreshold != null ? p.lowStockThreshold : 10;
+      
+      if (stock <= threshold || stock < 0) {
+        var shortage = threshold - stock;
+        lowStockProducts.push({
+          product: p,
+          stock: stock,
+          threshold: threshold,
+          shortage: shortage > 0 ? shortage : 0
+        });
+      }
+    });
+    
+    lowStockProducts.sort(function (a, b) { return a.stock - b.stock; });
+    
+    var rows = lowStockProducts.length ? lowStockProducts.map(function (item) {
+      var stockColor = item.stock < 0 ? '#ef4444' : (item.stock === 0 ? '#f97316' : '#eab308');
+      return '<tr>' +
+        '<td><code style="font-size:12px">' + item.product.sku + '</code></td>' +
+        '<td><strong>' + App.escHTML(pLang(item.product, 'name')) + '</strong></td>' +
+        '<td style="color:' + stockColor + ';font-weight:700;font-size:16px">' + item.stock + '</td>' +
+        '<td>' + item.threshold + '</td>' +
+        '<td style="color:var(--orange);font-weight:700">' + (item.shortage > 0 ? item.shortage : '—') + '</td>' +
+        '<td style="display:flex;gap:6px;padding:8px">' +
+          '<button class="btn-sm" onclick="AdminView._editProd(\'' + item.product.id + '\')" title="' + t('common.edit') + '">' +
+            '<span class="material-icons-round">edit</span></button>' +
+        '</td>' +
+      '</tr>';
+    }).join('')
+    : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">' + t('admin.noLowStockProducts') + '</td></tr>';
+    
+    var alertCount = lowStockProducts.filter(function (item) { return item.stock < 0; }).length;
+    var warningCount = lowStockProducts.filter(function (item) { return item.stock === 0; }).length;
+    
+    c.innerHTML = '<div class="admin-section">' +
+      '<div class="admin-section-header"><h2>' + t('admin.lowStockTitle') + '</h2>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          (alertCount > 0 
+            ? '<span style="background:#ef4444;color:#fff;border-radius:12px;padding:4px 12px;font-size:12px;font-weight:700">' + 
+                alertCount + ' ' + t('admin.negativeStock') + '</span>' 
+            : '') +
+          (warningCount > 0 
+            ? '<span style="background:#f97316;color:#fff;border-radius:12px;padding:4px 12px;font-size:12px;font-weight:700">' + 
+                warningCount + ' ' + t('admin.outOfStockLabel') + '</span>' 
+            : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="table-wrap"><table class="admin-table">' +
+        '<thead><tr>' +
+          '<th>' + t('admin.skuCol') + '</th>' +
+          '<th>' + t('admin.productName') + '</th>' +
+          '<th>' + t('admin.currentStock') + '</th>' +
+          '<th>' + t('admin.minThreshold') + '</th>' +
+          '<th>' + t('admin.shortage') + '</th>' +
+          '<th>' + t('admin.actionsCol') + '</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table></div>' +
+    '</div>';
+  },
+
+  /* ===== QUOTE REQUESTS ===== */
   _quoteRequests: function (c) {
     c.innerHTML = '<div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div>';
     if (!window.DB) {
@@ -1266,6 +1337,8 @@ var AdminView = {
   },
 
   /* ===== STATISTICS ===== */
+  _statsPeriod: 'month',
+
   _stats: function (c) {
     if (window.DB) {
       c.innerHTML = '<div class="admin-section"><div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div></div>';
@@ -1286,17 +1359,45 @@ var AdminView = {
     AdminView._statsRender(c, App.Orders.getAll());
   },
 
-  _statsRender: function (c, orders) {
-    orders = (orders || []).filter(function (o) { return AdminView._orderTimestampMs(o) > 0; });
+  _setPeriod: function (period) {
+    AdminView._statsPeriod = period;
+    var el = document.getElementById('av-content');
+    if (el) AdminView._stats(el);
+  },
+
+  _statsFilterOrders: function (orders, period) {
     var now = new Date();
-    var m = now.getMonth(), y = now.getFullYear();
-    var monthly = orders.filter(function (o) {
+    var start = null;
+    
+    if (period === 'month') {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (period === 'quarter') {
+      start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    } else if (period === 'halfyear') {
+      start = new Date(now.getFullYear(), now.getMonth() >= 6 ? 6 : 0, 1);
+    } else if (period === 'year') {
+      start = new Date(now.getFullYear(), 0, 1);
+    }
+    
+    if (!start) return orders;
+    
+    return orders.filter(function (o) {
       var ms = AdminView._orderTimestampMs(o);
       if (!ms) return false;
-      var d = new Date(ms);
-      return d.getMonth() === m && d.getFullYear() === y;
+      return new Date(ms) >= start;
     });
-    var allTime  = orders;
+  },
+
+  _statsRender: function (c, orders) {
+    orders = (orders || []).filter(function (o) { return AdminView._orderTimestampMs(o) > 0; });
+    var periods = [
+      { id: 'month', label: t('admin.periodMonth') },
+      { id: 'quarter', label: t('admin.periodQuarter') },
+      { id: 'halfyear', label: t('admin.periodHalfYear') },
+      { id: 'year', label: t('admin.periodYear') }
+    ];
+    
+    var filtered = AdminView._statsFilterOrders(orders, AdminView._statsPeriod);
 
     function topProduct(list) {
       var counts = {};
@@ -1322,13 +1423,9 @@ var AdminView = {
       return { name: top, total: totals[top] };
     }
 
-    var mRevenue   = monthly.reduce(function (s, o) { return s + o.total; }, 0);
-    var mOrders    = monthly.length;
-    var mTopProd   = topProduct(monthly);
-    var mTopCust   = topCustomer(monthly);
-    var allRevenue = allTime.reduce(function (s, o) { return s + o.total; }, 0);
-    var allTopProd = topProduct(allTime);
-    var allTopCust = topCustomer(allTime);
+    var revenue  = filtered.reduce(function (s, o) { return s + o.total; }, 0);
+    var topProd  = topProduct(filtered);
+    var topCust  = topCustomer(filtered);
 
     function statCard(icon, label, value, sub) {
       return '<div class="stat-card"><span class="material-icons-round">' + icon + '</span>' +
@@ -1336,25 +1433,72 @@ var AdminView = {
         (sub ? '<div class="stat-sub">' + sub + '</div>' : '') + '</div></div>';
     }
 
-    var locale = I18n.getLang() === 'en' ? 'en-US' : 'he-IL';
+    var productStats = {};
+    filtered.forEach(function (o) {
+      o.items.forEach(function (i) {
+        if (i.product.sku === '1000') return;
+        var pid = i.product.id;
+        if (!productStats[pid]) {
+          productStats[pid] = {
+            name: i.product.name,
+            sku: i.product.sku,
+            qty: 0,
+            revenue: 0,
+            stock: 0
+          };
+        }
+        productStats[pid].qty += i.qty;
+        productStats[pid].revenue += i.unitPrice * i.qty;
+      });
+    });
+
+    PRODUCTS.forEach(function (p) {
+      if (productStats[p.id]) {
+        productStats[p.id].stock = typeof p.stock === 'number' ? p.stock : 0;
+      }
+    });
+
+    var productList = Object.keys(productStats).map(function (pid) { return productStats[pid]; });
+    productList.sort(function (a, b) { return b.qty - a.qty; });
+
+    var productRows = productList.length ? productList.map(function (ps) {
+      var ratio = ps.stock > 0 ? (ps.qty / ps.stock).toFixed(2) : '∞';
+      return '<tr>' +
+        '<td><code style="font-size:12px">' + ps.sku + '</code></td>' +
+        '<td><strong>' + App.escHTML(pLang({ name: ps.name }, 'name')) + '</strong></td>' +
+        '<td style="color:var(--blue);font-weight:700">' + ps.qty + '</td>' +
+        '<td style="color:var(--green);font-weight:700">₪' + App.fmtP(ps.revenue) + '</td>' +
+        '<td>' + ps.stock + '</td>' +
+        '<td style="color:var(--text-muted)">' + ratio + '</td>' +
+      '</tr>';
+    }).join('') : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">' + t('admin.noData') + '</td></tr>';
 
     c.innerHTML =
       '<div class="admin-section">' +
-        '<div class="admin-section-header"><h2>' + t('admin.statsTitle') + '</h2>' +
-          '<span style="font-size:13px;color:var(--text-muted)">' + now.toLocaleDateString(locale, {month:'long', year:'numeric'}) + '</span>' +
+        '<div class="admin-section-header"><h2>' + t('admin.statsTitle') + '</h2></div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">' +
+          periods.map(function (p) {
+            return '<button class="cat-btn' + (AdminView._statsPeriod === p.id ? ' active' : '') +
+              '" onclick="AdminView._setPeriod(\'' + p.id + '\')">' + p.label + '</button>';
+          }).join('') +
         '</div>' +
-        '<h3 style="font-size:14px;color:var(--text-muted);margin-bottom:10px">' + t('admin.thisMonth') + '</h3>' +
         '<div class="stats-grid">' +
-          statCard('payments', t('admin.monthlyIncome'), '₪' + App.fmtP(mRevenue), mOrders + ' ' + t('admin.ordersCount')) +
-          statCard('star', t('admin.topProduct'), mTopProd ? mTopProd.name : '—', mTopProd ? mTopProd.qty + ' ' + t('common.units') : '') +
-          statCard('emoji_events', t('admin.topCustomer'), mTopCust ? AdminView._statsCustomerLabel(mTopCust.name) : '—', mTopCust ? '₪' + App.fmtP(mTopCust.total) : '') +
+          statCard('payments', t('admin.totalIncome'), '₪' + App.fmtP(revenue), filtered.length + ' ' + t('admin.ordersCount')) +
+          statCard('star', t('admin.topProduct'), topProd ? topProd.name : '—', topProd ? topProd.qty + ' ' + t('common.units') : '') +
+          statCard('emoji_events', t('admin.topCustomer'), topCust ? AdminView._statsCustomerLabel(topCust.name) : '—', topCust ? '₪' + App.fmtP(topCust.total) : '') +
         '</div>' +
-        '<h3 style="font-size:14px;color:var(--text-muted);margin:20px 0 10px">' + t('admin.allTime') + '</h3>' +
-        '<div class="stats-grid">' +
-          statCard('account_balance', t('admin.totalIncome'), '₪' + App.fmtP(allRevenue), allTime.length + ' ' + t('admin.ordersCount')) +
-          statCard('inventory_2', t('admin.topProduct'), allTopProd ? allTopProd.name : '—', allTopProd ? allTopProd.qty + ' ' + t('common.units') : '') +
-          statCard('workspace_premium', t('admin.topCustomer'), allTopCust ? AdminView._statsCustomerLabel(allTopCust.name) : '—', allTopCust ? '₪' + App.fmtP(allTopCust.total) : '') +
-        '</div>' +
+        '<h3 style="margin:24px 0 12px;font-size:16px;font-weight:700">' + t('admin.productSalesReport') + '</h3>' +
+        '<div class="table-wrap"><table class="admin-table">' +
+          '<thead><tr>' +
+            '<th>' + t('admin.skuCol') + '</th>' +
+            '<th>' + t('admin.productName') + '</th>' +
+            '<th>' + t('admin.qtySold') + '</th>' +
+            '<th>' + t('admin.revenue') + '</th>' +
+            '<th>' + t('admin.currentStock') + '</th>' +
+            '<th>' + t('admin.salesStockRatio') + '</th>' +
+          '</tr></thead>' +
+          '<tbody>' + productRows + '</tbody>' +
+        '</table></div>' +
       '</div>';
   },
 
