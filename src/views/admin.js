@@ -1753,6 +1753,368 @@ var AdminView = {
     }).join('');
   },
 
+  _statsDecisionClamp: function (n) {
+    n = parseFloat(n);
+    if (isNaN(n)) n = 0;
+    return Math.max(0, Math.min(100, Math.round(n)));
+  },
+
+  _statsDecisionConfidenceScore: function (ordersCount, rowsCount, hasComparison) {
+    var score = 35;
+    if (ordersCount >= 3) score += 20;
+    if (ordersCount >= 8) score += 20;
+    if (rowsCount >= 2) score += 10;
+    if (rowsCount >= 5) score += 10;
+    if (hasComparison) score += 5;
+    return AdminView._statsDecisionClamp(score);
+  },
+
+  _statsDecisionProductModel: function (filtered, previous, range) {
+    var current = {};
+    var prev = {};
+    var categories = {};
+    var prevCategories = {};
+    var nowMs = range.end.getTime();
+
+    function add(map, categoryMap, o) {
+      var ms = AdminView._orderTimestampMs(o);
+      (o.items || []).forEach(function (item) {
+        if (!AdminView._statsIsProductLine(item)) return;
+        var p = item.product || {};
+        var key = AdminView._statsProductKey(item);
+        var qty = parseFloat(item.qty);
+        if (isNaN(qty)) qty = 0;
+        var revenue = AdminView._statsLineRevenue(item);
+        var category = p.categoryLabel || p.category || 'ללא קטגוריה';
+        if (!map[key]) {
+          map[key] = {
+            key: key,
+            sku: p.sku || '—',
+            name: AdminView._statsProductName(item),
+            category: category,
+            qty: 0,
+            revenue: 0,
+            stock: typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : null,
+            lastMs: 0,
+            costLines: 0,
+            costTotal: 0
+          };
+        }
+        map[key].qty += qty;
+        map[key].revenue += revenue;
+        map[key].lastMs = Math.max(map[key].lastMs, ms || 0);
+        if (typeof p.stock === 'number' && !isNaN(p.stock)) map[key].stock = p.stock;
+        var cost = AdminView._statsLineCost(item);
+        if (cost !== null) {
+          map[key].costLines += 1;
+          map[key].costTotal += cost * qty;
+        }
+        if (!categoryMap[category]) categoryMap[category] = { name: category, qty: 0, revenue: 0 };
+        categoryMap[category].qty += qty;
+        categoryMap[category].revenue += revenue;
+      });
+    }
+
+    filtered.forEach(function (o) { add(current, categories, o); });
+    previous.forEach(function (o) { add(prev, prevCategories, o); });
+
+    var products = Object.keys(current).map(function (key) {
+      var p = current[key];
+      var pr = prev[key] || { qty: 0, revenue: 0 };
+      var cat = categories[p.category] || { qty: 0, revenue: 0 };
+      p.qty = parseFloat(p.qty.toFixed(2));
+      p.revenue = parseFloat(p.revenue.toFixed(2));
+      p.avgPrice = p.qty > 0 ? parseFloat((p.revenue / p.qty).toFixed(2)) : 0;
+      p.prevQty = parseFloat((pr.qty || 0).toFixed(2));
+      p.prevRevenue = parseFloat((pr.revenue || 0).toFixed(2));
+      p.categoryAvgPrice = cat.qty > 0 ? parseFloat((cat.revenue / cat.qty).toFixed(2)) : 0;
+      p.dailySales = Math.max(0, p.qty / Math.max(1, Math.ceil((range.end.getTime() - range.start.getTime()) / 864e5)));
+      p.stockDays = p.stock !== null && p.dailySales > 0 ? parseFloat((p.stock / p.dailySales).toFixed(1)) : null;
+      p.marginAvailable = p.costLines > 0 && p.qty > 0;
+      p.margin = p.marginAvailable ? parseFloat((p.revenue - p.costTotal).toFixed(2)) : null;
+      p.daysSince = p.lastMs ? Math.floor((nowMs - p.lastMs) / 864e5) : 999;
+      return p;
+    });
+
+    var categoryRows = Object.keys(categories).map(function (key) {
+      var c = categories[key];
+      var pc = prevCategories[key] || { revenue: 0, qty: 0 };
+      c.revenue = parseFloat(c.revenue.toFixed(2));
+      c.qty = parseFloat(c.qty.toFixed(2));
+      c.prevRevenue = parseFloat((pc.revenue || 0).toFixed(2));
+      c.growthPct = AdminView._statsPctChange(c.revenue, c.prevRevenue);
+      return c;
+    }).sort(function (a, b) { return b.growthPct - a.growthPct; });
+
+    return { products: products, categories: categoryRows };
+  },
+
+  _statsDecisionEngine: function (ctx) {
+    var productModel = AdminView._statsDecisionProductModel(ctx.filtered, ctx.previous, ctx.range);
+    var products = productModel.products;
+    var categories = productModel.categories;
+    var actions = [];
+    var risks = [];
+    var opportunities = [];
+    var maxRevenue = Math.max(1, ctx.summary.revenue || 1);
+
+    function confidence(rows, hasComparison) {
+      return AdminView._statsDecisionConfidenceScore(ctx.filtered.length, rows, hasComparison);
+    }
+
+    function addAction(data) {
+      data.revenueImpact = parseFloat((data.revenueImpact || 0).toFixed(2));
+      data.riskReduction = AdminView._statsDecisionClamp(data.riskReduction || 0);
+      data.urgency = AdminView._statsDecisionClamp(data.urgency || 0);
+      data.revenueScore = AdminView._statsDecisionClamp((data.revenueImpact / maxRevenue) * 100);
+      data.priorityScore = AdminView._statsDecisionClamp((data.revenueScore * 0.4) + (data.riskReduction * 0.3) + (data.urgency * 0.3));
+      data.confidence = AdminView._statsDecisionClamp(data.confidence || 0);
+      actions.push(data);
+    }
+
+    ctx.inventoryInsights.risks.forEach(function (p) {
+      var protectedRevenue = parseFloat((p.dailySales * p.revenue / Math.max(1, p.qty) * 7).toFixed(2));
+      var urgency = p.stockDays <= 3 ? 100 : (p.stockDays <= 7 ? 85 : 65);
+      var riskLevel = p.stockDays <= 7 ? 'HIGH RISK' : 'MEDIUM RISK';
+      addAction({
+        title: 'לתעדף חידוש מלאי: ' + p.name,
+        impactType: 'stock',
+        revenueImpact: protectedRevenue,
+        riskReduction: riskLevel === 'HIGH RISK' ? 90 : 70,
+        urgency: urgency,
+        confidence: confidence(ctx.inventoryInsights.productsWithStock, false),
+        reasoning: 'המוצר צפוי להיגמר בעוד ' + p.stockDays + ' ימים לפי קצב מכירה יומי.',
+        source: 'orders.items.product.stock + qty + unitPrice',
+        method: 'ימים עד חוסר = מלאי מתוך ההזמנה ÷ מכירה יומית בתקופה',
+        assumptions: 'אין שינוי מלאי בפועל. זו המלצה בלבד לפי צילום המלאי שהיה בפריטי ההזמנה.',
+        simulation: {
+          revenue: '+₪' + App.fmtP(protectedRevenue) + ' הכנסה מוגנת משבוע מכירות',
+          margin: 'לא חושב אם חסרה עלות בפריטי הזמנה',
+          stock: 'מפחית סיכון חוסר, ללא כתיבה למלאי',
+          customer: 'מפחית סיכון אובדן הזמנות עקב חוסר'
+        }
+      });
+      risks.push({
+        level: riskLevel,
+        title: p.name,
+        why: 'מלאי נמוך מול קצב מכירה',
+        impact: 'אובדן הכנסה צפוי עד ₪' + App.fmtP(protectedRevenue),
+        confidence: confidence(ctx.inventoryInsights.productsWithStock, false)
+      });
+      opportunities.push({
+        title: 'פריט בביקוש גבוה עם מלאי נמוך: ' + p.name,
+        upside: protectedRevenue,
+        confidence: confidence(ctx.inventoryInsights.productsWithStock, false),
+        action: 'בדיקת רכש/זמינות לפני חוסר מלאי',
+        source: 'orders.items'
+      });
+    });
+
+    ctx.customerInsights.churn.forEach(function (c) {
+      var avgOrder = c.orders > 0 ? c.revenue / c.orders : 0;
+      var riskReduction = c.daysSince >= 60 ? 90 : 70;
+      var urgency = c.daysSince >= 60 ? 90 : 65;
+      addAction({
+        title: 'ליצור קשר עם לקוח בסיכון: ' + c.name,
+        impactType: 'retention',
+        revenueImpact: avgOrder,
+        riskReduction: riskReduction,
+        urgency: urgency,
+        confidence: confidence(ctx.customerInsights.customerCount, false),
+        reasoning: 'לקוח בעל ערך לא הזמין ' + c.daysSince + ' ימים.',
+        source: 'orders.customerId/customerName + orders.items',
+        method: 'לקוח בסיכון = הכנסה היסטורית מעל ממוצע לקוח + 30+ ימים ללא הזמנה',
+        assumptions: 'ההכנסה המדומה היא ממוצע הזמנה היסטורי. אין שינוי לקוח בפועל.',
+        simulation: {
+          revenue: '+₪' + App.fmtP(avgOrder) + ' הכנסה אפשרית אם הלקוח חוזר להזמין',
+          margin: 'לא חושב אם חסרה עלות בפריטי הזמנה',
+          stock: 'אין שינוי מלאי',
+          customer: 'הפחתת סיכון נטישה'
+        }
+      });
+      risks.push({
+        level: c.daysSince >= 60 ? 'HIGH RISK' : 'MEDIUM RISK',
+        title: c.name,
+        why: 'לקוח בעל ערך לא פעיל',
+        impact: 'סיכון לאובדן הזמנה ממוצעת של ₪' + App.fmtP(avgOrder),
+        confidence: confidence(ctx.customerInsights.customerCount, false)
+      });
+      opportunities.push({
+        title: 'החזרת VIP לא פעיל: ' + c.name,
+        upside: avgOrder,
+        confidence: confidence(ctx.customerInsights.customerCount, false),
+        action: 'שיחת שירות/בדיקת צורך להזמנה חוזרת',
+        source: 'orders'
+      });
+    });
+
+    products.filter(function (p) {
+      return p.qty > 0 && p.categoryAvgPrice > 0 && p.avgPrice < p.categoryAvgPrice * 0.92;
+    }).sort(function (a, b) {
+      return (b.categoryAvgPrice - b.avgPrice) * b.qty - (a.categoryAvgPrice - a.avgPrice) * a.qty;
+    }).slice(0, 5).forEach(function (p) {
+      var upside = parseFloat(((p.categoryAvgPrice - p.avgPrice) * p.qty * 0.5).toFixed(2));
+      if (upside <= 0) return;
+      addAction({
+        title: 'לבחון מחיר למוצר: ' + p.name,
+        impactType: 'revenue',
+        revenueImpact: upside,
+        riskReduction: 35,
+        urgency: p.qty >= 5 ? 70 : 45,
+        confidence: confidence(products.length, true),
+        reasoning: 'מחיר ממוצע נמוך מממוצע הקטגוריה לפי הזמנות בפועל.',
+        source: 'orders.items.unitPrice + orders.items.product.category',
+        method: 'אפסייד = חצי מהפער מול מחיר ממוצע קטגוריה × כמות שנמכרה',
+        assumptions: 'סימולציה בלבד. אין עדכון מחיר ואין הנחת תגובת לקוחות.',
+        simulation: {
+          revenue: '+₪' + App.fmtP(upside) + ' אפסייד אפשרי',
+          margin: p.marginAvailable ? '+₪' + App.fmtP(upside) + ' לפני שינוי עלויות' : 'לא חושב כי חסרה עלות בפריטי הזמנה',
+          stock: 'אין שינוי מלאי',
+          customer: 'סיכון לקוח לא חושב ללא נתוני נטישה לפי מחיר'
+        }
+      });
+      opportunities.push({
+        title: 'מוצר מתומחר נמוך יחסית: ' + p.name,
+        upside: upside,
+        confidence: confidence(products.length, true),
+        action: 'בדיקת מחיר ידנית בלבד',
+        source: 'orders.items'
+      });
+    });
+
+    categories.filter(function (c) {
+      return c.revenue > 0 && c.growthPct >= 20;
+    }).slice(0, 3).forEach(function (c) {
+      var upside = parseFloat((c.revenue * Math.min(c.growthPct, 50) / 100 * 0.5).toFixed(2));
+      addAction({
+        title: 'לתעדף קטגוריה בצמיחה: ' + c.name,
+        impactType: 'revenue',
+        revenueImpact: upside,
+        riskReduction: 25,
+        urgency: c.growthPct >= 50 ? 75 : 55,
+        confidence: confidence(categories.length, true),
+        reasoning: 'הקטגוריה צמחה ב-' + c.growthPct + '% מול התקופה הקודמת.',
+        source: 'orders.items.product.category + revenue by period',
+        method: 'אפסייד = הכנסות קטגוריה × חצי משיעור הצמיחה, מוגבל ל-50%',
+        assumptions: 'סימולציה בלבד. אין שינוי קטלוג או מלאי.',
+        simulation: {
+          revenue: '+₪' + App.fmtP(upside) + ' אפסייד אפשרי',
+          margin: 'לא חושב אם חסרות עלויות בפריטי הזמנה',
+          stock: 'עשוי להגדיל צורך במלאי, ללא כתיבה',
+          customer: 'אין שינוי לקוח'
+        }
+      });
+      opportunities.push({
+        title: 'קטגוריה עולה: ' + c.name,
+        upside: upside,
+        confidence: confidence(categories.length, true),
+        action: 'לתת עדיפות תפעולית ושיווקית לקטגוריה',
+        source: 'orders.items'
+      });
+    });
+
+    if (ctx.summary.revenue < ctx.prevSummary.revenue && ctx.previous.length > 0) {
+      var drop = parseFloat((ctx.prevSummary.revenue - ctx.summary.revenue).toFixed(2));
+      risks.push({
+        level: drop > ctx.prevSummary.revenue * 0.25 ? 'HIGH RISK' : 'MEDIUM RISK',
+        title: 'ירידת הכנסות בתקופה',
+        why: 'הכנסות התקופה נמוכות מהתקופה הקודמת',
+        impact: 'פער הכנסות של ₪' + App.fmtP(drop),
+        confidence: confidence(ctx.filtered.length, true)
+      });
+      addAction({
+        title: 'לטפל בירידת הכנסות מול תקופה קודמת',
+        impactType: 'risk',
+        revenueImpact: drop,
+        riskReduction: 75,
+        urgency: 70,
+        confidence: confidence(ctx.filtered.length, true),
+        reasoning: 'נמצא פער הכנסות של ₪' + App.fmtP(drop) + ' מול התקופה הקודמת.',
+        source: 'orders.items revenue by current/previous period',
+        method: 'פער = הכנסות תקופה קודמת פחות הכנסות תקופה נוכחית',
+        assumptions: 'לא מבוצעת פעולה אוטומטית. יש לבדוק לקוחות ומוצרים מובילים.',
+        simulation: {
+          revenue: '+₪' + App.fmtP(drop) + ' הכנסה לשיקום אם חוזרים לרמת התקופה הקודמת',
+          margin: 'לא חושב אם חסרות עלויות',
+          stock: 'אין שינוי מלאי',
+          customer: 'תלוי בזיהוי לקוחות/מוצרים שירדו'
+        }
+      });
+    }
+
+    if (ctx.filtered.length > 0 && ctx.filtered.length < 3) {
+      risks.push({
+        level: 'LOW RISK',
+        title: 'מדגם נתונים קטן',
+        why: 'יש פחות מ-3 הזמנות בתקופה הנבחרת',
+        impact: 'החלטות עסקיות עלולות להיות פחות מדויקות',
+        confidence: confidence(ctx.filtered.length, false)
+      });
+    }
+
+    actions.sort(function (a, b) { return b.priorityScore - a.priorityScore; });
+    risks.sort(function (a, b) {
+      var rank = { 'HIGH RISK': 3, 'MEDIUM RISK': 2, 'LOW RISK': 1 };
+      return (rank[b.level] || 0) - (rank[a.level] || 0);
+    });
+    opportunities.sort(function (a, b) { return b.upside - a.upside; });
+
+    return {
+      actions: actions.slice(0, 10),
+      risks: risks.slice(0, 8),
+      opportunities: opportunities.slice(0, 8),
+      formula: 'Score = (Revenue Impact * 0.4) + (Risk Reduction * 0.3) + (Urgency * 0.3)'
+    };
+  },
+
+  _statsDecisionActionRows: function (actions) {
+    if (!actions.length) {
+      return '<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--text-muted)">אין מספיק נתוני orders/items ליצירת החלטות פעולה</td></tr>';
+    }
+    return actions.map(function (a, idx) {
+      return '<tr>' +
+        '<td style="font-weight:900;color:var(--orange)">' + (idx + 1) + '</td>' +
+        '<td><strong>' + App.escHTML(a.title) + '</strong><div style="font-size:12px;color:var(--text-muted);margin-top:4px">' + App.escHTML(a.reasoning) + '</div></td>' +
+        '<td><span class="bi-trend flat">' + App.escHTML(a.impactType) + '</span></td>' +
+        '<td style="font-weight:800;color:var(--blue)">' + a.priorityScore + '</td>' +
+        '<td>' + a.confidence + '/100</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(a.source) + '<br>' + App.escHTML(a.method) + '<br>הנחות: ' + App.escHTML(a.assumptions) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(a.simulation.revenue) + '<br>' + App.escHTML(a.simulation.margin) + '<br>' + App.escHTML(a.simulation.stock) + '<br>' + App.escHTML(a.simulation.customer) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsDecisionRiskRows: function (risks) {
+    if (!risks.length) {
+      return '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted)">לא זוהה סיכון עסקי ברור לפי orders/items</td></tr>';
+    }
+    return risks.map(function (r) {
+      var color = r.level === 'HIGH RISK' ? 'var(--red)' : (r.level === 'MEDIUM RISK' ? 'var(--orange)' : 'var(--text-muted)');
+      return '<tr>' +
+        '<td style="font-weight:900;color:' + color + '">' + App.escHTML(r.level) + '</td>' +
+        '<td><strong>' + App.escHTML(r.title) + '</strong></td>' +
+        '<td>' + App.escHTML(r.why) + '</td>' +
+        '<td>' + App.escHTML(r.impact) + '</td>' +
+        '<td>' + r.confidence + '/100</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsDecisionOpportunityRows: function (opportunities) {
+    if (!opportunities.length) {
+      return '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted)">אין מספיק נתונים להזדמנויות צמיחה אמינות</td></tr>';
+    }
+    return opportunities.map(function (o) {
+      return '<tr>' +
+        '<td><strong>' + App.escHTML(o.title) + '</strong><div style="font-size:12px;color:var(--text-muted)">מקור: ' + App.escHTML(o.source) + '</div></td>' +
+        '<td style="font-weight:800;color:var(--green)">₪' + App.fmtP(o.upside) + '</td>' +
+        '<td>' + o.confidence + '/100</td>' +
+        '<td>' + App.escHTML(o.action) + '</td>' +
+        '<td style="color:var(--text-muted)">סימולציה בלבד, ללא כתיבה למערכת</td>' +
+      '</tr>';
+    }).join('');
+  },
+
   _statsRender: function (c, orders) {
     orders = (orders || []).filter(function (o) { return AdminView._orderTimestampMs(o) > 0; });
     var periods = [
@@ -1785,6 +2147,15 @@ var AdminView = {
     var churnConfidence = AdminView._statsConfidence({ currentOrders: orders.length, previousOrders: 0, rows: customerInsights.customerCount }, false);
     var inventoryConfidence = AdminView._statsConfidence({ currentOrders: filtered.length, previousOrders: 0, rows: inventoryInsights.productsWithStock }, false);
     var businessScore = AdminView._statsBusinessScore(summary, prevSummary, customerInsights, inventoryInsights, filtered.length, previous.length);
+    var decisionEngine = AdminView._statsDecisionEngine({
+      filtered: filtered,
+      previous: previous,
+      range: range,
+      summary: summary,
+      prevSummary: prevSummary,
+      customerInsights: customerInsights,
+      inventoryInsights: inventoryInsights
+    });
 
     function statCard(icon, label, value, sub, trendPct) {
       return '<div class="stat-card"><span class="material-icons-round">' + icon + '</span>' +
@@ -1879,6 +2250,20 @@ var AdminView = {
           '<div class="table-wrap"><table class="admin-table"><thead><tr><th>' + t('admin.skuCol') + '</th><th>' + t('admin.productName') + '</th><th>ימים עד חוסר</th><th>נתוני חישוב</th></tr></thead>' +
           '<tbody>' + AdminView._statsInsightRows(inventoryInsights.risks, 'inventory') + '</tbody></table></div></div>' +
         '<p class="admin-note">Business Score parts: Revenue ' + businessScore.parts.revenueMomentum + ', Customers ' + businessScore.parts.customerActivity + ', Stock ' + businessScore.parts.stockHealth + ', Risk ' + businessScore.parts.riskLevel + ', Growth ' + businessScore.parts.growthTrend + '.</p>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">מנוע החלטות AI — קריאה בלבד</h3>' +
+        '<p class="admin-note">מודל תיעדוף: ' + decisionEngine.formula + '. Revenue Impact מנורמל ל-0–100 לפי הכנסות התקופה. אין יצירת הזמנות, אין שינוי מחיר, אין שינוי מלאי ואין כתיבה ל-Firestore.</p>' +
+        '<div class="table-wrap"><table class="admin-table">' +
+          '<thead><tr><th>#</th><th>מה לעשות עכשיו</th><th>סוג השפעה</th><th>ציון</th><th>ביטחון</th><th>הסבר ושיטת חישוב</th><th>סימולציה ללא כתיבה</th></tr></thead>' +
+          '<tbody>' + AdminView._statsDecisionActionRows(decisionEngine.actions) + '</tbody>' +
+        '</table></div>' +
+        '<div class="bi-top-grid">' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Business Risk Radar</h3>' +
+            '<div class="table-wrap"><table class="admin-table"><thead><tr><th>רמה</th><th>נושא</th><th>למה זה סיכון</th><th>השפעה צפויה</th><th>ביטחון</th></tr></thead>' +
+            '<tbody>' + AdminView._statsDecisionRiskRows(decisionEngine.risks) + '</tbody></table></div></div>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Opportunity Engine</h3>' +
+            '<div class="table-wrap"><table class="admin-table"><thead><tr><th>הזדמנות</th><th>אפסייד משוער</th><th>ביטחון</th><th>פעולה נדרשת</th><th>הערה</th></tr></thead>' +
+            '<tbody>' + AdminView._statsDecisionOpportunityRows(decisionEngine.opportunities) + '</tbody></table></div></div>' +
+        '</div>' +
         '<div class="bi-comparison">' +
           '<strong>' + t('admin.periodComparison') + '</strong>' +
           '<span>' + t('admin.revenueChange') + ': ' + AdminView._statsTrendHtml(AdminView._statsPctChange(summary.revenue, prevSummary.revenue)) + '</span>' +
