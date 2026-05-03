@@ -1574,6 +1574,185 @@ var AdminView = {
     '</div></div>';
   },
 
+  _statsConfidence: function (points, needsPrevious) {
+    points = points || {};
+    var currentOrders = parseInt(points.currentOrders, 10) || 0;
+    var previousOrders = parseInt(points.previousOrders, 10) || 0;
+    var rows = parseInt(points.rows, 10) || 0;
+    if (currentOrders >= 8 && (!needsPrevious || previousOrders >= 5) && rows >= 3) return 'גבוה';
+    if (currentOrders >= 3 && (!needsPrevious || previousOrders >= 1) && rows >= 1) return 'בינוני';
+    return 'נמוך';
+  },
+
+  _statsCustomerInsights: function (orders, filtered, nowMs) {
+    var allMap = {};
+    var periodMap = {};
+
+    function addTo(map, o) {
+      var key = String(o.customerId || o.customerName || 'unknown');
+      var name = AdminView._statsCustomerLabel(o.customerName || key) || key;
+      if (!map[key]) map[key] = { key: key, name: name, revenue: 0, orders: 0, lastMs: 0 };
+      map[key].orders += 1;
+      map[key].lastMs = Math.max(map[key].lastMs, AdminView._orderTimestampMs(o));
+      (o.items || []).forEach(function (item) {
+        if (!AdminView._statsIsProductLine(item)) return;
+        map[key].revenue += AdminView._statsLineRevenue(item);
+      });
+    }
+
+    orders.forEach(function (o) { addTo(allMap, o); });
+    filtered.forEach(function (o) { addTo(periodMap, o); });
+
+    function normalize(map) {
+      return Object.keys(map).map(function (key) {
+        map[key].revenue = parseFloat(map[key].revenue.toFixed(2));
+        return map[key];
+      });
+    }
+
+    var allCustomers = normalize(allMap);
+    var periodCustomers = normalize(periodMap);
+    var avgRevenue = allCustomers.length
+      ? allCustomers.reduce(function (s, c) { return s + c.revenue; }, 0) / allCustomers.length
+      : 0;
+    var vip = periodCustomers.filter(function (c) {
+      return c.revenue >= avgRevenue || c.orders >= 2;
+    }).sort(function (a, b) {
+      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+      return b.orders - a.orders;
+    }).slice(0, 5);
+
+    var churn = allCustomers.filter(function (c) {
+      var daysSince = c.lastMs ? Math.floor((nowMs - c.lastMs) / 864e5) : 999;
+      c.daysSince = daysSince;
+      return c.revenue >= avgRevenue && daysSince >= 30;
+    }).sort(function (a, b) {
+      if (b.daysSince !== a.daysSince) return b.daysSince - a.daysSince;
+      return b.revenue - a.revenue;
+    }).slice(0, 5);
+
+    return {
+      vip: vip,
+      churn: churn,
+      customerCount: allCustomers.length,
+      avgRevenue: parseFloat(avgRevenue.toFixed(2))
+    };
+  },
+
+  _statsInventoryInsights: function (orders, filtered, range) {
+    var allProducts = {};
+    var periodProducts = {};
+
+    function addProduct(map, item) {
+      if (!AdminView._statsIsProductLine(item)) return;
+      var p = item.product || {};
+      var key = AdminView._statsProductKey(item);
+      var qty = parseFloat(item.qty);
+      if (isNaN(qty)) qty = 0;
+      if (!map[key]) {
+        map[key] = {
+          key: key,
+          sku: p.sku || '—',
+          name: AdminView._statsProductName(item),
+          qty: 0,
+          revenue: 0,
+          stock: typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : null
+        };
+      }
+      map[key].qty += qty;
+      map[key].revenue += AdminView._statsLineRevenue(item);
+      if (typeof p.stock === 'number' && !isNaN(p.stock)) map[key].stock = p.stock;
+    }
+
+    orders.forEach(function (o) {
+      (o.items || []).forEach(function (item) { addProduct(allProducts, item); });
+    });
+    filtered.forEach(function (o) {
+      (o.items || []).forEach(function (item) { addProduct(periodProducts, item); });
+    });
+
+    var days = Math.max(1, Math.ceil((range.end.getTime() - range.start.getTime()) / 864e5));
+    var risks = Object.keys(periodProducts).map(function (key) {
+      var ps = periodProducts[key];
+      var dailySales = ps.qty / days;
+      var stockDays = ps.stock !== null && dailySales > 0 ? ps.stock / dailySales : null;
+      ps.qty = parseFloat(ps.qty.toFixed(2));
+      ps.revenue = parseFloat(ps.revenue.toFixed(2));
+      ps.dailySales = parseFloat(dailySales.toFixed(2));
+      ps.stockDays = stockDays === null ? null : parseFloat(stockDays.toFixed(1));
+      return ps;
+    }).filter(function (ps) {
+      return ps.stock !== null && ps.dailySales > 0 && ps.stockDays <= 14;
+    }).sort(function (a, b) {
+      return a.stockDays - b.stockDays;
+    }).slice(0, 5);
+
+    return {
+      risks: risks,
+      productsWithSales: Object.keys(periodProducts).length,
+      productsWithStock: Object.keys(allProducts).filter(function (key) { return allProducts[key].stock !== null; }).length
+    };
+  },
+
+  _statsBusinessScore: function (summary, prevSummary, customerInsights, inventoryInsights, currentOrders, previousOrders) {
+    var confidence = AdminView._statsConfidence({
+      currentOrders: currentOrders,
+      previousOrders: previousOrders,
+      rows: customerInsights.customerCount + inventoryInsights.productsWithSales
+    }, true);
+    if (currentOrders < 3 || (customerInsights.customerCount + inventoryInsights.productsWithSales) < 2) {
+      return {
+        score: null,
+        confidence: confidence,
+        parts: { revenueMomentum: 0, customerActivity: 0, stockHealth: 0, riskLevel: 0, growthTrend: 0 }
+      };
+    }
+    var revenuePct = AdminView._statsPctChange(summary.revenue, prevSummary.revenue);
+    var qtyPct = AdminView._statsPctChange(summary.qty, prevSummary.qty);
+    var revenueMomentum = Math.max(0, Math.min(100, 50 + revenuePct));
+    var customerActivity = Math.max(0, Math.min(100, customerInsights.customerCount ? (currentOrders / Math.max(1, customerInsights.customerCount)) * 35 : 0));
+    var stockHealth = Math.max(0, 100 - (inventoryInsights.risks.length * 15));
+    var riskLevel = Math.max(0, 100 - (customerInsights.churn.length * 12) - (inventoryInsights.risks.length * 10));
+    var growthTrend = Math.max(0, Math.min(100, 50 + ((revenuePct + qtyPct) / 2)));
+    var score = Math.round((revenueMomentum * 0.3) + (customerActivity * 0.2) + (stockHealth * 0.2) + (riskLevel * 0.15) + (growthTrend * 0.15));
+
+    return {
+      score: Math.max(0, Math.min(100, score)),
+      confidence: confidence,
+      parts: {
+        revenueMomentum: Math.round(revenueMomentum),
+        customerActivity: Math.round(customerActivity),
+        stockHealth: Math.round(stockHealth),
+        riskLevel: Math.round(riskLevel),
+        growthTrend: Math.round(growthTrend)
+      }
+    };
+  },
+
+  _statsInsightRows: function (rows, type) {
+    if (!rows.length) {
+      return '<tr><td colspan="4" style="text-align:center;padding:18px;color:var(--text-muted)">אין מספיק נתונים אמיתיים להצגה</td></tr>';
+    }
+    return rows.map(function (r) {
+      if (type === 'inventory') {
+        return '<tr><td><code style="font-size:12px">' + App.escHTML(r.sku) + '</code></td>' +
+          '<td><strong>' + App.escHTML(r.name) + '</strong></td>' +
+          '<td style="font-weight:800;color:var(--red)">' + App.fmtP(r.stockDays) + ' ימים</td>' +
+          '<td style="color:var(--text-muted)">מלאי ' + App.fmtP(r.stock) + ' | מכירה יומית ' + App.fmtP(r.dailySales) + '</td></tr>';
+      }
+      if (type === 'churn') {
+        return '<tr><td><strong>' + App.escHTML(r.name) + '</strong></td>' +
+          '<td style="font-weight:800;color:var(--orange)">₪' + App.fmtP(r.revenue) + '</td>' +
+          '<td style="color:var(--red);font-weight:700">' + r.daysSince + ' ימים</td>' +
+          '<td style="color:var(--text-muted)">' + r.orders + ' הזמנות</td></tr>';
+      }
+      return '<tr><td><strong>' + App.escHTML(r.name) + '</strong></td>' +
+        '<td style="font-weight:800;color:var(--blue)">₪' + App.fmtP(r.revenue) + '</td>' +
+        '<td style="color:var(--green);font-weight:700">' + r.orders + ' הזמנות</td>' +
+        '<td style="color:var(--text-muted)">מעל ממוצע לקוח</td></tr>';
+    }).join('');
+  },
+
   _statsRender: function (c, orders) {
     orders = (orders || []).filter(function (o) { return AdminView._orderTimestampMs(o) > 0; });
     var periods = [
@@ -1597,6 +1776,15 @@ var AdminView = {
     var series = AdminView._statsSeries(filtered, AdminView._statsGrain);
     var productStats = AdminView._statsProducts(filtered);
     var prevProducts = AdminView._statsProducts(previous);
+    var nowMs = Date.now();
+    var customerInsights = AdminView._statsCustomerInsights(orders, filtered, nowMs);
+    var inventoryInsights = AdminView._statsInventoryInsights(orders, filtered, range);
+    var revenueTrendPct = AdminView._statsPctChange(summary.revenue, prevSummary.revenue);
+    var revenueTrendConfidence = AdminView._statsConfidence({ currentOrders: filtered.length, previousOrders: previous.length, rows: filtered.length }, true);
+    var vipConfidence = AdminView._statsConfidence({ currentOrders: filtered.length, previousOrders: previous.length, rows: customerInsights.vip.length }, false);
+    var churnConfidence = AdminView._statsConfidence({ currentOrders: orders.length, previousOrders: 0, rows: customerInsights.customerCount }, false);
+    var inventoryConfidence = AdminView._statsConfidence({ currentOrders: filtered.length, previousOrders: 0, rows: inventoryInsights.productsWithStock }, false);
+    var businessScore = AdminView._statsBusinessScore(summary, prevSummary, customerInsights, inventoryInsights, filtered.length, previous.length);
 
     function statCard(icon, label, value, sub, trendPct) {
       return '<div class="stat-card"><span class="material-icons-round">' + icon + '</span>' +
@@ -1638,6 +1826,12 @@ var AdminView = {
     var profitText = summary.profitAvailable ? '₪' + App.fmtP(summary.profit) : t('admin.notDerivable');
     var profitSub = summary.profitAvailable ? t('admin.fromOrderCosts') : t('admin.missingOrderCosts');
     var profitChart = summary.profitAvailable ? AdminView._statsBarChart(series, 'profit', t('admin.profitTrend'), '₪') : '';
+    var topOpportunity = customerInsights.vip.length
+      ? 'הזדמנות: לחזק את ' + App.escHTML(customerInsights.vip[0].name)
+      : 'אין מספיק נתונים להזדמנות היום';
+    var topRisk = customerInsights.churn.length
+      ? 'סיכון: ' + App.escHTML(customerInsights.churn[0].name) + ' לא הזמין ' + customerInsights.churn[0].daysSince + ' ימים'
+      : (inventoryInsights.risks.length ? 'סיכון מלאי: ' + App.escHTML(inventoryInsights.risks[0].name) : 'אין סיכון בולט לפי הנתונים');
 
     c.innerHTML =
       '<div class="admin-section">' +
@@ -1661,6 +1855,30 @@ var AdminView = {
           statCard('inventory_2', t('admin.stockMovement'), App.fmtP(summary.stockMovement), t('admin.fromOrderItems'), AdminView._statsPctChange(summary.stockMovement, prevSummary.stockMovement)) +
           statCard('trending_up', t('admin.profitLabel'), profitText, profitSub, summary.profitAvailable && prevSummary.profitAvailable ? AdminView._statsPctChange(summary.profit, prevSummary.profit) : null) +
         '</div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">AI Strategic Command Center</h3>' +
+        '<div class="stats-grid">' +
+          statCard('show_chart', 'Revenue trend', AdminView._statsTrendHtml(revenueTrendPct), 'נוסחה: הכנסות תקופה נוכחית מול תקופה קודמת | ביטחון: ' + revenueTrendConfidence, null) +
+          statCard('workspace_premium', 'VIP customers', customerInsights.vip.length ? customerInsights.vip.length + ' לקוחות' : 'אין מספיק נתונים', 'נוסחה: הכנסה בתקופה או 2+ הזמנות | ביטחון: ' + vipConfidence, null) +
+          statCard('warning', 'Churn risk', customerInsights.churn.length ? customerInsights.churn.length + ' לקוחות בסיכון' : 'אין סיכון בולט', 'נוסחה: לקוח בעל ערך שלא הזמין 30+ ימים | ביטחון: ' + churnConfidence, null) +
+          statCard('inventory', 'Inventory risk', inventoryInsights.risks.length ? inventoryInsights.risks.length + ' מוצרים' : 'אין סיכון בולט', 'נוסחה: מלאי בהזמנה ÷ קצב מכירה יומי <= 14 ימים | ביטחון: ' + inventoryConfidence, null) +
+          statCard('speed', 'Business Score 100', businessScore.score === null ? 'אין מספיק נתונים' : businessScore.score + '/100', 'נוסחה: הכנסות 30%, לקוחות 20%, מלאי 20%, סיכון 15%, צמיחה 15% | ביטחון: ' + businessScore.confidence, null) +
+        '</div>' +
+        '<div class="bi-comparison">' +
+          '<strong>Top opportunity today</strong><span>' + topOpportunity + '</span>' +
+          '<strong>Top risk today</strong><span>' + topRisk + '</span>' +
+        '</div>' +
+        '<div class="bi-top-grid">' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">VIP customers</h3>' +
+            '<div class="table-wrap"><table class="admin-table"><thead><tr><th>לקוח</th><th>הכנסות</th><th>הזמנות</th><th>חישוב</th></tr></thead>' +
+            '<tbody>' + AdminView._statsInsightRows(customerInsights.vip, 'vip') + '</tbody></table></div></div>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Churn risk customers</h3>' +
+            '<div class="table-wrap"><table class="admin-table"><thead><tr><th>לקוח</th><th>הכנסות היסטוריות</th><th>ימים ללא הזמנה</th><th>הזמנות</th></tr></thead>' +
+            '<tbody>' + AdminView._statsInsightRows(customerInsights.churn, 'churn') + '</tbody></table></div></div>' +
+        '</div>' +
+        '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Inventory risk</h3>' +
+          '<div class="table-wrap"><table class="admin-table"><thead><tr><th>' + t('admin.skuCol') + '</th><th>' + t('admin.productName') + '</th><th>ימים עד חוסר</th><th>נתוני חישוב</th></tr></thead>' +
+          '<tbody>' + AdminView._statsInsightRows(inventoryInsights.risks, 'inventory') + '</tbody></table></div></div>' +
+        '<p class="admin-note">Business Score parts: Revenue ' + businessScore.parts.revenueMomentum + ', Customers ' + businessScore.parts.customerActivity + ', Stock ' + businessScore.parts.stockHealth + ', Risk ' + businessScore.parts.riskLevel + ', Growth ' + businessScore.parts.growthTrend + '.</p>' +
         '<div class="bi-comparison">' +
           '<strong>' + t('admin.periodComparison') + '</strong>' +
           '<span>' + t('admin.revenueChange') + ': ' + AdminView._statsTrendHtml(AdminView._statsPctChange(summary.revenue, prevSummary.revenue)) + '</span>' +
