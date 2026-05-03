@@ -875,6 +875,54 @@ html[dir="ltr"] .form-group label { text-align: left; }
 .stat-val   { font-size: 22px; font-weight: 900; color: var(--white); line-height: 1.1; }
 .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
 .stat-sub   { font-size: 12px; color: var(--orange); margin-top: 2px; font-weight: 600; }
+.bi-trend {
+  display: inline-flex; align-items: center; gap: 3px;
+  width: fit-content; margin-top: 6px; padding: 3px 8px;
+  border-radius: 50px; font-size: 12px; font-weight: 800;
+}
+.bi-trend.up { color: var(--green); background: var(--green-dim); }
+.bi-trend.down { color: var(--red); background: var(--red-dim); }
+.bi-trend.flat { color: var(--text-muted); background: rgba(255,255,255,.06); }
+.bi-comparison {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--navy-dark); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.bi-comparison span { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13px; }
+.bi-chart-grid,
+.bi-top-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.bi-chart-card {
+  background: var(--navy-light);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  min-height: 250px;
+}
+.bi-chart-title { font-size: 14px; font-weight: 800; margin-bottom: 16px; }
+.bi-bars {
+  display: flex; align-items: flex-end; gap: 8px;
+  height: 170px; padding-top: 8px; overflow-x: auto;
+}
+.bi-bar-wrap {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  gap: 6px; min-width: 34px; height: 100%; color: var(--text-muted); font-size: 10px;
+}
+.bi-bar {
+  width: 100%; min-height: 4px; border-radius: 8px 8px 2px 2px;
+  background: linear-gradient(180deg, var(--blue-light), var(--blue));
+  box-shadow: 0 6px 18px rgba(52,152,219,.18);
+}
+.bi-bar.orange { background: linear-gradient(180deg, #ffb066, var(--orange)); box-shadow: 0 6px 18px rgba(255,126,32,.16); }
+.bi-bar.green { background: linear-gradient(180deg, #65d98c, var(--green)); box-shadow: 0 6px 18px rgba(39,174,96,.16); }
+.bi-empty {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 160px; color: var(--text-muted); background: var(--navy-light);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
 
 /* ===== PRINT (delivery note) ===== */
 @media print {

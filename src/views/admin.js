@@ -16,9 +16,15 @@ var AdminView = {
   _ORDERS_QUERY_LIMIT: 50,
   /** Stats/financial: rolling window; ISO lower bound matches string timestamps on orders. */
   _STATS_QUERY_LOOKBACK_DAYS: 90,
+  /** BI dashboard needs current + previous yearly windows without changing financial tab loading. */
+  _BI_QUERY_LOOKBACK_DAYS: 760,
 
   _statsOrdersStartISO: function () {
     return new Date(Date.now() - AdminView._STATS_QUERY_LOOKBACK_DAYS * 864e5).toISOString();
+  },
+
+  _biOrdersStartISO: function () {
+    return new Date(Date.now() - AdminView._BI_QUERY_LOOKBACK_DAYS * 864e5).toISOString();
   },
 
   _orderTimestampMs: function (o) {
@@ -1338,11 +1344,12 @@ var AdminView = {
 
   /* ===== STATISTICS ===== */
   _statsPeriod: 'month',
+  _statsGrain: 'daily',
 
   _stats: function (c) {
     if (window.DB) {
       c.innerHTML = '<div class="admin-section"><div style="display:flex;justify-content:center;padding:48px"><div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div></div></div>';
-      var START_DATE = AdminView._statsOrdersStartISO();
+      var START_DATE = AdminView._biOrdersStartISO();
       window.DB.collection('orders')
         .where('timestamp', '>=', START_DATE)
         .orderBy('timestamp', 'desc')
@@ -1365,10 +1372,16 @@ var AdminView = {
     if (el) AdminView._stats(el);
   },
 
-  _statsFilterOrders: function (orders, period) {
+  _setStatsGrain: function (grain) {
+    AdminView._statsGrain = grain;
+    var el = document.getElementById('av-content');
+    if (el) AdminView._stats(el);
+  },
+
+  _statsPeriodRange: function (period) {
     var now = new Date();
     var start = null;
-    
+
     if (period === 'month') {
       start = new Date(now.getFullYear(), now.getMonth(), 1);
     } else if (period === 'quarter') {
@@ -1378,14 +1391,187 @@ var AdminView = {
     } else if (period === 'year') {
       start = new Date(now.getFullYear(), 0, 1);
     }
-    
-    if (!start) return orders;
-    
+
+    if (!start) start = new Date(0);
+    return { start: start, end: now };
+  },
+
+  _statsPreviousRange: function (range) {
+    var len = range.end.getTime() - range.start.getTime();
+    var prevEnd = new Date(range.start.getTime());
+    return { start: new Date(prevEnd.getTime() - len), end: prevEnd };
+  },
+
+  _statsFilterOrders: function (orders, period) {
+    var range = AdminView._statsPeriodRange(period);
+    return AdminView._statsFilterOrdersInRange(orders, range);
+  },
+
+  _statsFilterOrdersInRange: function (orders, range) {
     return orders.filter(function (o) {
       var ms = AdminView._orderTimestampMs(o);
       if (!ms) return false;
-      return new Date(ms) >= start;
+      return ms >= range.start.getTime() && ms < range.end.getTime();
     });
+  },
+
+  _statsIsProductLine: function (item) {
+    var p = item && item.product ? item.product : {};
+    return !(p.id === 'ship-1000' || p.category === 'shipping' || String(p.sku) === '1000');
+  },
+
+  _statsLineRevenue: function (item) {
+    var qty = parseFloat(item && item.qty);
+    var unitPrice = parseFloat(item && item.unitPrice);
+    if (isNaN(qty) || isNaN(unitPrice)) return 0;
+    return parseFloat((qty * unitPrice).toFixed(2));
+  },
+
+  _statsLineCost: function (item) {
+    item = item || {};
+    var p = item && item.product ? item.product : {};
+    var vals = [item.unitCost, item.cost, p.unitCost, p.cost, p.costPrice, p.purchasePrice, p.supplierCost];
+    for (var i = 0; i < vals.length; i++) {
+      var n = parseFloat(vals[i]);
+      if (!isNaN(n) && n >= 0) return n;
+    }
+    return null;
+  },
+
+  _statsProductKey: function (item) {
+    var p = item && item.product ? item.product : {};
+    return String(p.id || p.sku || p.name || 'unknown');
+  },
+
+  _statsProductName: function (item) {
+    var p = item && item.product ? item.product : {};
+    return pLang(p, 'name') || p.name || t('admin.unknownProduct');
+  },
+
+  _statsAggregate: function (list) {
+    var out = { revenue: 0, qty: 0, stockMovement: 0, orders: list.length, profit: 0, profitLines: 0, missingCostLines: 0 };
+    list.forEach(function (o) {
+      (o.items || []).forEach(function (item) {
+        if (!AdminView._statsIsProductLine(item)) return;
+        var qty = parseFloat(item.qty);
+        if (isNaN(qty)) qty = 0;
+        var revenue = AdminView._statsLineRevenue(item);
+        out.revenue += revenue;
+        out.qty += qty;
+        out.stockMovement += qty;
+        var cost = AdminView._statsLineCost(item);
+        if (cost === null) {
+          out.missingCostLines += 1;
+        } else {
+          out.profit += revenue - (cost * qty);
+          out.profitLines += 1;
+        }
+      });
+    });
+    out.revenue = parseFloat(out.revenue.toFixed(2));
+    out.qty = parseFloat(out.qty.toFixed(2));
+    out.stockMovement = parseFloat(out.stockMovement.toFixed(2));
+    out.profit = parseFloat(out.profit.toFixed(2));
+    out.profitAvailable = out.profitLines > 0 && out.missingCostLines === 0;
+    return out;
+  },
+
+  _statsProducts: function (list) {
+    var map = {};
+    list.forEach(function (o) {
+      (o.items || []).forEach(function (item) {
+        if (!AdminView._statsIsProductLine(item)) return;
+        var key = AdminView._statsProductKey(item);
+        var qty = parseFloat(item.qty);
+        if (isNaN(qty)) qty = 0;
+        if (!map[key]) {
+          var p = item.product || {};
+          map[key] = { key: key, sku: p.sku || '—', name: AdminView._statsProductName(item), qty: 0, revenue: 0 };
+        }
+        map[key].qty += qty;
+        map[key].revenue += AdminView._statsLineRevenue(item);
+      });
+    });
+    Object.keys(map).forEach(function (k) {
+      map[k].qty = parseFloat(map[k].qty.toFixed(2));
+      map[k].revenue = parseFloat(map[k].revenue.toFixed(2));
+    });
+    return map;
+  },
+
+  _statsPctChange: function (current, previous) {
+    current = parseFloat(current) || 0;
+    previous = parseFloat(previous) || 0;
+    if (previous === 0) return current === 0 ? 0 : 100;
+    return parseFloat(((current - previous) / Math.abs(previous) * 100).toFixed(1));
+  },
+
+  _statsTrendHtml: function (pct) {
+    var cls = pct > 0 ? 'up' : (pct < 0 ? 'down' : 'flat');
+    var icon = pct > 0 ? '↑' : (pct < 0 ? '↓' : '→');
+    return '<span class="bi-trend ' + cls + '">' + icon + ' ' + Math.abs(pct) + '%</span>';
+  },
+
+  _statsDateKey: function (date, grain) {
+    var d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    if (grain === 'weekly') {
+      var day = d.getDay();
+      d.setDate(d.getDate() - day);
+    }
+    if (grain === 'monthly') {
+      d = new Date(date.getFullYear(), date.getMonth(), 1);
+    }
+    function pad(n) { return n < 10 ? '0' + n : String(n); }
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  },
+
+  _statsSeries: function (list, grain) {
+    var map = {};
+    list.forEach(function (o) {
+      var ms = AdminView._orderTimestampMs(o);
+      if (!ms) return;
+      var key = AdminView._statsDateKey(new Date(ms), grain);
+      if (!map[key]) map[key] = { label: key, revenue: 0, qty: 0, profit: 0, profitAvailable: true, profitLines: 0 };
+      (o.items || []).forEach(function (item) {
+        if (!AdminView._statsIsProductLine(item)) return;
+        var qty = parseFloat(item.qty);
+        if (isNaN(qty)) qty = 0;
+        var revenue = AdminView._statsLineRevenue(item);
+        map[key].revenue += revenue;
+        map[key].qty += qty;
+        var cost = AdminView._statsLineCost(item);
+        if (cost === null) {
+          map[key].profitAvailable = false;
+        } else {
+          map[key].profit += revenue - (cost * qty);
+          map[key].profitLines += 1;
+        }
+      });
+    });
+    return Object.keys(map).sort().map(function (key) {
+      var row = map[key];
+      row.revenue = parseFloat(row.revenue.toFixed(2));
+      row.qty = parseFloat(row.qty.toFixed(2));
+      row.profit = parseFloat(row.profit.toFixed(2));
+      row.profitAvailable = row.profitAvailable && row.profitLines > 0;
+      return row;
+    });
+  },
+
+  _statsBarChart: function (series, metric, title, prefix) {
+    if (!series.length) return '<div class="bi-empty">' + t('admin.noData') + '</div>';
+    var max = series.reduce(function (m, r) { return Math.max(m, Math.abs(r[metric] || 0)); }, 0);
+    if (max <= 0) max = 1;
+    return '<div class="bi-chart-card"><div class="bi-chart-title">' + title + '</div><div class="bi-bars">' +
+      series.map(function (r) {
+        var val = r[metric] || 0;
+        var h = Math.max(4, Math.round(Math.abs(val) / max * 100));
+        return '<div class="bi-bar-wrap" title="' + r.label + ': ' + (prefix || '') + App.fmtP(val) + '">' +
+          '<div class="bi-bar ' + (metric === 'qty' ? 'orange' : (metric === 'profit' ? 'green' : '')) + '" style="height:' + h + '%"></div>' +
+          '<span>' + r.label.substring(5) + '</span>' +
+        '</div>';
+      }).join('') +
+    '</div></div>';
   },
 
   _statsRender: function (c, orders) {
@@ -1396,113 +1582,120 @@ var AdminView = {
       { id: 'halfyear', label: t('admin.periodHalfYear') },
       { id: 'year', label: t('admin.periodYear') }
     ];
-    
-    var filtered = AdminView._statsFilterOrders(orders, AdminView._statsPeriod);
+    var grains = [
+      { id: 'daily', label: t('admin.daily') },
+      { id: 'weekly', label: t('admin.weekly') },
+      { id: 'monthly', label: t('admin.monthly') }
+    ];
 
-    function topProduct(list) {
-      var counts = {};
-      list.forEach(function (o) {
-        o.items.forEach(function (i) {
-          if (i.product.sku === '1000') return;
-          var k = i.product.sku + '|' + i.product.name;
-          counts[k] = (counts[k] || 0) + i.qty;
-        });
-      });
-      var keys = Object.keys(counts);
-      if (!keys.length) return null;
-      var top = keys.sort(function (a, b) { return counts[b] - counts[a]; })[0];
-      return { name: top.split('|')[1], qty: counts[top] };
-    }
+    var range = AdminView._statsPeriodRange(AdminView._statsPeriod);
+    var prevRange = AdminView._statsPreviousRange(range);
+    var filtered = AdminView._statsFilterOrdersInRange(orders, range);
+    var previous = AdminView._statsFilterOrdersInRange(orders, prevRange);
+    var summary = AdminView._statsAggregate(filtered);
+    var prevSummary = AdminView._statsAggregate(previous);
+    var series = AdminView._statsSeries(filtered, AdminView._statsGrain);
+    var productStats = AdminView._statsProducts(filtered);
+    var prevProducts = AdminView._statsProducts(previous);
 
-    function topCustomer(list) {
-      var totals = {};
-      list.forEach(function (o) { totals[o.customerName] = (totals[o.customerName] || 0) + o.total; });
-      var keys = Object.keys(totals);
-      if (!keys.length) return null;
-      var top = keys.sort(function (a, b) { return totals[b] - totals[a]; })[0];
-      return { name: top, total: totals[top] };
-    }
-
-    var revenue  = filtered.reduce(function (s, o) { return s + o.total; }, 0);
-    var topProd  = topProduct(filtered);
-    var topCust  = topCustomer(filtered);
-
-    function statCard(icon, label, value, sub) {
+    function statCard(icon, label, value, sub, trendPct) {
       return '<div class="stat-card"><span class="material-icons-round">' + icon + '</span>' +
         '<div><div class="stat-val">' + value + '</div><div class="stat-label">' + label + '</div>' +
-        (sub ? '<div class="stat-sub">' + sub + '</div>' : '') + '</div></div>';
+        (sub ? '<div class="stat-sub">' + sub + '</div>' : '') +
+        (trendPct !== null && trendPct !== undefined ? AdminView._statsTrendHtml(trendPct) : '') + '</div></div>';
     }
 
-    var productStats = {};
-    filtered.forEach(function (o) {
-      o.items.forEach(function (i) {
-        if (i.product.sku === '1000') return;
-        var pid = i.product.id;
-        if (!productStats[pid]) {
-          productStats[pid] = {
-            name: i.product.name,
-            sku: i.product.sku,
-            qty: 0,
-            revenue: 0,
-            currentStock: 0,
-            initialStock: 0
-          };
-        }
-        productStats[pid].qty += i.qty;
-        productStats[pid].revenue += parseFloat((i.unitPrice * i.qty).toFixed(2));
-      });
-    });
+    function topRows(metric) {
+      var productList = Object.keys(productStats).map(function (pid) { return productStats[pid]; });
+      productList.sort(function (a, b) { return b[metric] - a[metric]; });
+      productList = productList.slice(0, 10);
+      return productList.length ? productList.map(function (ps) {
+        var prev = prevProducts[ps.key] ? prevProducts[ps.key][metric] : 0;
+        var pct = AdminView._statsPctChange(ps[metric], prev);
+        var main = metric === 'revenue' ? '₪' + App.fmtP(ps.revenue) : App.fmtP(ps.qty);
+        var sub = metric === 'revenue' ? App.fmtP(ps.qty) + ' ' + t('common.units') : '₪' + App.fmtP(ps.revenue);
+        return '<tr>' +
+          '<td><code style="font-size:12px">' + App.escHTML(ps.sku) + '</code></td>' +
+          '<td><strong>' + App.escHTML(ps.name) + '</strong></td>' +
+          '<td style="font-weight:800;color:var(--blue)">' + main + '</td>' +
+          '<td style="color:var(--text-muted)">' + sub + '</td>' +
+          '<td>' + AdminView._statsTrendHtml(pct) + '</td>' +
+        '</tr>';
+      }).join('') : '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">' + t('admin.noData') + '</td></tr>';
+    }
 
-    PRODUCTS.forEach(function (p) {
-      if (productStats[p.id]) {
-        var currentStock = typeof p.stock === 'number' ? p.stock : 0;
-        productStats[p.id].currentStock = currentStock;
-        productStats[p.id].initialStock = currentStock + productStats[p.id].qty;
-      }
-    });
-
-    var productList = Object.keys(productStats).map(function (pid) { return productStats[pid]; });
-    productList.sort(function (a, b) { return b.qty - a.qty; });
-
-    var productRows = productList.length ? productList.map(function (ps) {
-      var ratio = ps.initialStock > 0 ? (ps.qty / ps.initialStock * 100).toFixed(1) : '0.0';
+    var movementList = Object.keys(productStats).map(function (pid) { return productStats[pid]; });
+    movementList.sort(function (a, b) { return b.qty - a.qty; });
+    var movementRows = movementList.length ? movementList.slice(0, 10).map(function (ps) {
       return '<tr>' +
-        '<td><code style="font-size:12px">' + ps.sku + '</code></td>' +
-        '<td><strong>' + App.escHTML(pLang({ name: ps.name }, 'name')) + '</strong></td>' +
-        '<td style="color:var(--blue);font-weight:700">' + ps.qty + '</td>' +
+        '<td><code style="font-size:12px">' + App.escHTML(ps.sku) + '</code></td>' +
+        '<td><strong>' + App.escHTML(ps.name) + '</strong></td>' +
+        '<td style="color:var(--orange);font-weight:800">' + App.fmtP(ps.qty) + '</td>' +
         '<td style="color:var(--green);font-weight:700">₪' + App.fmtP(ps.revenue) + '</td>' +
-        '<td style="color:var(--text-muted)">' + ps.initialStock + '</td>' +
-        '<td>' + ps.currentStock + '</td>' +
-        '<td style="color:var(--orange);font-weight:600">' + ratio + '%</td>' +
       '</tr>';
-    }).join('') : '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">' + t('admin.noData') + '</td></tr>';
+    }).join('') : '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-muted)">' + t('admin.noData') + '</td></tr>';
+
+    var profitText = summary.profitAvailable ? '₪' + App.fmtP(summary.profit) : t('admin.notDerivable');
+    var profitSub = summary.profitAvailable ? t('admin.fromOrderCosts') : t('admin.missingOrderCosts');
+    var profitChart = summary.profitAvailable ? AdminView._statsBarChart(series, 'profit', t('admin.profitTrend'), '₪') : '';
 
     c.innerHTML =
       '<div class="admin-section">' +
-        '<div class="admin-section-header"><h2>' + t('admin.statsTitle') + '</h2></div>' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">' +
+        '<div class="admin-section-header"><h2>' + t('admin.biDashboardTitle') + '</h2>' +
+          '<span class="admin-note">' + t('admin.biOrdersOnlyNote') + '</span></div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' +
           periods.map(function (p) {
             return '<button class="cat-btn' + (AdminView._statsPeriod === p.id ? ' active' : '') +
               '" onclick="AdminView._setPeriod(\'' + p.id + '\')">' + p.label + '</button>';
           }).join('') +
         '</div>' +
-        '<div class="stats-grid">' +
-          statCard('payments', t('admin.totalIncome'), '₪' + App.fmtP(revenue), filtered.length + ' ' + t('admin.ordersCount')) +
-          statCard('star', t('admin.topProduct'), topProd ? topProd.name : '—', topProd ? topProd.qty + ' ' + t('common.units') : '') +
-          statCard('emoji_events', t('admin.topCustomer'), topCust ? AdminView._statsCustomerLabel(topCust.name) : '—', topCust ? '₪' + App.fmtP(topCust.total) : '') +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">' +
+          grains.map(function (g) {
+            return '<button class="cat-btn' + (AdminView._statsGrain === g.id ? ' active' : '') +
+              '" onclick="AdminView._setStatsGrain(\'' + g.id + '\')">' + g.label + '</button>';
+          }).join('') +
         '</div>' +
-        '<h3 style="margin:24px 0 12px;font-size:16px;font-weight:700">' + t('admin.productSalesReport') + '</h3>' +
+        '<div class="stats-grid">' +
+          statCard('payments', t('admin.revenue'), '₪' + App.fmtP(summary.revenue), filtered.length + ' ' + t('admin.ordersCount'), AdminView._statsPctChange(summary.revenue, prevSummary.revenue)) +
+          statCard('shopping_cart', t('admin.quantitySold'), App.fmtP(summary.qty), t('admin.productUnitsOnly'), AdminView._statsPctChange(summary.qty, prevSummary.qty)) +
+          statCard('inventory_2', t('admin.stockMovement'), App.fmtP(summary.stockMovement), t('admin.fromOrderItems'), AdminView._statsPctChange(summary.stockMovement, prevSummary.stockMovement)) +
+          statCard('trending_up', t('admin.profitLabel'), profitText, profitSub, summary.profitAvailable && prevSummary.profitAvailable ? AdminView._statsPctChange(summary.profit, prevSummary.profit) : null) +
+        '</div>' +
+        '<div class="bi-comparison">' +
+          '<strong>' + t('admin.periodComparison') + '</strong>' +
+          '<span>' + t('admin.revenueChange') + ': ' + AdminView._statsTrendHtml(AdminView._statsPctChange(summary.revenue, prevSummary.revenue)) + '</span>' +
+          '<span>' + t('admin.salesChange') + ': ' + AdminView._statsTrendHtml(AdminView._statsPctChange(summary.qty, prevSummary.qty)) + '</span>' +
+        '</div>' +
+        '<div class="bi-chart-grid">' +
+          AdminView._statsBarChart(series, 'revenue', t('admin.revenueOverTime'), '₪') +
+          AdminView._statsBarChart(series, 'qty', t('admin.salesQuantityOverTime'), '') +
+          profitChart +
+        '</div>' +
+        '<div class="bi-top-grid">' +
+          '<div>' +
+            '<h3 style="margin:24px 0 12px;font-size:16px;font-weight:700">' + t('admin.top10ByRevenue') + '</h3>' +
+            '<div class="table-wrap"><table class="admin-table">' +
+              '<thead><tr><th>' + t('admin.skuCol') + '</th><th>' + t('admin.productName') + '</th><th>' + t('admin.revenue') + '</th><th>' + t('admin.qtySold') + '</th><th>' + t('admin.trend') + '</th></tr></thead>' +
+              '<tbody>' + topRows('revenue') + '</tbody>' +
+            '</table></div>' +
+          '</div>' +
+          '<div>' +
+            '<h3 style="margin:24px 0 12px;font-size:16px;font-weight:700">' + t('admin.top10ByQuantity') + '</h3>' +
+            '<div class="table-wrap"><table class="admin-table">' +
+              '<thead><tr><th>' + t('admin.skuCol') + '</th><th>' + t('admin.productName') + '</th><th>' + t('admin.qtySold') + '</th><th>' + t('admin.revenue') + '</th><th>' + t('admin.trend') + '</th></tr></thead>' +
+              '<tbody>' + topRows('qty') + '</tbody>' +
+            '</table></div>' +
+          '</div>' +
+        '</div>' +
+        '<h3 style="margin:24px 0 12px;font-size:16px;font-weight:700">' + t('admin.stockMovementReport') + '</h3>' +
         '<div class="table-wrap"><table class="admin-table">' +
           '<thead><tr>' +
             '<th>' + t('admin.skuCol') + '</th>' +
             '<th>' + t('admin.productName') + '</th>' +
-            '<th>' + t('admin.qtySold') + '</th>' +
+            '<th>' + t('admin.stockMovement') + '</th>' +
             '<th>' + t('admin.revenue') + '</th>' +
-            '<th>' + t('admin.initialStock') + '</th>' +
-            '<th>' + t('admin.currentStock') + '</th>' +
-            '<th>' + t('admin.salesStockRatio') + '</th>' +
           '</tr></thead>' +
-          '<tbody>' + productRows + '</tbody>' +
+          '<tbody>' + movementRows + '</tbody>' +
         '</table></div>' +
       '</div>';
   },
