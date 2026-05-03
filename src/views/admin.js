@@ -1444,17 +1444,20 @@ var AdminView = {
             sku: i.product.sku,
             qty: 0,
             revenue: 0,
-            stock: 0
+            currentStock: 0,
+            initialStock: 0
           };
         }
         productStats[pid].qty += i.qty;
-        productStats[pid].revenue += i.unitPrice * i.qty;
+        productStats[pid].revenue += parseFloat((i.unitPrice * i.qty).toFixed(2));
       });
     });
 
     PRODUCTS.forEach(function (p) {
       if (productStats[p.id]) {
-        productStats[p.id].stock = typeof p.stock === 'number' ? p.stock : 0;
+        var currentStock = typeof p.stock === 'number' ? p.stock : 0;
+        productStats[p.id].currentStock = currentStock;
+        productStats[p.id].initialStock = currentStock + productStats[p.id].qty;
       }
     });
 
@@ -1462,16 +1465,17 @@ var AdminView = {
     productList.sort(function (a, b) { return b.qty - a.qty; });
 
     var productRows = productList.length ? productList.map(function (ps) {
-      var ratio = (ps.qty / (ps.qty + Math.abs(ps.stock))).toFixed(2);
+      var ratio = ps.initialStock > 0 ? (ps.qty / ps.initialStock * 100).toFixed(1) : '0.0';
       return '<tr>' +
         '<td><code style="font-size:12px">' + ps.sku + '</code></td>' +
         '<td><strong>' + App.escHTML(pLang({ name: ps.name }, 'name')) + '</strong></td>' +
         '<td style="color:var(--blue);font-weight:700">' + ps.qty + '</td>' +
         '<td style="color:var(--green);font-weight:700">₪' + App.fmtP(ps.revenue) + '</td>' +
-        '<td>' + ps.stock + '</td>' +
-        '<td style="color:var(--text-muted)">' + ratio + '</td>' +
+        '<td style="color:var(--text-muted)">' + ps.initialStock + '</td>' +
+        '<td>' + ps.currentStock + '</td>' +
+        '<td style="color:var(--orange);font-weight:600">' + ratio + '%</td>' +
       '</tr>';
-    }).join('') : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">' + t('admin.noData') + '</td></tr>';
+    }).join('') : '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">' + t('admin.noData') + '</td></tr>';
 
     c.innerHTML =
       '<div class="admin-section">' +
@@ -1494,6 +1498,7 @@ var AdminView = {
             '<th>' + t('admin.productName') + '</th>' +
             '<th>' + t('admin.qtySold') + '</th>' +
             '<th>' + t('admin.revenue') + '</th>' +
+            '<th>' + t('admin.initialStock') + '</th>' +
             '<th>' + t('admin.currentStock') + '</th>' +
             '<th>' + t('admin.salesStockRatio') + '</th>' +
           '</tr></thead>' +
