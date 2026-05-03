@@ -1379,131 +1379,51 @@ var AdminView = {
   },
 
   _statsPeriodRange: function (period) {
-    var now = new Date();
-    var start = null;
-
-    if (period === 'month') {
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (period === 'quarter') {
-      start = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-    } else if (period === 'halfyear') {
-      start = new Date(now.getFullYear(), now.getMonth() >= 6 ? 6 : 0, 1);
-    } else if (period === 'year') {
-      start = new Date(now.getFullYear(), 0, 1);
-    }
-
-    if (!start) start = new Date(0);
-    return { start: start, end: now };
+    return BIDataLoader.periodRange(period);
   },
 
   _statsPreviousRange: function (range) {
-    var len = range.end.getTime() - range.start.getTime();
-    var prevEnd = new Date(range.start.getTime());
-    return { start: new Date(prevEnd.getTime() - len), end: prevEnd };
+    return BIDataLoader.previousRange(range);
   },
 
   _statsFilterOrders: function (orders, period) {
-    var range = AdminView._statsPeriodRange(period);
-    return AdminView._statsFilterOrdersInRange(orders, range);
+    return BIDataLoader.filterOrdersInRange(orders, BIDataLoader.periodRange(period));
   },
 
   _statsFilterOrdersInRange: function (orders, range) {
-    return orders.filter(function (o) {
-      var ms = AdminView._orderTimestampMs(o);
-      if (!ms) return false;
-      return ms >= range.start.getTime() && ms < range.end.getTime();
-    });
+    return BIDataLoader.filterOrdersInRange(orders, range);
   },
 
   _statsIsProductLine: function (item) {
-    var p = item && item.product ? item.product : {};
-    return !(p.id === 'ship-1000' || p.category === 'shipping' || String(p.sku) === '1000');
+    return BIDataLoader.isProductLine(item);
   },
 
   _statsLineRevenue: function (item) {
-    var qty = parseFloat(item && item.qty);
-    var unitPrice = parseFloat(item && item.unitPrice);
-    if (isNaN(qty) || isNaN(unitPrice)) return 0;
-    return parseFloat((qty * unitPrice).toFixed(2));
+    return BIDataLoader.lineRevenue(item);
   },
 
   _statsLineCost: function (item) {
-    item = item || {};
-    var p = item && item.product ? item.product : {};
-    var vals = [item.unitCost, item.cost, p.unitCost, p.cost, p.costPrice, p.purchasePrice, p.supplierCost];
-    for (var i = 0; i < vals.length; i++) {
-      var n = parseFloat(vals[i]);
-      if (!isNaN(n) && n >= 0) return n;
-    }
-    return null;
+    return BIDataLoader.lineCost(item);
   },
 
   _statsProductKey: function (item) {
-    var p = item && item.product ? item.product : {};
-    return String(p.id || p.sku || p.name || 'unknown');
+    return BIDataLoader.productKey(item);
   },
 
   _statsProductName: function (item) {
-    var p = item && item.product ? item.product : {};
-    return pLang(p, 'name') || p.name || t('admin.unknownProduct');
+    return BIDataLoader.productName(item);
   },
 
   _statsAggregate: function (list) {
-    var out = { revenue: 0, qty: 0, stockMovement: 0, orders: list.length, profit: 0, profitLines: 0, missingCostLines: 0 };
-    list.forEach(function (o) {
-      (o.items || []).forEach(function (item) {
-        if (!AdminView._statsIsProductLine(item)) return;
-        var qty = parseFloat(item.qty);
-        if (isNaN(qty)) qty = 0;
-        var revenue = AdminView._statsLineRevenue(item);
-        out.revenue += revenue;
-        out.qty += qty;
-        out.stockMovement += qty;
-        var cost = AdminView._statsLineCost(item);
-        if (cost === null) {
-          out.missingCostLines += 1;
-        } else {
-          out.profit += revenue - (cost * qty);
-          out.profitLines += 1;
-        }
-      });
-    });
-    out.revenue = parseFloat(out.revenue.toFixed(2));
-    out.qty = parseFloat(out.qty.toFixed(2));
-    out.stockMovement = parseFloat(out.stockMovement.toFixed(2));
-    out.profit = parseFloat(out.profit.toFixed(2));
-    out.profitAvailable = out.profitLines > 0 && out.missingCostLines === 0;
-    return out;
+    return BIMetricsEngine.aggregate(list);
   },
 
   _statsProducts: function (list) {
-    var map = {};
-    list.forEach(function (o) {
-      (o.items || []).forEach(function (item) {
-        if (!AdminView._statsIsProductLine(item)) return;
-        var key = AdminView._statsProductKey(item);
-        var qty = parseFloat(item.qty);
-        if (isNaN(qty)) qty = 0;
-        if (!map[key]) {
-          var p = item.product || {};
-          map[key] = { key: key, sku: p.sku || '—', name: AdminView._statsProductName(item), qty: 0, revenue: 0 };
-        }
-        map[key].qty += qty;
-        map[key].revenue += AdminView._statsLineRevenue(item);
-      });
-    });
-    Object.keys(map).forEach(function (k) {
-      map[k].qty = parseFloat(map[k].qty.toFixed(2));
-      map[k].revenue = parseFloat(map[k].revenue.toFixed(2));
-    });
-    return map;
+    return BIMetricsEngine.products(list);
   },
 
   _statsPctChange: function (current, previous) {
-    current = parseFloat(current) || 0;
-    previous = parseFloat(previous) || 0;
-    if (previous === 0) return current === 0 ? 0 : 100;
-    return parseFloat(((current - previous) / Math.abs(previous) * 100).toFixed(1));
+    return BIMetricsEngine.pctChange(current, previous);
   },
 
   _statsTrendHtml: function (pct) {
@@ -1513,49 +1433,11 @@ var AdminView = {
   },
 
   _statsDateKey: function (date, grain) {
-    var d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    if (grain === 'weekly') {
-      var day = d.getDay();
-      d.setDate(d.getDate() - day);
-    }
-    if (grain === 'monthly') {
-      d = new Date(date.getFullYear(), date.getMonth(), 1);
-    }
-    function pad(n) { return n < 10 ? '0' + n : String(n); }
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    return BIDataLoader.dateKey(date, grain);
   },
 
   _statsSeries: function (list, grain) {
-    var map = {};
-    list.forEach(function (o) {
-      var ms = AdminView._orderTimestampMs(o);
-      if (!ms) return;
-      var key = AdminView._statsDateKey(new Date(ms), grain);
-      if (!map[key]) map[key] = { label: key, revenue: 0, qty: 0, profit: 0, profitAvailable: true, profitLines: 0 };
-      (o.items || []).forEach(function (item) {
-        if (!AdminView._statsIsProductLine(item)) return;
-        var qty = parseFloat(item.qty);
-        if (isNaN(qty)) qty = 0;
-        var revenue = AdminView._statsLineRevenue(item);
-        map[key].revenue += revenue;
-        map[key].qty += qty;
-        var cost = AdminView._statsLineCost(item);
-        if (cost === null) {
-          map[key].profitAvailable = false;
-        } else {
-          map[key].profit += revenue - (cost * qty);
-          map[key].profitLines += 1;
-        }
-      });
-    });
-    return Object.keys(map).sort().map(function (key) {
-      var row = map[key];
-      row.revenue = parseFloat(row.revenue.toFixed(2));
-      row.qty = parseFloat(row.qty.toFixed(2));
-      row.profit = parseFloat(row.profit.toFixed(2));
-      row.profitAvailable = row.profitAvailable && row.profitLines > 0;
-      return row;
-    });
+    return BIMetricsEngine.series(list, grain);
   },
 
   _statsBarChart: function (series, metric, title, prefix) {
@@ -1575,158 +1457,19 @@ var AdminView = {
   },
 
   _statsConfidence: function (points, needsPrevious) {
-    points = points || {};
-    var currentOrders = parseInt(points.currentOrders, 10) || 0;
-    var previousOrders = parseInt(points.previousOrders, 10) || 0;
-    var rows = parseInt(points.rows, 10) || 0;
-    if (currentOrders >= 8 && (!needsPrevious || previousOrders >= 5) && rows >= 3) return 'גבוה';
-    if (currentOrders >= 3 && (!needsPrevious || previousOrders >= 1) && rows >= 1) return 'בינוני';
-    return 'נמוך';
+    return BIScoringEngine.confidenceLabel(points, needsPrevious);
   },
 
   _statsCustomerInsights: function (orders, filtered, nowMs) {
-    var allMap = {};
-    var periodMap = {};
-
-    function addTo(map, o) {
-      var key = String(o.customerId || o.customerName || 'unknown');
-      var name = AdminView._statsCustomerLabel(o.customerName || key) || key;
-      if (!map[key]) map[key] = { key: key, name: name, revenue: 0, orders: 0, lastMs: 0 };
-      map[key].orders += 1;
-      map[key].lastMs = Math.max(map[key].lastMs, AdminView._orderTimestampMs(o));
-      (o.items || []).forEach(function (item) {
-        if (!AdminView._statsIsProductLine(item)) return;
-        map[key].revenue += AdminView._statsLineRevenue(item);
-      });
-    }
-
-    orders.forEach(function (o) { addTo(allMap, o); });
-    filtered.forEach(function (o) { addTo(periodMap, o); });
-
-    function normalize(map) {
-      return Object.keys(map).map(function (key) {
-        map[key].revenue = parseFloat(map[key].revenue.toFixed(2));
-        return map[key];
-      });
-    }
-
-    var allCustomers = normalize(allMap);
-    var periodCustomers = normalize(periodMap);
-    var avgRevenue = allCustomers.length
-      ? allCustomers.reduce(function (s, c) { return s + c.revenue; }, 0) / allCustomers.length
-      : 0;
-    var vip = periodCustomers.filter(function (c) {
-      return c.revenue >= avgRevenue || c.orders >= 2;
-    }).sort(function (a, b) {
-      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
-      return b.orders - a.orders;
-    }).slice(0, 5);
-
-    var churn = allCustomers.filter(function (c) {
-      var daysSince = c.lastMs ? Math.floor((nowMs - c.lastMs) / 864e5) : 999;
-      c.daysSince = daysSince;
-      return c.revenue >= avgRevenue && daysSince >= 30;
-    }).sort(function (a, b) {
-      if (b.daysSince !== a.daysSince) return b.daysSince - a.daysSince;
-      return b.revenue - a.revenue;
-    }).slice(0, 5);
-
-    return {
-      vip: vip,
-      churn: churn,
-      customerCount: allCustomers.length,
-      avgRevenue: parseFloat(avgRevenue.toFixed(2))
-    };
+    return BICustomerIntelligenceModel.build(orders, filtered, nowMs);
   },
 
   _statsInventoryInsights: function (orders, filtered, range) {
-    var allProducts = {};
-    var periodProducts = {};
-
-    function addProduct(map, item) {
-      if (!AdminView._statsIsProductLine(item)) return;
-      var p = item.product || {};
-      var key = AdminView._statsProductKey(item);
-      var qty = parseFloat(item.qty);
-      if (isNaN(qty)) qty = 0;
-      if (!map[key]) {
-        map[key] = {
-          key: key,
-          sku: p.sku || '—',
-          name: AdminView._statsProductName(item),
-          qty: 0,
-          revenue: 0,
-          stock: typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : null
-        };
-      }
-      map[key].qty += qty;
-      map[key].revenue += AdminView._statsLineRevenue(item);
-      if (typeof p.stock === 'number' && !isNaN(p.stock)) map[key].stock = p.stock;
-    }
-
-    orders.forEach(function (o) {
-      (o.items || []).forEach(function (item) { addProduct(allProducts, item); });
-    });
-    filtered.forEach(function (o) {
-      (o.items || []).forEach(function (item) { addProduct(periodProducts, item); });
-    });
-
-    var days = Math.max(1, Math.ceil((range.end.getTime() - range.start.getTime()) / 864e5));
-    var risks = Object.keys(periodProducts).map(function (key) {
-      var ps = periodProducts[key];
-      var dailySales = ps.qty / days;
-      var stockDays = ps.stock !== null && dailySales > 0 ? ps.stock / dailySales : null;
-      ps.qty = parseFloat(ps.qty.toFixed(2));
-      ps.revenue = parseFloat(ps.revenue.toFixed(2));
-      ps.dailySales = parseFloat(dailySales.toFixed(2));
-      ps.stockDays = stockDays === null ? null : parseFloat(stockDays.toFixed(1));
-      return ps;
-    }).filter(function (ps) {
-      return ps.stock !== null && ps.dailySales > 0 && ps.stockDays <= 14;
-    }).sort(function (a, b) {
-      return a.stockDays - b.stockDays;
-    }).slice(0, 5);
-
-    return {
-      risks: risks,
-      productsWithSales: Object.keys(periodProducts).length,
-      productsWithStock: Object.keys(allProducts).filter(function (key) { return allProducts[key].stock !== null; }).length
-    };
+    return BIInventoryIntelligenceModel.build(orders, filtered, range);
   },
 
   _statsBusinessScore: function (summary, prevSummary, customerInsights, inventoryInsights, currentOrders, previousOrders) {
-    var confidence = AdminView._statsConfidence({
-      currentOrders: currentOrders,
-      previousOrders: previousOrders,
-      rows: customerInsights.customerCount + inventoryInsights.productsWithSales
-    }, true);
-    if (currentOrders < 3 || (customerInsights.customerCount + inventoryInsights.productsWithSales) < 2) {
-      return {
-        score: null,
-        confidence: confidence,
-        parts: { revenueMomentum: 0, customerActivity: 0, stockHealth: 0, riskLevel: 0, growthTrend: 0 }
-      };
-    }
-    var revenuePct = AdminView._statsPctChange(summary.revenue, prevSummary.revenue);
-    var qtyPct = AdminView._statsPctChange(summary.qty, prevSummary.qty);
-    var revenueMomentum = Math.max(0, Math.min(100, 50 + revenuePct));
-    var customerActivity = Math.max(0, Math.min(100, customerInsights.customerCount ? (currentOrders / Math.max(1, customerInsights.customerCount)) * 35 : 0));
-    var stockHealth = Math.max(0, 100 - (inventoryInsights.risks.length * 15));
-    var riskLevel = Math.max(0, 100 - (customerInsights.churn.length * 12) - (inventoryInsights.risks.length * 10));
-    var growthTrend = Math.max(0, Math.min(100, 50 + ((revenuePct + qtyPct) / 2)));
-    var score = Math.round((revenueMomentum * 0.3) + (customerActivity * 0.2) + (stockHealth * 0.2) + (riskLevel * 0.15) + (growthTrend * 0.15));
-
-    return {
-      score: Math.max(0, Math.min(100, score)),
-      confidence: confidence,
-      parts: {
-        revenueMomentum: Math.round(revenueMomentum),
-        customerActivity: Math.round(customerActivity),
-        stockHealth: Math.round(stockHealth),
-        riskLevel: Math.round(riskLevel),
-        growthTrend: Math.round(growthTrend)
-      }
-    };
+    return BIBusinessScoreModel.build(summary, prevSummary, customerInsights, inventoryInsights, currentOrders, previousOrders);
   },
 
   _statsInsightRows: function (rows, type) {
@@ -1751,320 +1494,6 @@ var AdminView = {
         '<td style="color:var(--green);font-weight:700">' + r.orders + ' הזמנות</td>' +
         '<td style="color:var(--text-muted)">מעל ממוצע לקוח</td></tr>';
     }).join('');
-  },
-
-  _statsDecisionClamp: function (n) {
-    n = parseFloat(n);
-    if (isNaN(n)) n = 0;
-    return Math.max(0, Math.min(100, Math.round(n)));
-  },
-
-  _statsDecisionConfidenceScore: function (ordersCount, rowsCount, hasComparison) {
-    var score = 35;
-    if (ordersCount >= 3) score += 20;
-    if (ordersCount >= 8) score += 20;
-    if (rowsCount >= 2) score += 10;
-    if (rowsCount >= 5) score += 10;
-    if (hasComparison) score += 5;
-    return AdminView._statsDecisionClamp(score);
-  },
-
-  _statsDecisionProductModel: function (filtered, previous, range) {
-    var current = {};
-    var prev = {};
-    var categories = {};
-    var prevCategories = {};
-    var nowMs = range.end.getTime();
-
-    function add(map, categoryMap, o) {
-      var ms = AdminView._orderTimestampMs(o);
-      (o.items || []).forEach(function (item) {
-        if (!AdminView._statsIsProductLine(item)) return;
-        var p = item.product || {};
-        var key = AdminView._statsProductKey(item);
-        var qty = parseFloat(item.qty);
-        if (isNaN(qty)) qty = 0;
-        var revenue = AdminView._statsLineRevenue(item);
-        var category = p.categoryLabel || p.category || 'ללא קטגוריה';
-        if (!map[key]) {
-          map[key] = {
-            key: key,
-            sku: p.sku || '—',
-            name: AdminView._statsProductName(item),
-            category: category,
-            qty: 0,
-            revenue: 0,
-            stock: typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : null,
-            lastMs: 0,
-            costLines: 0,
-            costTotal: 0
-          };
-        }
-        map[key].qty += qty;
-        map[key].revenue += revenue;
-        map[key].lastMs = Math.max(map[key].lastMs, ms || 0);
-        if (typeof p.stock === 'number' && !isNaN(p.stock)) map[key].stock = p.stock;
-        var cost = AdminView._statsLineCost(item);
-        if (cost !== null) {
-          map[key].costLines += 1;
-          map[key].costTotal += cost * qty;
-        }
-        if (!categoryMap[category]) categoryMap[category] = { name: category, qty: 0, revenue: 0 };
-        categoryMap[category].qty += qty;
-        categoryMap[category].revenue += revenue;
-      });
-    }
-
-    filtered.forEach(function (o) { add(current, categories, o); });
-    previous.forEach(function (o) { add(prev, prevCategories, o); });
-
-    var products = Object.keys(current).map(function (key) {
-      var p = current[key];
-      var pr = prev[key] || { qty: 0, revenue: 0 };
-      var cat = categories[p.category] || { qty: 0, revenue: 0 };
-      p.qty = parseFloat(p.qty.toFixed(2));
-      p.revenue = parseFloat(p.revenue.toFixed(2));
-      p.avgPrice = p.qty > 0 ? parseFloat((p.revenue / p.qty).toFixed(2)) : 0;
-      p.prevQty = parseFloat((pr.qty || 0).toFixed(2));
-      p.prevRevenue = parseFloat((pr.revenue || 0).toFixed(2));
-      p.categoryAvgPrice = cat.qty > 0 ? parseFloat((cat.revenue / cat.qty).toFixed(2)) : 0;
-      p.dailySales = Math.max(0, p.qty / Math.max(1, Math.ceil((range.end.getTime() - range.start.getTime()) / 864e5)));
-      p.stockDays = p.stock !== null && p.dailySales > 0 ? parseFloat((p.stock / p.dailySales).toFixed(1)) : null;
-      p.marginAvailable = p.costLines > 0 && p.qty > 0;
-      p.margin = p.marginAvailable ? parseFloat((p.revenue - p.costTotal).toFixed(2)) : null;
-      p.daysSince = p.lastMs ? Math.floor((nowMs - p.lastMs) / 864e5) : 999;
-      return p;
-    });
-
-    var categoryRows = Object.keys(categories).map(function (key) {
-      var c = categories[key];
-      var pc = prevCategories[key] || { revenue: 0, qty: 0 };
-      c.revenue = parseFloat(c.revenue.toFixed(2));
-      c.qty = parseFloat(c.qty.toFixed(2));
-      c.prevRevenue = parseFloat((pc.revenue || 0).toFixed(2));
-      c.growthPct = AdminView._statsPctChange(c.revenue, c.prevRevenue);
-      return c;
-    }).sort(function (a, b) { return b.growthPct - a.growthPct; });
-
-    return { products: products, categories: categoryRows };
-  },
-
-  _statsDecisionEngine: function (ctx) {
-    var productModel = AdminView._statsDecisionProductModel(ctx.filtered, ctx.previous, ctx.range);
-    var products = productModel.products;
-    var categories = productModel.categories;
-    var actions = [];
-    var risks = [];
-    var opportunities = [];
-    var maxRevenue = Math.max(1, ctx.summary.revenue || 1);
-
-    function confidence(rows, hasComparison) {
-      return AdminView._statsDecisionConfidenceScore(ctx.filtered.length, rows, hasComparison);
-    }
-
-    function addAction(data) {
-      data.revenueImpact = parseFloat((data.revenueImpact || 0).toFixed(2));
-      data.riskReduction = AdminView._statsDecisionClamp(data.riskReduction || 0);
-      data.urgency = AdminView._statsDecisionClamp(data.urgency || 0);
-      data.revenueScore = AdminView._statsDecisionClamp((data.revenueImpact / maxRevenue) * 100);
-      data.priorityScore = AdminView._statsDecisionClamp((data.revenueScore * 0.4) + (data.riskReduction * 0.3) + (data.urgency * 0.3));
-      data.confidence = AdminView._statsDecisionClamp(data.confidence || 0);
-      actions.push(data);
-    }
-
-    ctx.inventoryInsights.risks.forEach(function (p) {
-      var protectedRevenue = parseFloat((p.dailySales * p.revenue / Math.max(1, p.qty) * 7).toFixed(2));
-      var urgency = p.stockDays <= 3 ? 100 : (p.stockDays <= 7 ? 85 : 65);
-      var riskLevel = p.stockDays <= 7 ? 'HIGH RISK' : 'MEDIUM RISK';
-      addAction({
-        title: 'לתעדף חידוש מלאי: ' + p.name,
-        impactType: 'stock',
-        revenueImpact: protectedRevenue,
-        riskReduction: riskLevel === 'HIGH RISK' ? 90 : 70,
-        urgency: urgency,
-        confidence: confidence(ctx.inventoryInsights.productsWithStock, false),
-        reasoning: 'המוצר צפוי להיגמר בעוד ' + p.stockDays + ' ימים לפי קצב מכירה יומי.',
-        source: 'orders.items.product.stock + qty + unitPrice',
-        method: 'ימים עד חוסר = מלאי מתוך ההזמנה ÷ מכירה יומית בתקופה',
-        assumptions: 'אין שינוי מלאי בפועל. זו המלצה בלבד לפי צילום המלאי שהיה בפריטי ההזמנה.',
-        simulation: {
-          revenue: '+₪' + App.fmtP(protectedRevenue) + ' הכנסה מוגנת משבוע מכירות',
-          margin: 'לא חושב אם חסרה עלות בפריטי הזמנה',
-          stock: 'מפחית סיכון חוסר, ללא כתיבה למלאי',
-          customer: 'מפחית סיכון אובדן הזמנות עקב חוסר'
-        }
-      });
-      risks.push({
-        level: riskLevel,
-        title: p.name,
-        why: 'מלאי נמוך מול קצב מכירה',
-        impact: 'אובדן הכנסה צפוי עד ₪' + App.fmtP(protectedRevenue),
-        confidence: confidence(ctx.inventoryInsights.productsWithStock, false)
-      });
-      opportunities.push({
-        title: 'פריט בביקוש גבוה עם מלאי נמוך: ' + p.name,
-        upside: protectedRevenue,
-        confidence: confidence(ctx.inventoryInsights.productsWithStock, false),
-        action: 'בדיקת רכש/זמינות לפני חוסר מלאי',
-        source: 'orders.items'
-      });
-    });
-
-    ctx.customerInsights.churn.forEach(function (c) {
-      var avgOrder = c.orders > 0 ? c.revenue / c.orders : 0;
-      var riskReduction = c.daysSince >= 60 ? 90 : 70;
-      var urgency = c.daysSince >= 60 ? 90 : 65;
-      addAction({
-        title: 'ליצור קשר עם לקוח בסיכון: ' + c.name,
-        impactType: 'retention',
-        revenueImpact: avgOrder,
-        riskReduction: riskReduction,
-        urgency: urgency,
-        confidence: confidence(ctx.customerInsights.customerCount, false),
-        reasoning: 'לקוח בעל ערך לא הזמין ' + c.daysSince + ' ימים.',
-        source: 'orders.customerId/customerName + orders.items',
-        method: 'לקוח בסיכון = הכנסה היסטורית מעל ממוצע לקוח + 30+ ימים ללא הזמנה',
-        assumptions: 'ההכנסה המדומה היא ממוצע הזמנה היסטורי. אין שינוי לקוח בפועל.',
-        simulation: {
-          revenue: '+₪' + App.fmtP(avgOrder) + ' הכנסה אפשרית אם הלקוח חוזר להזמין',
-          margin: 'לא חושב אם חסרה עלות בפריטי הזמנה',
-          stock: 'אין שינוי מלאי',
-          customer: 'הפחתת סיכון נטישה'
-        }
-      });
-      risks.push({
-        level: c.daysSince >= 60 ? 'HIGH RISK' : 'MEDIUM RISK',
-        title: c.name,
-        why: 'לקוח בעל ערך לא פעיל',
-        impact: 'סיכון לאובדן הזמנה ממוצעת של ₪' + App.fmtP(avgOrder),
-        confidence: confidence(ctx.customerInsights.customerCount, false)
-      });
-      opportunities.push({
-        title: 'החזרת VIP לא פעיל: ' + c.name,
-        upside: avgOrder,
-        confidence: confidence(ctx.customerInsights.customerCount, false),
-        action: 'שיחת שירות/בדיקת צורך להזמנה חוזרת',
-        source: 'orders'
-      });
-    });
-
-    products.filter(function (p) {
-      return p.qty > 0 && p.categoryAvgPrice > 0 && p.avgPrice < p.categoryAvgPrice * 0.92;
-    }).sort(function (a, b) {
-      return (b.categoryAvgPrice - b.avgPrice) * b.qty - (a.categoryAvgPrice - a.avgPrice) * a.qty;
-    }).slice(0, 5).forEach(function (p) {
-      var upside = parseFloat(((p.categoryAvgPrice - p.avgPrice) * p.qty * 0.5).toFixed(2));
-      if (upside <= 0) return;
-      addAction({
-        title: 'לבחון מחיר למוצר: ' + p.name,
-        impactType: 'revenue',
-        revenueImpact: upside,
-        riskReduction: 35,
-        urgency: p.qty >= 5 ? 70 : 45,
-        confidence: confidence(products.length, true),
-        reasoning: 'מחיר ממוצע נמוך מממוצע הקטגוריה לפי הזמנות בפועל.',
-        source: 'orders.items.unitPrice + orders.items.product.category',
-        method: 'אפסייד = חצי מהפער מול מחיר ממוצע קטגוריה × כמות שנמכרה',
-        assumptions: 'סימולציה בלבד. אין עדכון מחיר ואין הנחת תגובת לקוחות.',
-        simulation: {
-          revenue: '+₪' + App.fmtP(upside) + ' אפסייד אפשרי',
-          margin: p.marginAvailable ? '+₪' + App.fmtP(upside) + ' לפני שינוי עלויות' : 'לא חושב כי חסרה עלות בפריטי הזמנה',
-          stock: 'אין שינוי מלאי',
-          customer: 'סיכון לקוח לא חושב ללא נתוני נטישה לפי מחיר'
-        }
-      });
-      opportunities.push({
-        title: 'מוצר מתומחר נמוך יחסית: ' + p.name,
-        upside: upside,
-        confidence: confidence(products.length, true),
-        action: 'בדיקת מחיר ידנית בלבד',
-        source: 'orders.items'
-      });
-    });
-
-    categories.filter(function (c) {
-      return c.revenue > 0 && c.growthPct >= 20;
-    }).slice(0, 3).forEach(function (c) {
-      var upside = parseFloat((c.revenue * Math.min(c.growthPct, 50) / 100 * 0.5).toFixed(2));
-      addAction({
-        title: 'לתעדף קטגוריה בצמיחה: ' + c.name,
-        impactType: 'revenue',
-        revenueImpact: upside,
-        riskReduction: 25,
-        urgency: c.growthPct >= 50 ? 75 : 55,
-        confidence: confidence(categories.length, true),
-        reasoning: 'הקטגוריה צמחה ב-' + c.growthPct + '% מול התקופה הקודמת.',
-        source: 'orders.items.product.category + revenue by period',
-        method: 'אפסייד = הכנסות קטגוריה × חצי משיעור הצמיחה, מוגבל ל-50%',
-        assumptions: 'סימולציה בלבד. אין שינוי קטלוג או מלאי.',
-        simulation: {
-          revenue: '+₪' + App.fmtP(upside) + ' אפסייד אפשרי',
-          margin: 'לא חושב אם חסרות עלויות בפריטי הזמנה',
-          stock: 'עשוי להגדיל צורך במלאי, ללא כתיבה',
-          customer: 'אין שינוי לקוח'
-        }
-      });
-      opportunities.push({
-        title: 'קטגוריה עולה: ' + c.name,
-        upside: upside,
-        confidence: confidence(categories.length, true),
-        action: 'לתת עדיפות תפעולית ושיווקית לקטגוריה',
-        source: 'orders.items'
-      });
-    });
-
-    if (ctx.summary.revenue < ctx.prevSummary.revenue && ctx.previous.length > 0) {
-      var drop = parseFloat((ctx.prevSummary.revenue - ctx.summary.revenue).toFixed(2));
-      risks.push({
-        level: drop > ctx.prevSummary.revenue * 0.25 ? 'HIGH RISK' : 'MEDIUM RISK',
-        title: 'ירידת הכנסות בתקופה',
-        why: 'הכנסות התקופה נמוכות מהתקופה הקודמת',
-        impact: 'פער הכנסות של ₪' + App.fmtP(drop),
-        confidence: confidence(ctx.filtered.length, true)
-      });
-      addAction({
-        title: 'לטפל בירידת הכנסות מול תקופה קודמת',
-        impactType: 'risk',
-        revenueImpact: drop,
-        riskReduction: 75,
-        urgency: 70,
-        confidence: confidence(ctx.filtered.length, true),
-        reasoning: 'נמצא פער הכנסות של ₪' + App.fmtP(drop) + ' מול התקופה הקודמת.',
-        source: 'orders.items revenue by current/previous period',
-        method: 'פער = הכנסות תקופה קודמת פחות הכנסות תקופה נוכחית',
-        assumptions: 'לא מבוצעת פעולה אוטומטית. יש לבדוק לקוחות ומוצרים מובילים.',
-        simulation: {
-          revenue: '+₪' + App.fmtP(drop) + ' הכנסה לשיקום אם חוזרים לרמת התקופה הקודמת',
-          margin: 'לא חושב אם חסרות עלויות',
-          stock: 'אין שינוי מלאי',
-          customer: 'תלוי בזיהוי לקוחות/מוצרים שירדו'
-        }
-      });
-    }
-
-    if (ctx.filtered.length > 0 && ctx.filtered.length < 3) {
-      risks.push({
-        level: 'LOW RISK',
-        title: 'מדגם נתונים קטן',
-        why: 'יש פחות מ-3 הזמנות בתקופה הנבחרת',
-        impact: 'החלטות עסקיות עלולות להיות פחות מדויקות',
-        confidence: confidence(ctx.filtered.length, false)
-      });
-    }
-
-    actions.sort(function (a, b) { return b.priorityScore - a.priorityScore; });
-    risks.sort(function (a, b) {
-      var rank = { 'HIGH RISK': 3, 'MEDIUM RISK': 2, 'LOW RISK': 1 };
-      return (rank[b.level] || 0) - (rank[a.level] || 0);
-    });
-    opportunities.sort(function (a, b) { return b.upside - a.upside; });
-
-    return {
-      actions: actions.slice(0, 10),
-      risks: risks.slice(0, 8),
-      opportunities: opportunities.slice(0, 8),
-      formula: 'Score = (Revenue Impact * 0.4) + (Risk Reduction * 0.3) + (Urgency * 0.3)'
-    };
   },
 
   _statsDecisionActionRows: function (actions) {
@@ -2116,7 +1545,8 @@ var AdminView = {
   },
 
   _statsRender: function (c, orders) {
-    orders = (orders || []).filter(function (o) { return AdminView._orderTimestampMs(o) > 0; });
+    var report = BIReportBuilderService.build(orders || [], AdminView._statsPeriod, AdminView._statsGrain);
+    orders = report.orders;
     var periods = [
       { id: 'month', label: t('admin.periodMonth') },
       { id: 'quarter', label: t('admin.periodQuarter') },
@@ -2129,33 +1559,22 @@ var AdminView = {
       { id: 'monthly', label: t('admin.monthly') }
     ];
 
-    var range = AdminView._statsPeriodRange(AdminView._statsPeriod);
-    var prevRange = AdminView._statsPreviousRange(range);
-    var filtered = AdminView._statsFilterOrdersInRange(orders, range);
-    var previous = AdminView._statsFilterOrdersInRange(orders, prevRange);
-    var summary = AdminView._statsAggregate(filtered);
-    var prevSummary = AdminView._statsAggregate(previous);
-    var series = AdminView._statsSeries(filtered, AdminView._statsGrain);
-    var productStats = AdminView._statsProducts(filtered);
-    var prevProducts = AdminView._statsProducts(previous);
-    var nowMs = Date.now();
-    var customerInsights = AdminView._statsCustomerInsights(orders, filtered, nowMs);
-    var inventoryInsights = AdminView._statsInventoryInsights(orders, filtered, range);
-    var revenueTrendPct = AdminView._statsPctChange(summary.revenue, prevSummary.revenue);
-    var revenueTrendConfidence = AdminView._statsConfidence({ currentOrders: filtered.length, previousOrders: previous.length, rows: filtered.length }, true);
-    var vipConfidence = AdminView._statsConfidence({ currentOrders: filtered.length, previousOrders: previous.length, rows: customerInsights.vip.length }, false);
-    var churnConfidence = AdminView._statsConfidence({ currentOrders: orders.length, previousOrders: 0, rows: customerInsights.customerCount }, false);
-    var inventoryConfidence = AdminView._statsConfidence({ currentOrders: filtered.length, previousOrders: 0, rows: inventoryInsights.productsWithStock }, false);
-    var businessScore = AdminView._statsBusinessScore(summary, prevSummary, customerInsights, inventoryInsights, filtered.length, previous.length);
-    var decisionEngine = AdminView._statsDecisionEngine({
-      filtered: filtered,
-      previous: previous,
-      range: range,
-      summary: summary,
-      prevSummary: prevSummary,
-      customerInsights: customerInsights,
-      inventoryInsights: inventoryInsights
-    });
+    var filtered = report.filtered;
+    var summary = report.summary;
+    var prevSummary = report.prevSummary;
+    var series = report.series;
+    var topRevenueProducts = report.topRevenueProducts;
+    var topQtyProducts = report.topQtyProducts;
+    var movementProducts = report.movementProducts;
+    var customerInsights = report.customerInsights;
+    var inventoryInsights = report.inventoryInsights;
+    var revenueTrendPct = report.revenueTrendPct;
+    var revenueTrendConfidence = report.confidence.revenueTrend;
+    var vipConfidence = report.confidence.vip;
+    var churnConfidence = report.confidence.churn;
+    var inventoryConfidence = report.confidence.inventory;
+    var businessScore = report.businessScore;
+    var decisionEngine = report.decisionEngine;
 
     function statCard(icon, label, value, sub, trendPct) {
       return '<div class="stat-card"><span class="material-icons-round">' + icon + '</span>' +
@@ -2165,12 +1584,8 @@ var AdminView = {
     }
 
     function topRows(metric) {
-      var productList = Object.keys(productStats).map(function (pid) { return productStats[pid]; });
-      productList.sort(function (a, b) { return b[metric] - a[metric]; });
-      productList = productList.slice(0, 10);
+      var productList = metric === 'revenue' ? topRevenueProducts : topQtyProducts;
       return productList.length ? productList.map(function (ps) {
-        var prev = prevProducts[ps.key] ? prevProducts[ps.key][metric] : 0;
-        var pct = AdminView._statsPctChange(ps[metric], prev);
         var main = metric === 'revenue' ? '₪' + App.fmtP(ps.revenue) : App.fmtP(ps.qty);
         var sub = metric === 'revenue' ? App.fmtP(ps.qty) + ' ' + t('common.units') : '₪' + App.fmtP(ps.revenue);
         return '<tr>' +
@@ -2178,14 +1593,12 @@ var AdminView = {
           '<td><strong>' + App.escHTML(ps.name) + '</strong></td>' +
           '<td style="font-weight:800;color:var(--blue)">' + main + '</td>' +
           '<td style="color:var(--text-muted)">' + sub + '</td>' +
-          '<td>' + AdminView._statsTrendHtml(pct) + '</td>' +
+          '<td>' + AdminView._statsTrendHtml(ps.trendPct) + '</td>' +
         '</tr>';
       }).join('') : '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">' + t('admin.noData') + '</td></tr>';
     }
 
-    var movementList = Object.keys(productStats).map(function (pid) { return productStats[pid]; });
-    movementList.sort(function (a, b) { return b.qty - a.qty; });
-    var movementRows = movementList.length ? movementList.slice(0, 10).map(function (ps) {
+    var movementRows = movementProducts.length ? movementProducts.map(function (ps) {
       return '<tr>' +
         '<td><code style="font-size:12px">' + App.escHTML(ps.sku) + '</code></td>' +
         '<td><strong>' + App.escHTML(ps.name) + '</strong></td>' +
