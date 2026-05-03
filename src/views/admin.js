@@ -1462,7 +1462,7 @@ var AdminView = {
     productList.sort(function (a, b) { return b.qty - a.qty; });
 
     var productRows = productList.length ? productList.map(function (ps) {
-      var ratio = ps.stock > 0 ? (ps.qty / ps.stock).toFixed(2) : '∞';
+      var ratio = (ps.qty / (ps.qty + Math.abs(ps.stock))).toFixed(2);
       return '<tr>' +
         '<td><code style="font-size:12px">' + ps.sku + '</code></td>' +
         '<td><strong>' + App.escHTML(pLang({ name: ps.name }, 'name')) + '</strong></td>' +
