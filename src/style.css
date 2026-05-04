@@ -928,6 +928,11 @@ html[dir="ltr"] .form-group label { text-align: left; }
   padding: 14px;
 }
 .bi-ros-quality strong { display: block; font-size: 28px; font-weight: 900; color: var(--green); }
+.bi-predictive-hero {
+  background: linear-gradient(135deg, rgba(52,152,219,.20), rgba(39,174,96,.10));
+  border-color: rgba(52,152,219,.34);
+}
+.bi-predictive-hero h4 { color: var(--blue-light); }
 @media (max-width: 720px) {
   .bi-ros-hero { grid-template-columns: 1fr; padding: 14px; }
 }

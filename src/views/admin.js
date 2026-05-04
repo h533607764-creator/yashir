@@ -1686,6 +1686,76 @@ var AdminView = {
     }).join('');
   },
 
+  _statsPredictiveForecastRows: function (rows) {
+    if (!rows.length) return '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-muted)">אין תחזית זמינה</td></tr>';
+    return rows.map(function (f) {
+      return '<tr>' +
+        '<td><strong>' + f.days + ' ימים</strong></td>' +
+        '<td style="font-weight:900;color:var(--green)">₪' + App.fmtP(f.value) + '</td>' +
+        '<td>₪' + App.fmtP(f.worstCase) + '</td>' +
+        '<td>₪' + App.fmtP(f.bestCase) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(f.confidence) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(f.formula) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsPredictiveSignalRows: function (rows, kind) {
+    if (!rows.length) return '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-muted)">אין אותות עתידיים מספיק חזקים</td></tr>';
+    return rows.slice(0, 10).map(function (r) {
+      var name = kind === 'product'
+        ? ((r.sku ? '<code style="font-size:12px">' + App.escHTML(r.sku) + '</code> ' : '') + App.escHTML(r.name))
+        : App.escHTML(r.name);
+      return '<tr>' +
+        '<td><strong>' + name + '</strong></td>' +
+        '<td><span class="bi-trend flat">' + App.escHTML(r.type) + '</span></td>' +
+        '<td style="font-weight:800;color:var(--blue)">' + App.fmtP(r.probability) + '%</td>' +
+        '<td>₪' + App.fmtP(r.expectedValue || 0) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(r.reason || '') + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(r.confidence) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsPredictiveWarningRows: function (rows) {
+    if (!rows.length) return '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted)">אין אזהרת תזרים עתידית חריגה</td></tr>';
+    return rows.map(function (w) {
+      return '<tr>' +
+        '<td><strong>' + App.escHTML(w.title) + '</strong></td>' +
+        '<td style="font-weight:800;color:var(--red)">' + w.urgency + '/100</td>' +
+        '<td>' + App.escHTML(w.impactLabel || ('₪' + App.fmtP(w.impact || 0))) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(w.reason || '') + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(w.confidence) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsPredictiveMoveRows: function (rows) {
+    if (!rows.length) return '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted)">אין מהלך מונע ברור</td></tr>';
+    return rows.map(function (m, idx) {
+      return '<tr>' +
+        '<td style="font-weight:900;color:var(--orange)">' + (idx + 1) + '</td>' +
+        '<td><strong>' + App.escHTML(m.title) + '</strong><div style="font-size:12px;color:var(--text-muted)">' + App.escHTML(m.why || '') + '</div></td>' +
+        '<td>' + m.urgency + '/100</td>' +
+        '<td>' + App.escHTML(m.suggestion || '') + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(m.confidence) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsPredictiveClockRows: function (rows) {
+    if (!rows.length) return '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted)">אין חלונות הזדמנות קרובים</td></tr>';
+    return rows.slice(0, 8).map(function (o) {
+      return '<tr>' +
+        '<td><strong>' + App.escHTML(o.title) + '</strong></td>' +
+        '<td><span class="bi-trend up">' + App.escHTML(o.type) + '</span></td>' +
+        '<td style="font-weight:800;color:var(--orange)">' + App.escHTML(o.expiresIn) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(o.reason || '') + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(o.confidence) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
   _statsRender: function (c, orders) {
     var report = BIReportBuilderService.build(orders || [], AdminView._statsPeriod, AdminView._statsGrain);
     orders = report.orders;
@@ -1730,6 +1800,10 @@ var AdminView = {
     var revenueOS = report.revenueOperatingSystem;
     var rosCommand = revenueOS.commandCenter;
     var rosQuality = revenueOS.recommendationQuality;
+    var predictiveEmpire = report.predictiveEmpire;
+    var futureScore = predictiveEmpire.futureScore;
+    var noAction = predictiveEmpire.noActionScenario;
+    var futureBrief = predictiveEmpire.executiveFutureBrief;
 
     function statCard(icon, label, value, sub, trendPct) {
       return '<div class="stat-card"><span class="material-icons-round">' + icon + '</span>' +
@@ -1775,6 +1849,11 @@ var AdminView = {
       return '<div><strong>' + (idx + 1) + '. ' + App.escHTML(a.title) + '</strong><span style="display:block;color:var(--text-muted);font-size:12px">' + App.escHTML(a.reasoning) + '</span></div>';
     }).join('') : '<span style="color:var(--text-muted)">אין מספיק נתונים לפעולות מומלצות</span>';
     var profitTrendToday = rosCommand.profitTrendToday === null ? 'אין עלויות מלאות' : AdminView._statsTrendHtml(rosCommand.profitTrendToday);
+    var noActionText = '30 יום ללא פעולה: Drift הכנסות ' + (noAction.revenueDrift >= 0 ? '+' : '') + '₪' + App.fmtP(noAction.revenueDrift) +
+      ', חוסרי מלאי ' + noAction.stockouts.length +
+      ', לקוחות בסיכון ' + noAction.lostCustomers.length +
+      ', מלאי מת מתפתח ' + noAction.deadStockGrowth.length +
+      ', דליפות רווח ' + noAction.profitLeakage.length + '.';
 
     c.innerHTML =
       '<div class="admin-section">' +
@@ -1820,6 +1899,29 @@ var AdminView = {
           '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Customer Action Radar</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>לקוח</th><th>סגמנט</th><th>ערך</th><th>דחיפות</th><th>סיבה</th><th>פעולה</th></tr></thead><tbody>' + AdminView._statsRosRadarRows(revenueOS.customerRadar, 'customer') + '</tbody></table></div></div>' +
           '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Product Action Radar</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>מוצר</th><th>סגמנט</th><th>ערך</th><th>דחיפות</th><th>סיבה</th><th>פעולה</th></tr></thead><tbody>' + AdminView._statsRosRadarRows(revenueOS.productRadar, 'product') + '</tbody></table></div></div>' +
         '</div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:900">Predictive Empire - מודיעין עתידי קריאה בלבד</h3>' +
+        '<div class="bi-ros-hero bi-predictive-hero">' +
+          '<div><h4>Executive Future Brief</h4><p>' + App.escHTML(futureBrief.today) + '</p><span>' + App.escHTML(futureBrief.week) + '</span><span>' + App.escHTML(futureBrief.month) + '</span></div>' +
+          '<div class="bi-ros-quality"><strong>' + futureScore.score + '/100</strong><span>Future Score</span><small>' + App.escHTML(futureScore.formula) + '</small></div>' +
+        '</div>' +
+        '<p class="admin-note">' + App.escHTML(predictiveEmpire.assumptions) + ' | ' + App.escHTML(predictiveEmpire.confidenceLogic) + '</p>' +
+        '<div class="stats-grid">' +
+          statCard('auto_graph', 'Demand Momentum', futureScore.parts.demandMomentum + '/100', 'חלק מציון העתיד', null) +
+          statCard('groups', 'Customer Health', futureScore.parts.customerHealth + '/100', 'לקוחות, נטישה וצמיחה צפויה', null) +
+          statCard('inventory', 'Stock Readiness', futureScore.parts.stockReadiness + '/100', 'מוכנות מלאי מול ביקוש צפוי', null) +
+          statCard('crisis_alert', 'מה יקרה אם לא עושים כלום', noActionText, App.escHTML(noAction.assumption), null) +
+        '</div>' +
+        '<div class="table-wrap"><table class="admin-table"><thead><tr><th>טווח</th><th>תחזית</th><th>Worst</th><th>Best</th><th>ביטחון</th><th>נוסחה</th></tr></thead><tbody>' + AdminView._statsPredictiveForecastRows(predictiveEmpire.futureRevenue) + '</tbody></table></div>' +
+        '<div class="bi-top-grid">' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Customer Future Radar</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>לקוח</th><th>תחזית</th><th>סיכוי</th><th>ערך צפוי</th><th>סיבה</th><th>ביטחון</th></tr></thead><tbody>' + AdminView._statsPredictiveSignalRows(predictiveEmpire.customerFutureRadar, 'customer') + '</tbody></table></div></div>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Product Demand Forecast</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>מוצר</th><th>תחזית</th><th>סיכוי</th><th>ערך</th><th>סיבה</th><th>ביטחון</th></tr></thead><tbody>' + AdminView._statsPredictiveSignalRows(predictiveEmpire.productDemandForecast, 'product') + '</tbody></table></div></div>' +
+        '</div>' +
+        '<div class="bi-top-grid">' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Cashflow Early Warning</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>אזהרה</th><th>דחיפות</th><th>השפעה</th><th>סיבה</th><th>ביטחון</th></tr></thead><tbody>' + AdminView._statsPredictiveWarningRows(predictiveEmpire.cashflowWarnings) + '</tbody></table></div></div>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Action Before Problem</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>#</th><th>מהלך מונע</th><th>דחיפות</th><th>הצעה</th><th>ביטחון</th></tr></thead><tbody>' + AdminView._statsPredictiveMoveRows(predictiveEmpire.preventiveMoves) + '</tbody></table></div></div>' +
+        '</div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">Opportunity Clock</h3>' +
+        '<div class="table-wrap"><table class="admin-table"><thead><tr><th>הזדמנות</th><th>סוג</th><th>נסגר תוך</th><th>סיבה</th><th>ביטחון</th></tr></thead><tbody>' + AdminView._statsPredictiveClockRows(predictiveEmpire.opportunityClock) + '</tbody></table></div>' +
         '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">מרכז שליטה אסטרטגי AI</h3>' +
         '<div class="stats-grid">' +
           statCard('show_chart', 'מגמת הכנסות', AdminView._statsTrendHtml(revenueTrendPct), 'נוסחה: הכנסות תקופה נוכחית מול תקופה קודמת | ביטחון: ' + revenueTrendConfidence, null) +

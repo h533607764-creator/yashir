@@ -49,6 +49,7 @@ var BIReportBuilderService = (function () {
     var forecast = BIPredictiveForecastEngine.build(ctx, productModel, customerDna, trustLayer);
     var executiveIntelligence = BIExecutiveIntelligenceService.build(ctx, productModel, decisionEngine, forecast, customerDna, inventoryWarRoom, profitLeak, trustLayer);
     var revenueOperatingSystem = BIRevenueOSService.build(ctx, productModel, customerDna, inventoryWarRoom, profitLeak);
+    var predictiveEmpire = BIPredictiveEmpireService.build(ctx, productModel, customerDna, inventoryWarRoom, revenueOperatingSystem);
 
     _cache = {
       key: key,
@@ -77,6 +78,7 @@ var BIReportBuilderService = (function () {
       profitLeak: profitLeak,
       executiveIntelligence: executiveIntelligence,
       revenueOperatingSystem: revenueOperatingSystem,
+      predictiveEmpire: predictiveEmpire,
       revenueTrendPct: BIMetricsEngine.pctChange(summary.revenue, prevSummary.revenue),
       confidence: {
         revenueTrend: BIScoringEngine.confidenceLabel({ currentOrders: filtered.length, previousOrders: previous.length, rows: filtered.length }, true),
