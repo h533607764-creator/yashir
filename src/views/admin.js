@@ -241,8 +241,57 @@ var AdminView = {
   },
 
   /* ===== CUSTOMERS ===== */
+  _customersSortField: null,
+  _customersSortAsc: true,
+
   _customers: function (c) {
-    var rows = CUSTOMERS_DB.map(function (cu) {
+    var customers = CUSTOMERS_DB.slice();
+    
+    if (AdminView._customersSortField) {
+      customers.sort(function (a, b) {
+        var aVal, bVal;
+        switch (AdminView._customersSortField) {
+          case 'id':
+            aVal = a.id || '';
+            bVal = b.id || '';
+            break;
+          case 'name':
+            aVal = pLang(a, 'name') || '';
+            bVal = pLang(b, 'name') || '';
+            break;
+          case 'phone':
+            aVal = a.phone || '';
+            bVal = b.phone || '';
+            break;
+          case 'discount':
+            aVal = a.generalDiscount || 0;
+            bVal = b.generalDiscount || 0;
+            break;
+          case 'terms':
+            aVal = a.paymentTerms || '';
+            bVal = b.paymentTerms || '';
+            break;
+          case 'debt':
+            aVal = a.existingDebt || 0;
+            bVal = b.existingDebt || 0;
+            break;
+          case 'prices':
+            aVal = Object.keys(a.personalPrices || {}).length;
+            bVal = Object.keys(b.personalPrices || {}).length;
+            break;
+          default:
+            return 0;
+        }
+        if (typeof aVal === 'string') {
+          var cmp = aVal.localeCompare(bVal, 'he');
+          return AdminView._customersSortAsc ? cmp : -cmp;
+        } else {
+          return AdminView._customersSortAsc ? (aVal - bVal) : (bVal - aVal);
+        }
+      });
+    }
+
+    var rows = customers.map(function (cu) {
       var debt = cu.existingDebt || 0;
       return '<tr>' +
         '<td><code style="font-size:12px">' + cu.id + '</code></td>' +
@@ -259,14 +308,40 @@ var AdminView = {
         '</td></tr>';
     }).join('');
 
+    var sortIcon = function(field) {
+      if (AdminView._customersSortField !== field) return '<span class="material-icons-round" style="font-size:14px;opacity:0.3;margin-right:3px">unfold_more</span>';
+      return AdminView._customersSortAsc 
+        ? '<span class="material-icons-round" style="font-size:14px;margin-right:3px">arrow_upward</span>'
+        : '<span class="material-icons-round" style="font-size:14px;margin-right:3px">arrow_downward</span>';
+    };
+
     c.innerHTML = '<div class="admin-section">' +
       '<div class="admin-section-header"><h2>' + t('admin.customers') + '</h2>' +
         '<button class="btn-primary" onclick="AdminView._editCust(null)">' +
           '<span class="material-icons-round">person_add</span> ' + t('admin.addCustomer') + '</button>' +
       '</div>' +
       '<div class="table-wrap"><table class="admin-table">' +
-        '<thead><tr><th>' + t('admin.hpCol') + '</th><th>' + t('admin.nameCol') + '</th><th>' + t('admin.phoneCol') + '</th><th>' + t('admin.discountColCust') + '</th><th>' + t('admin.paymentTerms') + '</th><th>' + t('admin.existingDebt') + '</th><th>' + t('admin.pricesCol') + '</th><th>' + t('admin.actionsCol') + '</th></tr></thead>' +
+        '<thead><tr>' +
+          '<th onclick="AdminView._sortCustomers(\'id\')" style="cursor:pointer">' + sortIcon('id') + t('admin.hpCol') + '</th>' +
+          '<th onclick="AdminView._sortCustomers(\'name\')" style="cursor:pointer">' + sortIcon('name') + t('admin.nameCol') + '</th>' +
+          '<th onclick="AdminView._sortCustomers(\'phone\')" style="cursor:pointer">' + sortIcon('phone') + t('admin.phoneCol') + '</th>' +
+          '<th onclick="AdminView._sortCustomers(\'discount\')" style="cursor:pointer">' + sortIcon('discount') + t('admin.discountColCust') + '</th>' +
+          '<th onclick="AdminView._sortCustomers(\'terms\')" style="cursor:pointer">' + sortIcon('terms') + t('admin.paymentTerms') + '</th>' +
+          '<th onclick="AdminView._sortCustomers(\'debt\')" style="cursor:pointer">' + sortIcon('debt') + t('admin.existingDebt') + '</th>' +
+          '<th onclick="AdminView._sortCustomers(\'prices\')" style="cursor:pointer">' + sortIcon('prices') + t('admin.pricesCol') + '</th>' +
+          '<th>' + t('admin.actionsCol') + '</th>' +
+        '</tr></thead>' +
         '<tbody>' + rows + '</tbody></table></div></div>';
+  },
+
+  _sortCustomers: function (field) {
+    if (AdminView._customersSortField === field) {
+      AdminView._customersSortAsc = !AdminView._customersSortAsc;
+    } else {
+      AdminView._customersSortField = field;
+      AdminView._customersSortAsc = true;
+    }
+    AdminView._customers(document.getElementById('av-content'));
   },
 
   _fld: function (label, id, value, type, disabled) {
@@ -360,7 +435,7 @@ var AdminView = {
   _editCust: function (id) {
     var isNew = !id;
     var cu = isNew
-      ? { id:'', name:'', name_en:'', email:'', phone:'', address:'', contactPerson:'', shippingAddress:'', generalDiscount:0, shippingCost:45, paymentTerms: t('admin.cash'), existingDebt:0, personalPrices:{} }
+      ? { id:'', name:'', name_en:'', email:'', phone:'', address:'', contactPerson:'', shippingAddress:'', generalDiscount:0, shippingCost:45, paymentTerms: t('admin.cash'), existingDebt:0, personalPrices:{}, password:'' }
       : CUSTOMERS_DB.find(function (x) { return x.id === id; }) || {};
     var termsOpts = [t('admin.cash'),'שוטף 30','שוטף 60','שוטף 90','שוטף+30','שוטף+60'].map(function (trm) {
       return '<option value="' + trm + '"' + (cu.paymentTerms === trm ? ' selected' : '') + '>' + trm + '</option>';
@@ -372,6 +447,8 @@ var AdminView = {
         (isNew ? '' : '<p style="font-size:12px;color:var(--orange);margin-top:-8px">' + t('admin.hpChangeWarning') + '</p>') +
         AdminView._fld(t('admin.businessName'), 'ef-name', cu.name, 'text') +
         AdminView._fldTransliterate(t('admin.customerNameEn'), 'ef-name-en', cu.name_en || '', 'ef-name') +
+        AdminView._fld(t('admin.passwordField'), 'ef-password', cu.password || '', 'password') +
+        '<p style="font-size:12px;color:var(--text-muted);margin-top:-8px">' + t('admin.passwordHint') + '</p>' +
         AdminView._fld(t('common.phone'), 'ef-phone', cu.phone, 'tel') +
         AdminView._fld(t('common.email'), 'ef-email', cu.email, 'email') +
         AdminView._fld(t('admin.address'), 'ef-address', cu.address, 'text') +
@@ -397,12 +474,18 @@ var AdminView = {
     var id   = document.getElementById('ef-id').value.trim();
     var name = document.getElementById('ef-name').value.trim();
     if (!id || !name) { App.toast(t('admin.hpNameRequired'), 'warning'); return; }
+    
+    if (origId && origId !== id) {
+      if (!confirm(t('admin.hpChangeConfirm'))) return;
+    }
+    
     var duplicate = CUSTOMERS_DB.find(function (x) { return x.id === id && x.id !== origId; });
     if (duplicate) { App.toast(t('admin.hpCol') + ' ' + id + ' ' + t('admin.hpExists'), 'error'); return; }
     var existing = origId ? CUSTOMERS_DB.find(function (x) { return x.id === origId; }) : null;
     var data = {
       id: id, name: name,
       name_en: (document.getElementById('ef-name-en') || {}).value.trim() || '',
+      password: (document.getElementById('ef-password') || {}).value.trim() || '',
       phone:           document.getElementById('ef-phone').value,
       email:           document.getElementById('ef-email').value,
       address:         document.getElementById('ef-address').value,
@@ -515,11 +598,37 @@ var AdminView = {
   _savePrices: function (custId) {
     var cu = CUSTOMERS_DB.find(function (x) { return x.id === custId; });
     if (!cu) return;
+    
+    var errors = [];
     cu.personalPrices = {};
     PRODUCTS.forEach(function (p) {
       var inp = document.getElementById('pp-price-' + p.id);
-      if (inp && inp.value !== '') cu.personalPrices[p.id] = parseFloat(parseFloat(inp.value).toFixed(2));
+      if (inp && inp.value !== '') {
+        var customPrice = parseFloat(parseFloat(inp.value).toFixed(2));
+        var minPrice = p.minimumPrice || 0;
+        
+        if (minPrice > 0 && customPrice < minPrice) {
+          errors.push(pLang(p, 'name') + ' (' + t('admin.priceError') + ': ₪' + minPrice + ')');
+        } else {
+          cu.personalPrices[p.id] = customPrice;
+        }
+      }
     });
+    
+    if (errors.length > 0) {
+      App.showModal(
+        '<div class="sys-message">' +
+          '<div class="sys-icon" style="background:var(--red-dim)"><span class="material-icons-round" style="font-size:30px;color:var(--red)">error</span></div>' +
+          '<h3>' + t('admin.priceError') + '</h3>' +
+          '<div style="text-align:right;margin:12px 0;max-height:300px;overflow-y:auto">' +
+            errors.map(function(e) { return '<p style="margin:4px 0">• ' + e + '</p>'; }).join('') +
+          '</div>' +
+          '<button class="btn-primary" onclick="App.closeModal()">' + t('common.close') + '</button>' +
+        '</div>'
+      );
+      return;
+    }
+    
     DBSync.saveCustomer(cu);
     App.closeModal();
     App.toast(t('admin.pricesSaved'), 'success');
@@ -715,6 +824,8 @@ var AdminView = {
       '<div class="customer-form">' +
         AdminView._fld(t('admin.productName'), 'pf-name', p.name) +
         AdminView._fld(t('admin.priceBeforeVat'), 'pf-price', p.price, 'number') +
+        AdminView._fld(t('admin.minimumPrice'), 'pf-minprice', p.minimumPrice || 0, 'number') +
+        '<p style="font-size:12px;color:var(--text-muted);margin-top:-8px">' + t('admin.minimumPriceHint') + '</p>' +
         AdminView._fld(t('admin.stock'), 'pf-stock', p.stock, 'number') +
         AdminView._fld(t('admin.lowStockThreshold'), 'pf-threshold', threshold, 'number') +
         AdminView._fld(t('common.description'), 'pf-desc', p.description) +
@@ -862,6 +973,8 @@ var AdminView = {
         AdminView._fld(t('admin.skuNumber'), 'pf-sku', '', 'text') +
         AdminView._fld(t('admin.productName'), 'pf-name', '') +
         AdminView._fld(t('admin.priceBeforeVatShort'), 'pf-price', '', 'number') +
+        AdminView._fld(t('admin.minimumPrice'), 'pf-minprice', '0', 'number') +
+        '<p style="font-size:12px;color:var(--text-muted);margin-top:-8px">' + t('admin.minimumPriceHint') + '</p>' +
         AdminView._fld(t('admin.stock'), 'pf-stock', '100', 'number') +
         AdminView._fld(t('common.description'), 'pf-desc', '') +
         '<div class="form-group"><label>' + t('admin.category') + '</label>' +
@@ -913,6 +1026,7 @@ var AdminView = {
     if (!p) return;
     p.name              = document.getElementById('pf-name').value || p.name;
     p.price             = parseFloat(document.getElementById('pf-price').value) || p.price;
+    p.minimumPrice      = parseFloat(document.getElementById('pf-minprice').value) || 0;
     p.stock             = parseInt(document.getElementById('pf-stock').value) || 0;
     p.lowStockThreshold = (function () { var n = parseInt((document.getElementById('pf-threshold') || {}).value, 10); return Number.isNaN(n) ? 10 : n; })();
     p.description       = document.getElementById('pf-desc').value || p.description;
@@ -1033,6 +1147,7 @@ var AdminView = {
       subcategory:    subcat,
       subcategoryLabel: subcatLabel,
       price:          parseFloat(document.getElementById('pf-price').value) || 0,
+      minimumPrice:   parseFloat(document.getElementById('pf-minprice').value) || 0,
       stock:          (function () { var n = parseInt(document.getElementById('pf-stock').value, 10); return Number.isNaN(n) ? 100 : n; })(),
       description:    document.getElementById('pf-desc').value || '',
       icon:           catIcon,

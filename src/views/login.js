@@ -11,6 +11,9 @@ var LoginView = {
           '<div id="lv-customer">' +
             '<div class="form-group"><label>' + t('login.hpLabel') + '</label>' +
               '<input type="text" id="lv-hp" inputmode="numeric" placeholder="' + t('login.hpPlaceholder') + '" maxlength="9" autofocus></div>' +
+            '<div class="form-group"><label>' + t('login.passwordLabel') + '</label>' +
+              '<input type="password" id="lv-pass" placeholder="' + t('login.passwordPlaceholder') + '"></div>' +
+            '<p style="font-size:12px;color:var(--text-muted);margin-top:-8px">' + t('login.passwordHint') + '</p>' +
             '<label class="checkbox-label"><input type="checkbox" id="lv-rem"> ' + t('login.remember') + '</label>' +
             '<button class="btn-primary full-width" onclick="LoginView.doLogin()">' +
               '<span class="material-icons-round">login</span> ' + t('login.loginBtn') +
@@ -22,15 +25,22 @@ var LoginView = {
 
     setTimeout(function () {
       var hp = document.getElementById('lv-hp');
-      if (hp) hp.addEventListener('keydown', function (e) { if (e.key === 'Enter') LoginView.doLogin(); });
+      var pass = document.getElementById('lv-pass');
+      if (hp) {
+        hp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { var passField = document.getElementById('lv-pass'); if (passField) passField.focus(); } });
+      }
+      if (pass) {
+        pass.addEventListener('keydown', function (e) { if (e.key === 'Enter') LoginView.doLogin(); });
+      }
     }, 50);
   },
 
   doLogin: function () {
-    var hp  = document.getElementById('lv-hp').value.trim();
-    var rem = document.getElementById('lv-rem').checked;
+    var hp   = document.getElementById('lv-hp').value.trim();
+    var pass = document.getElementById('lv-pass').value.trim();
+    var rem  = document.getElementById('lv-rem').checked;
     if (!hp) { App.toast(t('login.missingHp'), 'warning'); return; }
-    if (!App.Auth.login(hp, rem)) {
+    if (!App.Auth.login(hp, rem, pass)) {
       App.toast(t('login.notFound'), 'error');
       document.getElementById('lv-hp').classList.add('input-error');
       return;

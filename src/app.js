@@ -88,9 +88,14 @@ var App = (function () {
 
   /* ===== AUTH ===== */
   var Auth = {
-    login: function (hp, remember) {
+    login: function (hp, remember, password) {
       var c = CUSTOMERS_DB.find(function (x) { return x.id === hp; });
       if (!c) return false;
+      
+      if (c.password && c.password !== '') {
+        if (!password || password !== c.password) return false;
+      }
+      
       state.currentUser = { role: 'customer', customer: c };
       state.cart = [];
       state.pricingPlan = null;
