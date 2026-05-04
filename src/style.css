@@ -908,6 +908,29 @@ html[dir="ltr"] .form-group label { text-align: left; }
 .bi-exec-card p,
 .bi-exec-card span { margin: 0; font-size: 12px; color: var(--text-muted); line-height: 1.45; }
 .bi-action-list { display: grid; gap: 10px; }
+.bi-ros-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr);
+  gap: 14px;
+  background: linear-gradient(135deg, rgba(52,152,219,.18), rgba(255,126,32,.12));
+  border: 1px solid rgba(52,152,219,.28);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.bi-ros-hero h4 { margin: 0 0 8px; font-size: 14px; font-weight: 900; color: var(--orange); }
+.bi-ros-hero p { margin: 0; font-size: 16px; line-height: 1.6; color: var(--white); font-weight: 700; }
+.bi-ros-hero span,
+.bi-ros-hero small { display: block; margin-top: 8px; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.bi-ros-quality {
+  background: rgba(0,0,0,.14);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+.bi-ros-quality strong { display: block; font-size: 28px; font-weight: 900; color: var(--green); }
+@media (max-width: 720px) {
+  .bi-ros-hero { grid-template-columns: 1fr; padding: 14px; }
+}
 .bi-chart-grid,
 .bi-top-grid {
   display: grid;

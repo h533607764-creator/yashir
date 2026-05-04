@@ -1628,6 +1628,64 @@ var AdminView = {
       '<span class="admin-note">' + AdminView._statsTrustText(report.confidence) + '</span></div>';
   },
 
+  _statsRosMoveRows: function (moves) {
+    if (!moves.length) return '<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--text-muted)">אין מספיק נתונים ל-3 מהלכי רווח היום</td></tr>';
+    return moves.map(function (m, idx) {
+      return '<tr>' +
+        '<td style="font-weight:900;color:var(--orange)">' + (idx + 1) + '</td>' +
+        '<td><strong>' + App.escHTML(m.title) + '</strong><div style="font-size:12px;color:var(--text-muted)">' + App.escHTML(m.why) + '</div></td>' +
+        '<td><span class="bi-trend flat">' + App.escHTML(m.category) + '</span></td>' +
+        '<td style="font-weight:800;color:var(--blue)">' + m.score + '/100</td>' +
+        '<td>₪' + App.fmtP(m.revenueImpact) + '</td>' +
+        '<td>₪' + App.fmtP(m.profitImpact) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(m.confidence) + '<br>' + App.escHTML(m.formula) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsRosOpportunityRows: function (rows) {
+    if (!rows.length) return '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-muted)">אין כסף קל ברור לפי הנתונים</td></tr>';
+    return rows.slice(0, 8).map(function (r) {
+      return '<tr>' +
+        '<td><strong>' + App.escHTML(r.title) + '</strong><div style="font-size:12px;color:var(--text-muted)">' + App.escHTML(r.why) + '</div></td>' +
+        '<td><span class="bi-trend up">' + App.escHTML(r.type) + '</span></td>' +
+        '<td style="font-weight:800;color:var(--green)">₪' + App.fmtP(r.estimatedRevenueGain) + '</td>' +
+        '<td>₪' + App.fmtP(r.estimatedProfitGain) + '</td>' +
+        '<td>' + r.urgency + '/100</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(r.confidence) + '<br>' + App.escHTML(r.suggestedAction) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsRosLeakRows: function (rows) {
+    if (!rows.length) return '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-muted)">לא נמצאה דליפת כסף ברורה</td></tr>';
+    return rows.slice(0, 8).map(function (r) {
+      return '<tr>' +
+        '<td><strong>' + App.escHTML(r.title) + '</strong><div style="font-size:12px;color:var(--text-muted)">' + App.escHTML(r.why) + '</div></td>' +
+        '<td><span class="bi-trend down">' + App.escHTML(r.type) + '</span></td>' +
+        '<td style="font-weight:800;color:var(--red)">₪' + App.fmtP(r.monthlyEstimatedLoss) + '</td>' +
+        '<td>' + r.urgency + '/100</td>' +
+        '<td>' + App.escHTML(r.suggestedAction) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(r.confidence) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsRosRadarRows: function (rows, kind) {
+    if (!rows.length) return '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-muted)">אין פריטים פעילים לרדאר</td></tr>';
+    return rows.slice(0, 10).map(function (r) {
+      var name = kind === 'product' ? ((r.sku ? '<code style="font-size:12px">' + App.escHTML(r.sku) + '</code> ' : '') + App.escHTML(r.name)) : App.escHTML(r.name);
+      return '<tr>' +
+        '<td><strong>' + name + '</strong></td>' +
+        '<td><span class="bi-trend flat">' + App.escHTML(r.segment) + '</span></td>' +
+        '<td style="font-weight:800;color:var(--blue)">₪' + App.fmtP(r.estimatedValue) + '</td>' +
+        '<td>' + r.urgency + '/100</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(r.reason || '') + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(r.suggestedAction || '') + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
   _statsRender: function (c, orders) {
     var report = BIReportBuilderService.build(orders || [], AdminView._statsPeriod, AdminView._statsGrain);
     orders = report.orders;
@@ -1669,6 +1727,9 @@ var AdminView = {
     var decisionLab = executive.decisionLab;
     var simulator = executive.whatIfSimulator;
     var autoReports = executive.autoReports;
+    var revenueOS = report.revenueOperatingSystem;
+    var rosCommand = revenueOS.commandCenter;
+    var rosQuality = revenueOS.recommendationQuality;
 
     function statCard(icon, label, value, sub, trendPct) {
       return '<div class="stat-card"><span class="material-icons-round">' + icon + '</span>' +
@@ -1713,6 +1774,7 @@ var AdminView = {
     var bestActions = commandCenter.bestActionsNow.length ? commandCenter.bestActionsNow.map(function (a, idx) {
       return '<div><strong>' + (idx + 1) + '. ' + App.escHTML(a.title) + '</strong><span style="display:block;color:var(--text-muted);font-size:12px">' + App.escHTML(a.reasoning) + '</span></div>';
     }).join('') : '<span style="color:var(--text-muted)">אין מספיק נתונים לפעולות מומלצות</span>';
+    var profitTrendToday = rosCommand.profitTrendToday === null ? 'אין עלויות מלאות' : AdminView._statsTrendHtml(rosCommand.profitTrendToday);
 
     c.innerHTML =
       '<div class="admin-section">' +
@@ -1735,6 +1797,28 @@ var AdminView = {
           statCard('shopping_cart', t('admin.quantitySold'), App.fmtP(summary.qty), t('admin.productUnitsOnly'), AdminView._statsPctChange(summary.qty, prevSummary.qty)) +
           statCard('inventory_2', t('admin.stockMovement'), App.fmtP(summary.stockMovement), t('admin.fromOrderItems'), AdminView._statsPctChange(summary.stockMovement, prevSummary.stockMovement)) +
           statCard('trending_up', t('admin.profitLabel'), profitText, profitSub, summary.profitAvailable && prevSummary.profitAvailable ? AdminView._statsPctChange(summary.profit, prevSummary.profit) : null) +
+        '</div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:900">Revenue Operating System - מכונת כסף יומית</h3>' +
+        '<div class="bi-ros-hero">' +
+          '<div><h4>COO Mode</h4><p>' + App.escHTML(revenueOS.ownerCooMode) + '</p><span>' + App.escHTML(revenueOS.assumptions) + '</span></div>' +
+          '<div class="bi-ros-quality"><strong>' + (rosQuality.successRate === null ? 'אין מספיק היסטוריה' : rosQuality.successRate + '%') + '</strong><span>איכות המלצות היסטורית</span><small>' + App.escHTML(rosQuality.explanation) + '</small></div>' +
+        '</div>' +
+        '<div class="stats-grid">' +
+          statCard('today', 'הכנסות היום', '₪' + App.fmtP(rosCommand.revenueToday), 'מול אותו יום בשבוע שעבר | ' + AdminView._statsTrustText(rosCommand.confidence), rosCommand.revenueVsSameWeekdayLastWeek) +
+          statCard('receipt_long', 'הזמנות היום מול צפוי', App.fmtP(rosCommand.ordersToday) + ' / ' + App.fmtP(rosCommand.expectedOrdersToday), rosCommand.formula, rosCommand.ordersVsExpectedPct) +
+          statCard('savings', 'מגמת רווח היום', profitTrendToday, 'מבוסס על עלויות בפריטי הזמנה בלבד', null) +
+          statCard('money_off', 'הכנסה חסרה משוערת', '₪' + App.fmtP(rosCommand.missingRevenueEstimate), 'הזמנות צפויות × ממוצע הזמנה פחות הכנסה היום', null) +
+        '</div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">Top 3 מהלכי רווח היום</h3>' +
+        '<p class="admin-note">' + App.escHTML(revenueOS.formula) + '</p>' +
+        '<div class="table-wrap"><table class="admin-table"><thead><tr><th>#</th><th>מהלך</th><th>סוג</th><th>ציון</th><th>Revenue</th><th>Profit</th><th>ביטחון ונוסחה</th></tr></thead><tbody>' + AdminView._statsRosMoveRows(revenueOS.topMoves) + '</tbody></table></div>' +
+        '<div class="bi-top-grid">' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Easy Money Engine</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>הזדמנות</th><th>סוג</th><th>Revenue</th><th>Profit</th><th>דחיפות</th><th>למה / פעולה</th></tr></thead><tbody>' + AdminView._statsRosOpportunityRows(revenueOS.easyMoney) + '</tbody></table></div></div>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Money Leak Engine Pro</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>דליפה</th><th>סוג</th><th>הפסד חודשי</th><th>דחיפות</th><th>פעולה</th><th>ביטחון</th></tr></thead><tbody>' + AdminView._statsRosLeakRows(revenueOS.leaks) + '</tbody></table></div></div>' +
+        '</div>' +
+        '<div class="bi-top-grid">' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Customer Action Radar</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>לקוח</th><th>סגמנט</th><th>ערך</th><th>דחיפות</th><th>סיבה</th><th>פעולה</th></tr></thead><tbody>' + AdminView._statsRosRadarRows(revenueOS.customerRadar, 'customer') + '</tbody></table></div></div>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Product Action Radar</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>מוצר</th><th>סגמנט</th><th>ערך</th><th>דחיפות</th><th>סיבה</th><th>פעולה</th></tr></thead><tbody>' + AdminView._statsRosRadarRows(revenueOS.productRadar, 'product') + '</tbody></table></div></div>' +
         '</div>' +
         '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">מרכז שליטה אסטרטגי AI</h3>' +
         '<div class="stats-grid">' +
