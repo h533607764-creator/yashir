@@ -1544,6 +1544,90 @@ var AdminView = {
     }).join('');
   },
 
+  _statsTrustText: function (trust) {
+    if (!trust) return 'ביטחון: נמוך';
+    return 'ביטחון: ' + App.escHTML(trust.label) + ' (' + (trust.score || 0) + '/100) | ' + App.escHTML(trust.explanation || '');
+  },
+
+  _statsCustomerDnaRows: function (customerDna) {
+    var groups = customerDna.groups || {};
+    var order = ['vip', 'loyal', 'priceSensitive', 'growing', 'churnRisk', 'sleepingHighValue', 'newPromising'];
+    return order.map(function (key) {
+      var g = groups[key] || { title: key, count: 0, rows: [], confidence: {} };
+      var names = g.rows.length ? g.rows.slice(0, 5).map(function (c) {
+        return App.escHTML(c.name) + ' <span style="color:var(--text-muted)">(' + App.escHTML(c.reason || '') + ')</span>';
+      }).join('<br>') : '<span style="color:var(--text-muted)">אין מספיק נתונים</span>';
+      return '<tr>' +
+        '<td><strong>' + App.escHTML(g.title) + '</strong></td>' +
+        '<td style="font-weight:800;color:var(--blue)">' + g.count + '</td>' +
+        '<td style="font-size:12px">' + names + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(g.confidence) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsInventoryWarRows: function (rows, emptyText) {
+    if (!rows.length) return '<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text-muted)">' + emptyText + '</td></tr>';
+    return rows.map(function (p) {
+      return '<tr>' +
+        '<td><code style="font-size:12px">' + App.escHTML(p.sku) + '</code></td>' +
+        '<td><strong>' + App.escHTML(p.name) + '</strong></td>' +
+        '<td>' + (p.stock === null ? 'לא ידוע' : App.fmtP(p.stock)) + '</td>' +
+        '<td>' + (p.stockDays === null ? 'לא ידוע' : App.fmtP(p.stockDays) + ' ימים') + '</td>' +
+        '<td>' + (p.tiedCapital === null ? 'אין עלות' : '₪' + App.fmtP(p.tiedCapital)) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(p.reason || '') + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsProfitLeakRows: function (profitLeak) {
+    if (!profitLeak.leaks.length) return '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted)">לא זוהתה דליפת רווח ברורה</td></tr>';
+    return profitLeak.leaks.map(function (l) {
+      return '<tr>' +
+        '<td><strong>' + App.escHTML(l.title) + '</strong></td>' +
+        '<td><span class="bi-trend flat">' + App.escHTML(l.type) + '</span></td>' +
+        '<td style="font-weight:800;color:var(--orange)">₪' + App.fmtP(l.impact || 0) + '</td>' +
+        '<td>' + App.escHTML(l.reason) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(l.confidence) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsDecisionLabRows: function (decisionLab) {
+    if (!decisionLab.actions.length) return '<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--text-muted)">אין מספיק נתונים להחלטות חכמות</td></tr>';
+    return decisionLab.actions.map(function (a, idx) {
+      return '<tr>' +
+        '<td style="font-weight:900;color:var(--orange)">' + (idx + 1) + '</td>' +
+        '<td><strong>' + App.escHTML(a.title) + '</strong><div style="font-size:12px;color:var(--text-muted)">' + App.escHTML(a.why) + '</div></td>' +
+        '<td style="font-weight:800;color:var(--green)">₪' + App.fmtP(a.estimatedRevenueUpside) + '</td>' +
+        '<td>' + a.urgency + '/100</td>' +
+        '<td>' + a.confidence + '/100</td>' +
+        '<td>' + App.escHTML(a.difficulty) + '</td>' +
+        '<td>' + App.escHTML(a.expectedTimeframe) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsWhatIfRows: function (simulator) {
+    if (!simulator.scenarios.length) return '<tr><td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted)">אין מספיק נתונים לסימולציה אמינה</td></tr>';
+    return simulator.scenarios.map(function (s) {
+      var color = s.estimatedImpact >= 0 ? 'var(--green)' : 'var(--red)';
+      return '<tr>' +
+        '<td><strong>' + App.escHTML(s.scenario) + '</strong></td>' +
+        '<td>' + App.escHTML(s.target || '') + '</td>' +
+        '<td style="font-weight:800;color:' + color + '">₪' + App.fmtP(s.estimatedImpact) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + App.escHTML(s.explanation) + '</td>' +
+        '<td style="font-size:12px;color:var(--text-muted)">' + AdminView._statsTrustText(s.confidence) + '</td>' +
+      '</tr>';
+    }).join('');
+  },
+
+  _statsReportBox: function (report) {
+    return '<div class="bi-exec-card"><h4>' + App.escHTML(report.title) + '</h4>' +
+      report.lines.map(function (line) { return '<p>' + App.escHTML(line) + '</p>'; }).join('') +
+      '<span class="admin-note">' + AdminView._statsTrustText(report.confidence) + '</span></div>';
+  },
+
   _statsRender: function (c, orders) {
     var report = BIReportBuilderService.build(orders || [], AdminView._statsPeriod, AdminView._statsGrain);
     orders = report.orders;
@@ -1575,6 +1659,16 @@ var AdminView = {
     var inventoryConfidence = report.confidence.inventory;
     var businessScore = report.businessScore;
     var decisionEngine = report.decisionEngine;
+    var trustLayer = report.trustLayer;
+    var forecast = report.forecast;
+    var customerDna = report.customerDna;
+    var inventoryWarRoom = report.inventoryWarRoom;
+    var profitLeak = report.profitLeak;
+    var executive = report.executiveIntelligence;
+    var commandCenter = executive.commandCenter;
+    var decisionLab = executive.decisionLab;
+    var simulator = executive.whatIfSimulator;
+    var autoReports = executive.autoReports;
 
     function statCard(icon, label, value, sub, trendPct) {
       return '<div class="stat-card"><span class="material-icons-round">' + icon + '</span>' +
@@ -1616,6 +1710,9 @@ var AdminView = {
     var topRisk = customerInsights.churn.length
       ? 'סיכון: ' + App.escHTML(customerInsights.churn[0].name) + ' לא הזמין ' + customerInsights.churn[0].daysSince + ' ימים'
       : (inventoryInsights.risks.length ? 'סיכון מלאי: ' + App.escHTML(inventoryInsights.risks[0].name) : 'אין סיכון בולט לפי הנתונים');
+    var bestActions = commandCenter.bestActionsNow.length ? commandCenter.bestActionsNow.map(function (a, idx) {
+      return '<div><strong>' + (idx + 1) + '. ' + App.escHTML(a.title) + '</strong><span style="display:block;color:var(--text-muted);font-size:12px">' + App.escHTML(a.reasoning) + '</span></div>';
+    }).join('') : '<span style="color:var(--text-muted)">אין מספיק נתונים לפעולות מומלצות</span>';
 
     c.innerHTML =
       '<div class="admin-section">' +
@@ -1639,30 +1736,66 @@ var AdminView = {
           statCard('inventory_2', t('admin.stockMovement'), App.fmtP(summary.stockMovement), t('admin.fromOrderItems'), AdminView._statsPctChange(summary.stockMovement, prevSummary.stockMovement)) +
           statCard('trending_up', t('admin.profitLabel'), profitText, profitSub, summary.profitAvailable && prevSummary.profitAvailable ? AdminView._statsPctChange(summary.profit, prevSummary.profit) : null) +
         '</div>' +
-        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">AI Strategic Command Center</h3>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">מרכז שליטה אסטרטגי AI</h3>' +
         '<div class="stats-grid">' +
-          statCard('show_chart', 'Revenue trend', AdminView._statsTrendHtml(revenueTrendPct), 'נוסחה: הכנסות תקופה נוכחית מול תקופה קודמת | ביטחון: ' + revenueTrendConfidence, null) +
-          statCard('workspace_premium', 'VIP customers', customerInsights.vip.length ? customerInsights.vip.length + ' לקוחות' : 'אין מספיק נתונים', 'נוסחה: הכנסה בתקופה או 2+ הזמנות | ביטחון: ' + vipConfidence, null) +
-          statCard('warning', 'Churn risk', customerInsights.churn.length ? customerInsights.churn.length + ' לקוחות בסיכון' : 'אין סיכון בולט', 'נוסחה: לקוח בעל ערך שלא הזמין 30+ ימים | ביטחון: ' + churnConfidence, null) +
-          statCard('inventory', 'Inventory risk', inventoryInsights.risks.length ? inventoryInsights.risks.length + ' מוצרים' : 'אין סיכון בולט', 'נוסחה: מלאי בהזמנה ÷ קצב מכירה יומי <= 14 ימים | ביטחון: ' + inventoryConfidence, null) +
-          statCard('speed', 'Business Score 100', businessScore.score === null ? 'אין מספיק נתונים' : businessScore.score + '/100', 'נוסחה: הכנסות 30%, לקוחות 20%, מלאי 20%, סיכון 15%, צמיחה 15% | ביטחון: ' + businessScore.confidence, null) +
+          statCard('show_chart', 'מגמת הכנסות', AdminView._statsTrendHtml(revenueTrendPct), 'נוסחה: הכנסות תקופה נוכחית מול תקופה קודמת | ביטחון: ' + revenueTrendConfidence, null) +
+          statCard('workspace_premium', 'לקוחות VIP', customerInsights.vip.length ? customerInsights.vip.length + ' לקוחות' : 'אין מספיק נתונים', 'נוסחה: הכנסה בתקופה או 2+ הזמנות | ביטחון: ' + vipConfidence, null) +
+          statCard('warning', 'סיכון נטישה', customerInsights.churn.length ? customerInsights.churn.length + ' לקוחות בסיכון' : 'אין סיכון בולט', 'נוסחה: לקוח בעל ערך שלא הזמין 30+ ימים | ביטחון: ' + churnConfidence, null) +
+          statCard('inventory', 'סיכון מלאי', inventoryInsights.risks.length ? inventoryInsights.risks.length + ' מוצרים' : 'אין סיכון בולט', 'נוסחה: מלאי בהזמנה ÷ קצב מכירה יומי <= 14 ימים | ביטחון: ' + inventoryConfidence, null) +
+          statCard('speed', 'ציון עסקי 100', businessScore.score === null ? 'אין מספיק נתונים' : businessScore.score + '/100', 'נוסחה: הכנסות 30%, לקוחות 20%, מלאי 20%, סיכון 15%, צמיחה 15% | ביטחון: ' + businessScore.confidence, null) +
         '</div>' +
         '<div class="bi-comparison">' +
-          '<strong>Top opportunity today</strong><span>' + topOpportunity + '</span>' +
-          '<strong>Top risk today</strong><span>' + topRisk + '</span>' +
+          '<strong>הזדמנות מובילה היום</strong><span>' + topOpportunity + '</span>' +
+          '<strong>סיכון מוביל היום</strong><span>' + topRisk + '</span>' +
         '</div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">מרכז פיקוד ניהולי - קריאה בלבד</h3>' +
+        '<div class="bi-exec-grid">' +
+          '<div class="bi-exec-card"><h4>מצב היום</h4><strong>' + App.escHTML(commandCenter.todayStatus) + '</strong><span>' + AdminView._statsTrustText(commandCenter.confidence) + '</span></div>' +
+          '<div class="bi-exec-card"><h4>מצב השבוע</h4><strong>' + App.escHTML(commandCenter.weekStatus) + '</strong><span>' + App.escHTML(commandCenter.forecastSummary) + '</span></div>' +
+          '<div class="bi-exec-card"><h4>מומנטום הכנסות</h4><strong>' + AdminView._statsTrendHtml(commandCenter.revenueMomentum) + '</strong><span>נוכחי מול תקופה קודמת</span></div>' +
+          '<div class="bi-exec-card"><h4>מומנטום לקוחות</h4><strong>' + AdminView._statsTrendHtml(commandCenter.customerMomentum) + '</strong><span>לקוחות פעילים מול תקופה קודמת</span></div>' +
+          '<div class="bi-exec-card"><h4>לחץ מלאי</h4><strong>' + App.escHTML(commandCenter.stockPressure) + '</strong><span>' + AdminView._statsTrustText(trustLayer.inventory) + '</span></div>' +
+          '<div class="bi-exec-card"><h4>רמת סיכון</h4><strong>' + App.escHTML(commandCenter.riskLevel) + '</strong><span>ביטחון כולל ' + commandCenter.confidencePct + '%</span></div>' +
+        '</div>' +
+        '<div class="bi-exec-card"><h4>3 הפעולות הטובות ביותר עכשיו</h4><div class="bi-action-list">' + bestActions + '</div><span>תובנות בלבד: אין יצירת הזמנות, אין שינוי מחירים ואין הודעות ללקוחות.</span></div>' +
+        '<div class="stats-grid">' +
+          statCard('query_stats', 'תחזית 7 ימים', '₪' + App.fmtP(forecast.revenue7Days), 'הזמנות צפויות: ' + App.fmtP(forecast.expectedOrders7Days) + ' | ' + AdminView._statsTrustText(forecast.confidence), null) +
+          statCard('monitoring', 'תחזית 30 ימים', '₪' + App.fmtP(forecast.revenue30Days), 'הזמנות צפויות: ' + App.fmtP(forecast.expectedOrders30Days) + ' | ' + forecast.formula, null) +
+          statCard('inventory', 'מוצרים לפני חוסר', forecast.likelyStockouts.length + ' מוצרים', AdminView._statsTrustText(trustLayer.inventory), null) +
+          statCard('person_off', 'לקוחות מאטים', forecast.slowingCustomers.length + ' לקוחות', AdminView._statsTrustText(trustLayer.customerDna), null) +
+        '</div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">מנוע DNA לקוחות</h3>' +
+        '<p class="admin-note">' + App.escHTML(customerDna.formula) + '</p>' +
+        '<div class="table-wrap"><table class="admin-table"><thead><tr><th>סגמנט</th><th>כמות</th><th>שמות וסיבה</th><th>אמון</th></tr></thead><tbody>' + AdminView._statsCustomerDnaRows(customerDna) + '</tbody></table></div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">חדר מלחמה מלאי</h3>' +
+        '<p class="admin-note">' + App.escHTML(inventoryWarRoom.formula) + '</p>' +
         '<div class="bi-top-grid">' +
-          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">VIP customers</h3>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">עדיפויות רכש</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>SKU</th><th>מוצר</th><th>מלאי</th><th>ימים</th><th>הון קשור</th><th>סיבה</th></tr></thead><tbody>' + AdminView._statsInventoryWarRows(inventoryWarRoom.restockPriorities, 'אין עדיפות רכש ברורה') + '</tbody></table></div></div>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">מוצרים מהירים / איטיים</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>SKU</th><th>מוצר</th><th>מלאי</th><th>ימים</th><th>הון קשור</th><th>סיבה</th></tr></thead><tbody>' + AdminView._statsInventoryWarRows(inventoryWarRoom.highVelocity.slice(0, 5).concat(inventoryWarRoom.slowMovers.slice(0, 5)), 'אין מספיק נתוני תנועה') + '</tbody></table></div></div>' +
+        '</div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">מנוע דליפות רווח</h3>' +
+        '<p class="admin-note">' + App.escHTML(profitLeak.formula) + (profitLeak.missingData ? ' | ' + App.escHTML(profitLeak.missingData) : '') + '</p>' +
+        '<div class="table-wrap"><table class="admin-table"><thead><tr><th>נושא</th><th>סוג</th><th>השפעה</th><th>סיבה</th><th>אמון</th></tr></thead><tbody>' + AdminView._statsProfitLeakRows(profitLeak) + '</tbody></table></div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">מעבדת החלטות - 5 מובילות</h3>' +
+        '<p class="admin-note">' + App.escHTML(decisionLab.formula) + '. המלצות קריאה בלבד.</p>' +
+        '<div class="table-wrap"><table class="admin-table"><thead><tr><th>#</th><th>פעולה</th><th>אפסייד</th><th>דחיפות</th><th>ביטחון</th><th>קושי</th><th>זמן</th></tr></thead><tbody>' + AdminView._statsDecisionLabRows(decisionLab) + '</tbody></table></div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">סימולטור תרחישים</h3>' +
+        '<p class="admin-note">' + App.escHTML(simulator.formula) + '</p>' +
+        '<div class="table-wrap"><table class="admin-table"><thead><tr><th>תרחיש</th><th>יעד</th><th>השפעה משוערת</th><th>חישוב</th><th>אמון</th></tr></thead><tbody>' + AdminView._statsWhatIfRows(simulator) + '</tbody></table></div>' +
+        '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">פאנל דוחות אוטומטיים</h3>' +
+        '<div class="bi-exec-grid">' + AdminView._statsReportBox(autoReports.daily) + AdminView._statsReportBox(autoReports.weekly) + AdminView._statsReportBox(autoReports.monthly) + '</div>' +
+        '<div class="bi-top-grid">' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">לקוחות VIP</h3>' +
             '<div class="table-wrap"><table class="admin-table"><thead><tr><th>לקוח</th><th>הכנסות</th><th>הזמנות</th><th>חישוב</th></tr></thead>' +
             '<tbody>' + AdminView._statsInsightRows(customerInsights.vip, 'vip') + '</tbody></table></div></div>' +
-          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Churn risk customers</h3>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">לקוחות בסיכון נטישה</h3>' +
             '<div class="table-wrap"><table class="admin-table"><thead><tr><th>לקוח</th><th>הכנסות היסטוריות</th><th>ימים ללא הזמנה</th><th>הזמנות</th></tr></thead>' +
             '<tbody>' + AdminView._statsInsightRows(customerInsights.churn, 'churn') + '</tbody></table></div></div>' +
         '</div>' +
-        '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Inventory risk</h3>' +
+        '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">סיכון מלאי</h3>' +
           '<div class="table-wrap"><table class="admin-table"><thead><tr><th>' + t('admin.skuCol') + '</th><th>' + t('admin.productName') + '</th><th>ימים עד חוסר</th><th>נתוני חישוב</th></tr></thead>' +
           '<tbody>' + AdminView._statsInsightRows(inventoryInsights.risks, 'inventory') + '</tbody></table></div></div>' +
-        '<p class="admin-note">Business Score parts: Revenue ' + businessScore.parts.revenueMomentum + ', Customers ' + businessScore.parts.customerActivity + ', Stock ' + businessScore.parts.stockHealth + ', Risk ' + businessScore.parts.riskLevel + ', Growth ' + businessScore.parts.growthTrend + '.</p>' +
+        '<p class="admin-note">רכיבי ציון עסקי: הכנסות ' + businessScore.parts.revenueMomentum + ', לקוחות ' + businessScore.parts.customerActivity + ', מלאי ' + businessScore.parts.stockHealth + ', סיכון ' + businessScore.parts.riskLevel + ', צמיחה ' + businessScore.parts.growthTrend + '.</p>' +
         '<h3 style="margin:18px 0 0;font-size:16px;font-weight:800">מנוע החלטות AI — קריאה בלבד</h3>' +
         '<p class="admin-note">מודל תיעדוף: ' + decisionEngine.formula + '. Revenue Impact מנורמל ל-0–100 לפי הכנסות התקופה. אין יצירת הזמנות, אין שינוי מחיר, אין שינוי מלאי ואין כתיבה ל-Firestore.</p>' +
         '<div class="table-wrap"><table class="admin-table">' +
@@ -1670,10 +1803,10 @@ var AdminView = {
           '<tbody>' + AdminView._statsDecisionActionRows(decisionEngine.actions) + '</tbody>' +
         '</table></div>' +
         '<div class="bi-top-grid">' +
-          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Business Risk Radar</h3>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">רדאר סיכונים עסקיים</h3>' +
             '<div class="table-wrap"><table class="admin-table"><thead><tr><th>רמה</th><th>נושא</th><th>למה זה סיכון</th><th>השפעה צפויה</th><th>ביטחון</th></tr></thead>' +
             '<tbody>' + AdminView._statsDecisionRiskRows(decisionEngine.risks) + '</tbody></table></div></div>' +
-          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">Opportunity Engine</h3>' +
+          '<div><h3 style="margin:10px 0 12px;font-size:16px;font-weight:700">מנוע הזדמנויות</h3>' +
             '<div class="table-wrap"><table class="admin-table"><thead><tr><th>הזדמנות</th><th>אפסייד משוער</th><th>ביטחון</th><th>פעולה נדרשת</th><th>הערה</th></tr></thead>' +
             '<tbody>' + AdminView._statsDecisionOpportunityRows(decisionEngine.opportunities) + '</tbody></table></div></div>' +
         '</div>' +

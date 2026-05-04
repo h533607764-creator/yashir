@@ -1,8 +1,13 @@
 var BIReportBuilderService = (function () {
   'use strict';
 
+  var _cache = { key: '', value: null };
+
   function build(orders, period, grain) {
     var validOrders = BIDataLoader.validOrders(orders);
+    var key = cacheKey(validOrders, period, grain);
+    if (_cache.key === key && _cache.value) return _cache.value;
+
     var range = BIDataLoader.periodRange(period);
     var prevRange = BIDataLoader.previousRange(range);
     var filtered = BIDataLoader.filterOrdersInRange(validOrders, range);
@@ -28,7 +33,8 @@ var BIReportBuilderService = (function () {
       summary: summary,
       prevSummary: prevSummary,
       customerInsights: customerInsights,
-      inventoryInsights: inventoryInsights
+      inventoryInsights: inventoryInsights,
+      productModel: productModel
     };
     var decisionEngine = {
       actions: BIDecisionEngineService.build(ctx, productModel),
@@ -36,8 +42,16 @@ var BIReportBuilderService = (function () {
       opportunities: BIOpportunityEngine.build(ctx, productModel),
       formula: BIScoringEngine.priorityFormula
     };
+    var trustLayer = BITrustEngine.build(ctx, productModel);
+    var customerDna = BICustomerDnaModel.build(ctx, trustLayer);
+    var inventoryWarRoom = BIInventoryWarRoomModel.build(productModel, trustLayer);
+    var profitLeak = BIProfitLeakEngine.build(ctx, productModel, customerDna, trustLayer);
+    var forecast = BIPredictiveForecastEngine.build(ctx, productModel, customerDna, trustLayer);
+    var executiveIntelligence = BIExecutiveIntelligenceService.build(ctx, productModel, decisionEngine, forecast, customerDna, inventoryWarRoom, profitLeak, trustLayer);
 
-    return {
+    _cache = {
+      key: key,
+      value: {
       orders: validOrders,
       range: range,
       prevRange: prevRange,
@@ -55,6 +69,12 @@ var BIReportBuilderService = (function () {
       inventoryInsights: inventoryInsights,
       businessScore: businessScore,
       decisionEngine: decisionEngine,
+      trustLayer: trustLayer,
+      forecast: forecast,
+      customerDna: customerDna,
+      inventoryWarRoom: inventoryWarRoom,
+      profitLeak: profitLeak,
+      executiveIntelligence: executiveIntelligence,
       revenueTrendPct: BIMetricsEngine.pctChange(summary.revenue, prevSummary.revenue),
       confidence: {
         revenueTrend: BIScoringEngine.confidenceLabel({ currentOrders: filtered.length, previousOrders: previous.length, rows: filtered.length }, true),
@@ -62,7 +82,24 @@ var BIReportBuilderService = (function () {
         churn: BIScoringEngine.confidenceLabel({ currentOrders: validOrders.length, previousOrders: 0, rows: customerInsights.customerCount }, false),
         inventory: BIScoringEngine.confidenceLabel({ currentOrders: filtered.length, previousOrders: 0, rows: inventoryInsights.productsWithStock }, false)
       }
+      }
     };
+    return _cache.value;
+  }
+
+  function cacheKey(orders, period, grain) {
+    var maxMs = 0;
+    var lineCount = 0;
+    var revenue = 0;
+    orders.forEach(function (o) {
+      maxMs = Math.max(maxMs, BIDataLoader.orderTimestampMs(o));
+      (o.items || []).forEach(function (item) {
+        if (!BIDataLoader.isProductLine(item)) return;
+        lineCount += 1;
+        revenue += BIDataLoader.lineRevenue(item);
+      });
+    });
+    return [period, grain, orders.length, maxMs, lineCount, parseFloat(revenue.toFixed(2))].join('|');
   }
 
   function topProducts(productStats, prevProducts, metric) {

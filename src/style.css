@@ -889,6 +889,25 @@ html[dir="ltr"] .form-group label { text-align: left; }
   border-radius: var(--radius); padding: 14px 16px;
 }
 .bi-comparison span { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13px; }
+.bi-exec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.bi-exec-card {
+  background: linear-gradient(135deg, rgba(52,152,219,.14), rgba(255,126,32,.08));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bi-exec-card h4 { margin: 0; font-size: 13px; font-weight: 800; color: var(--text-muted); }
+.bi-exec-card strong { font-size: 18px; font-weight: 900; color: var(--white); }
+.bi-exec-card p,
+.bi-exec-card span { margin: 0; font-size: 12px; color: var(--text-muted); line-height: 1.45; }
+.bi-action-list { display: grid; gap: 10px; }
 .bi-chart-grid,
 .bi-top-grid {
   display: grid;
