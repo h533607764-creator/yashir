@@ -91,11 +91,11 @@ var App = (function () {
     login: function (hp, remember, password) {
       var c = CUSTOMERS_DB.find(function (x) { return x.id === hp; });
       if (!c) return false;
-      
+
       if (c.password && c.password !== '') {
         if (!password || password !== c.password) return false;
       }
-      
+
       state.currentUser = { role: 'customer', customer: c };
       state.cart = [];
       state.pricingPlan = null;
@@ -104,6 +104,29 @@ var App = (function () {
       try { sessionStorage.setItem('yashir_sess_hp', hp); } catch (e) {}
       if (remember) Store.set('remember', { hp: hp, exp: Date.now() + 30 * 864e5 });
       return true;
+    },
+    loginCustomerFirebase: function (hp, remember, password) {
+      if (!window.DB) {
+        if (!Auth.login(hp, remember, password)) return Promise.reject(new Error('AUTH_FAIL'));
+        return Promise.resolve();
+      }
+      if (!window.AUTH || !window.YashirBackend) return Promise.reject(new Error('NO_BACKEND'));
+      var persist = remember
+        ? firebase.auth.Auth.Persistence.LOCAL
+        : firebase.auth.Auth.Persistence.SESSION;
+      return window.AUTH.setPersistence(persist)
+        .then(function () { return YashirBackend.authenticateCustomer(hp, password); })
+        .then(function (res) {
+          var cust = res && res.data && res.data.customer;
+          return window.AUTH.signInWithCustomToken(res.data.token).then(function () {
+            if (cust) {
+              state.currentUser = { role: 'customer', customer: cust };
+              window.CUSTOMERS_DB = [cust];
+              Cart._restore();
+            }
+            try { sessionStorage.setItem('yashir_sess_hp', hp); } catch (e) {}
+          });
+        });
     },
     loginAdmin: function (pin) {
       if (pin !== (state.settings.adminPin || ADMIN_CREDENTIALS.pin)) return false;
@@ -114,27 +137,51 @@ var App = (function () {
       try { sessionStorage.setItem('yashir_sess_admin', '1'); } catch (e) {}
       return true;
     },
+    loginAdminFirebase: function (pin) {
+      if (!window.DB) {
+        return Auth.loginAdmin(pin) ? Promise.resolve() : Promise.reject(new Error('AUTH_FAIL'));
+      }
+      if (!window.AUTH || !window.YashirBackend) return Promise.reject(new Error('NO_BACKEND'));
+      return YashirBackend.authenticateAdmin(pin)
+        .then(function (res) {
+          return window.AUTH.signInWithCustomToken(res.data.token).then(function () {
+            state.currentUser = { role: 'admin' };
+            state.cart = [];
+            state.pricingPlan = null;
+            _pricingRefreshQueuedWhileModal = false;
+            try { sessionStorage.setItem('yashir_sess_admin', '1'); } catch (e) {}
+          });
+        });
+    },
     logout: function () {
       _tearDownSecretAdmin();
-      state.currentUser = null;
-      state.cart = [];
-      state.pricingPlan = null;
-      _pricingRefreshQueuedWhileModal = false;
-      _deferredSubmitAfterPricingAck = false;
-      _deferredOrderNotes = '';
-      Store.del('remember');
-      try {
-        sessionStorage.removeItem('yashir_sess_hp');
-        sessionStorage.removeItem('yashir_sess_admin');
-        sessionStorage.removeItem('yashir_last_view');
-        sessionStorage.removeItem('yashir_last_params');
-        sessionStorage.removeItem('yashir_last_order_id');
-        sessionStorage.removeItem('yashir_cat_section');
-      } catch (e) {}
-      closeCart();
-      navigate('landing');
+      var done = function () {
+        state.currentUser = null;
+        state.cart = [];
+        state.pricingPlan = null;
+        _pricingRefreshQueuedWhileModal = false;
+        _deferredSubmitAfterPricingAck = false;
+        _deferredOrderNotes = '';
+        Store.del('remember');
+        try {
+          sessionStorage.removeItem('yashir_sess_hp');
+          sessionStorage.removeItem('yashir_sess_admin');
+          sessionStorage.removeItem('yashir_last_view');
+          sessionStorage.removeItem('yashir_last_params');
+          sessionStorage.removeItem('yashir_last_order_id');
+          sessionStorage.removeItem('yashir_cat_section');
+        } catch (e) {}
+        closeCart();
+        navigate('landing');
+      };
+      if (window.AUTH) {
+        window.AUTH.signOut().then(done, done);
+      } else {
+        done();
+      }
     },
     tryAuto: function () {
+      if (window.AUTH && window.DB) return false;
       var r = Store.get('remember');
       if (!r || Date.now() > r.exp) return false;
       return Auth.login(r.hp, false);
@@ -565,74 +612,48 @@ var App = (function () {
         return;
       }
 
-      var dbRef = window.DB;
-      var settingsRef = dbRef.collection('app_settings').doc('main');
-      var fv = firebase.firestore.FieldValue;
-      var cartLinesForStock = [];
-      state.cart.forEach(function (line) {
-        if (!_isShippingLineProduct(line.product)) cartLinesForStock.push(line);
-      });
+      if (!window.YashirBackend || !window.AUTH || !window.AUTH.currentUser) {
+        toast(t('cart.orderSaveFailed'), 'error');
+        return;
+      }
 
-      dbRef
-        .runTransaction(function (transaction) {
-          return transaction.get(settingsRef).then(function (setSnap) {
-            var d = setSnap.exists ? setSnap.data() : {};
-            var seeded =
-              typeof state.settings.nextOrderId === 'number' && !isNaN(state.settings.nextOrderId)
-                ? state.settings.nextOrderId
-                : 352436352;
-            var curSeq =
-              typeof d.nextOrderId === 'number' && !isNaN(d.nextOrderId)
-                ? d.nextOrderId
-                : seeded;
-            if (curSeq < seeded) curSeq = seeded;
+      var lineItemsPayload = [];
+      for (var li = 0; li < state.cart.length; li++) {
+        var cln = state.cart[li];
+        if (_isShippingLineProduct(cln.product)) continue;
+        var qi = parseInt(cln.qty, 10);
+        if (isNaN(qi) || qi < 1) qi = 1;
+        qi = Math.min(999, qi);
+        lineItemsPayload.push({ productId: cln.product.id, qty: qi });
+      }
 
-            function readProdSnaps(idx, acc) {
-              if (idx >= cartLinesForStock.length) return Promise.resolve(acc);
-              return transaction
-                .get(dbRef.collection('products').doc(cartLinesForStock[idx].product.id))
-                .then(function (snap) {
-                  acc.push(snap);
-                  return readProdSnaps(idx + 1, acc);
-                });
-            }
-
-            return readProdSnaps(0, []).then(function (prodSnaps) {
-              var pi;
-              for (pi = 0; pi < prodSnaps.length; pi++) {
-                if (!prodSnaps[pi].exists) throw new Error('PRODUCT_DOC_MISSING');
-              }
-
-              var assignedNum = curSeq;
-              var orderIdStr = String(assignedNum);
-              var orderPayload = makeOrderPayload(orderIdStr);
-
-              transaction.set(settingsRef, { nextOrderId: assignedNum + 1 }, { merge: true });
-              transaction.set(dbRef.collection('orders').doc(orderIdStr), orderPayload);
-
-              for (pi = 0; pi < cartLinesForStock.length; pi++) {
-                var dq = parseInt(cartLinesForStock[pi].qty, 10);
-                if (isNaN(dq) || dq < 1) dq = 1;
-                var pref = dbRef.collection('products').doc(cartLinesForStock[pi].product.id);
-                transaction.update(pref, { stock: fv.increment(-dq) });
-              }
-
-              return assignedNum + 1;
-            });
-          });
-        })
-        .then(function (nextCounter) {
-          state.settings.nextOrderId = nextCounter;
+      YashirBackend.createOrder({ lineItems: lineItemsPayload, notes: notes || '' })
+        .then(function (res) {
+          var payload = res.data || {};
+          var orderFromServer = payload.order;
+          if (!orderFromServer || orderFromServer.id == null) {
+            toast(t('cart.orderSaveFailed'), 'error');
+            return;
+          }
+          if (typeof payload.nextOrderId === 'number' && !isNaN(payload.nextOrderId)) {
+            state.settings.nextOrderId = payload.nextOrderId;
+          }
           try {
             Store.set('settings', state.settings);
           } catch (e1) {}
           if (window.DBSync) DBSync.saveSettings(state.settings);
-          /* Stock: rely on Firestore products onSnapshot — do not deduct locally here (avoids double decrement). */
-          persistLocalAndFinish(makeOrderPayload(String(nextCounter - 1)));
+          Cart.clear();
+          closeCart();
+          navigate('success', { order: orderFromServer });
+          var allSync = Store.get('orders') || [];
+          allSync.unshift(orderFromServer);
+          Store.set('orders', allSync);
         })
         .catch(function (e) {
-          console.warn('Firestore order transaction:', e);
-          if (e && e.message === 'PRODUCT_DOC_MISSING') {
+          console.warn('createOrder callable:', e);
+          var msg = (e && e.message) ? String(e.message) : '';
+          var code = (e && e.code) ? String(e.code) : '';
+          if (msg.indexOf('PRODUCT_DOC_MISSING') >= 0 || code.indexOf('failed-precondition') >= 0) {
             toast(t('cart.productMissing'), 'error');
           } else {
             toast(t('cart.orderSaveFailed'), 'error');
@@ -1117,14 +1138,17 @@ var App = (function () {
   function _secretLogin() {
     var pin = document.getElementById('sec-pin');
     if (!pin) return;
-    if (Auth.loginAdmin(pin.value)) {
-      _tearDownSecretAdmin();
-      renderHeader();
-      navigate('admin');
-    } else {
-      toast(t('sys.wrongCode'), 'error');
-      pin.value = ''; pin.focus();
-    }
+    App.Auth.loginAdminFirebase(pin.value)
+      .then(function () {
+        _tearDownSecretAdmin();
+        renderHeader();
+        navigate('admin');
+      })
+      .catch(function () {
+        toast(t('sys.wrongCode'), 'error');
+        pin.value = '';
+        pin.focus();
+      });
   }
 
   /* ===== LOW STOCK ALERT ===== */
@@ -1260,6 +1284,98 @@ var App = (function () {
     return _cartRepricePromptPromise;
   }
 
+  var _firebaseRouteInit = false;
+  var _productsListenerAttached = false;
+  var _customersSnapUnsub = null;
+
+  function ensureProductsFirestoreWired() {
+    if (_productsListenerAttached || !window.DB) return;
+    _productsListenerAttached = true;
+    loadProductsFromFirestore(
+      function () {
+        App.Store.set('products', window.PRODUCTS);
+        var el = document.getElementById('view-content');
+        if (el && state.currentView === 'catalog') {
+          var _cp = {};
+          try {
+            var _s = sessionStorage.getItem('yashir_cat_section');
+            if (_s === 'full' || _s === 'personal') _cp.section = _s;
+          } catch (_e) {}
+          CatalogView.render(el, _cp);
+        }
+      },
+      function () {}
+    );
+  }
+
+  function attachCustomersListener() {
+    if (_customersSnapUnsub) {
+      try { _customersSnapUnsub(); } catch (e0) {}
+      _customersSnapUnsub = null;
+    }
+    if (!window.DB || !DBSync.listenCustomers) return;
+    _customersSnapUnsub = DBSync.listenCustomers(function () {
+      if (state.currentUser && state.currentUser.role === 'customer') {
+        var freshCu = (window.CUSTOMERS_DB || []).find(function (c) {
+          return c.id === state.currentUser.customer.id;
+        });
+        if (freshCu) state.currentUser.customer = freshCu;
+        maybeRepriceCartAfterPricingChange();
+      }
+      var elCat = document.getElementById('view-content');
+      if (elCat && state.currentView === 'catalog') {
+        var _cpLive = {};
+        try {
+          var _secLive = sessionStorage.getItem('yashir_cat_section');
+          if (_secLive === 'full' || _secLive === 'personal') _cpLive.section = _secLive;
+        } catch (_eLive) {}
+        CatalogView.render(elCat, _cpLive);
+      }
+    });
+  }
+
+  function applyFirebaseAuthUser(user) {
+    if (!window.AUTH || !window.DB) return Promise.resolve();
+    if (!user) {
+      state.currentUser = null;
+      return Promise.resolve();
+    }
+    return user.getIdTokenResult().then(function (tr) {
+      var claims = tr.claims || {};
+      if (claims.admin === true) {
+        state.currentUser = { role: 'admin' };
+        state.cart = [];
+        state.pricingPlan = null;
+        _pricingRefreshQueuedWhileModal = false;
+        return DBSync.loadCustomersPromise().then(function () {
+          return new Promise(function (resolve) {
+            DBSync.loadMainSettings(function () { resolve(); });
+          });
+        }).then(function () {
+          return new Promise(function (resolve) {
+            DBSync.bootstrapPublicSettingsIfAdmin(function () { resolve(); });
+          });
+        });
+      }
+      if (claims.customerId) {
+        return window.DB.collection('customers').doc(String(claims.customerId)).get().then(function (snap) {
+          if (!snap.exists) {
+            state.currentUser = null;
+            return window.AUTH.signOut();
+          }
+          var cu = snap.data();
+          state.currentUser = { role: 'customer', customer: cu };
+          window.CUSTOMERS_DB = [cu];
+          state.cart = [];
+          state.pricingPlan = null;
+          _pricingRefreshQueuedWhileModal = false;
+          Cart._restore();
+        });
+      }
+      state.currentUser = null;
+    });
+  }
+
   /* ===== INIT ===== */
   function init() {
     loadData();
@@ -1269,67 +1385,79 @@ var App = (function () {
       if (!document.getElementById('modal-wrap').classList.contains('hidden')) { closeModal(); return; }
       if (state.cartOpen) closeCart();
     });
-    restoreSession();
-    restoreRoute();
-    if (Auth.isCustomer()) {
-      renderCartFab();
-      setTimeout(showSystemMsg, 800);
-    }
 
+    if (window.AUTH && window.DB) {
+      window.AUTH.onAuthStateChanged(function (user) {
+        applyFirebaseAuthUser(user).then(function () {
+          if (!_firebaseRouteInit) {
+            _firebaseRouteInit = true;
+            restoreRoute();
+          } else {
+            renderHeader();
+            updateFloatBtns();
+            var el = document.getElementById('view-content');
+            if (el) {
+              switch (state.currentView) {
+                case 'landing':  LandingView.render(el); break;
+                case 'login':    LoginView.render(el); break;
+                case 'catalog': {
+                  var _cpR = {};
+                  try {
+                    var _sr = sessionStorage.getItem('yashir_cat_section');
+                    if (_sr === 'full' || _sr === 'personal') _cpR.section = _sr;
+                  } catch (_er) {}
+                  CatalogView.render(el, _cpR);
+                  break;
+                }
+                case 'success':  SuccessView.render(el, {}); break;
+                case 'admin': {
+                  if (Auth.isAdmin()) AdminView.render(el, {});
+                  else navigate('landing');
+                  break;
+                }
+                default: LandingView.render(el);
+              }
+            }
+          }
 
-    if (window.DB) {
-      loadProductsFromFirestore(
-        function () {
-          App.Store.set('products', window.PRODUCTS);
-          var el = document.getElementById('view-content');
-          if (el && state.currentView === 'catalog') {
-            var _cp = {};
-            try {
-              var _s = sessionStorage.getItem('yashir_cat_section');
-              if (_s === 'full' || _s === 'personal') _cp.section = _s;
-            } catch (_e) {}
-            CatalogView.render(el, _cp);
-          }
-        },
-        function () {}
-      );
+          ensureProductsFirestoreWired();
+          DBSync.loadSettings(function () {
+            renderHeader();
+            if (Auth.isAdmin()) {
+              DBSync.loadCustomers(function () {});
+              DBSync.loadMainSettings(function () { renderHeader(); });
+              DBSync.bootstrapPublicSettingsIfAdmin(function () {});
+            }
+            attachCustomersListener();
+          });
 
-      DBSync.loadCustomers(function (ok) {
-        if (ok) {
-          if (state.currentUser && state.currentUser.role === 'customer') {
-            var fresh = (window.CUSTOMERS_DB || []).find(function (c) {
-              return c.id === state.currentUser.customer.id;
-            });
-            if (fresh) state.currentUser.customer = fresh;
-            maybeRepriceCartAfterPricingChange();
+          if (Auth.isCustomer()) {
+            renderCartFab();
+            setTimeout(showSystemMsg, 800);
           }
-        }
-      });
-
-      if (DBSync.listenCustomers) {
-        DBSync.listenCustomers(function () {
-          if (state.currentUser && state.currentUser.role === 'customer') {
-            var freshCu = (window.CUSTOMERS_DB || []).find(function (c) {
-              return c.id === state.currentUser.customer.id;
-            });
-            if (freshCu) state.currentUser.customer = freshCu;
-            maybeRepriceCartAfterPricingChange();
+        }).catch(function (err) {
+          console.warn('auth state:', err);
+          if (!_firebaseRouteInit) {
+            _firebaseRouteInit = true;
+            restoreRoute();
           }
-          var elCat = document.getElementById('view-content');
-          if (elCat && state.currentView === 'catalog') {
-            var _cpLive = {};
-            try {
-              var _secLive = sessionStorage.getItem('yashir_cat_section');
-              if (_secLive === 'full' || _secLive === 'personal') _cpLive.section = _secLive;
-            } catch (_eLive) {}
-            CatalogView.render(elCat, _cpLive);
-          }
+          ensureProductsFirestoreWired();
+          DBSync.loadSettings(function () { renderHeader(); });
         });
-      }
-
-      DBSync.loadSettings(function () {
-        renderHeader();
       });
+    } else {
+      restoreSession();
+      restoreRoute();
+      if (window.DB) {
+        ensureProductsFirestoreWired();
+        DBSync.loadSettings(function () { renderHeader(); });
+        DBSync.loadCustomers(function () {});
+        attachCustomersListener();
+      }
+      if (Auth.isCustomer()) {
+        renderCartFab();
+        setTimeout(showSystemMsg, 800);
+      }
     }
   }
 

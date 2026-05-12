@@ -1,5 +1,5 @@
 /* =============================================================
-   DBSync — סינכרון כל נתוני המערכת עם Firestore
+   DBSync — סינכרון עם Firestore (כללי אבטחה מבוססי Firebase Auth)
    מקור האמת: Firestore. localStorage = מטמון מהיר בלבד.
    ============================================================= */
 var DBSync = (function () {
@@ -11,48 +11,90 @@ var DBSync = (function () {
     PRODUCTS:  'products',
     EXPENSES:  'expenses'
   };
-  var SETTINGS_DOC = 'main';
+  var SETTINGS_DOC_MAIN = 'main';
+  var SETTINGS_DOC_PUBLIC = 'public';
+
+  var PUBLIC_SETTINGS_KEYS = [
+    'minOrderAmount',
+    'defaultShippingCost',
+    'vatRate',
+    'systemMessage',
+    'systemMessage_en',
+    'landingTitle',
+    'landingTitle_en',
+    'landingSubtitle',
+    'landingSubtitle_en'
+  ];
+
+  var PRIVATE_SETTINGS_KEYS = ['adminPin', 'nextOrderId'];
 
   function db() { return window.DB; }
+
+  function pickPublicSettings(settings) {
+    var out = {};
+    if (!settings) return out;
+    PUBLIC_SETTINGS_KEYS.forEach(function (k) {
+      if (settings[k] !== undefined) out[k] = settings[k];
+    });
+    return out;
+  }
+
+  function pickPrivateSettings(settings) {
+    var out = {};
+    if (!settings) return out;
+    PRIVATE_SETTINGS_KEYS.forEach(function (k) {
+      if (settings[k] !== undefined) out[k] = settings[k];
+    });
+    return out;
+  }
 
   /* ──────────────────────────────────────────
      לקוחות
      ────────────────────────────────────────── */
 
   function listenCustomers(onUpdate) {
-    if (!db()) return function () {};
-    return db().collection(COLLECTIONS.CUSTOMERS).onSnapshot(function (snap) {
-      var list = [];
-      snap.forEach(function (d) { list.push(d.data()); });
-      window.CUSTOMERS_DB = list;
-      try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
-      onUpdate && onUpdate();
-    }, function (err) {
-      console.warn('DBSync.listenCustomers error:', err);
-    });
+    if (!db() || !window.AUTH) return function () {};
+    if (window.App && App.Auth.isAdmin()) {
+      return db().collection(COLLECTIONS.CUSTOMERS).onSnapshot(function (snap) {
+        var list = [];
+        snap.forEach(function (d) { list.push(d.data()); });
+        window.CUSTOMERS_DB = list;
+        try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
+        onUpdate && onUpdate();
+      }, function (err) {
+        console.warn('DBSync.listenCustomers error:', err);
+      });
+    }
+    if (window.App && App.Auth.isCustomer() && App.state.currentUser.customer) {
+      var cid = String(App.state.currentUser.customer.id);
+      return db().collection(COLLECTIONS.CUSTOMERS).doc(cid).onSnapshot(function (doc) {
+        if (doc.exists) {
+          var c = doc.data();
+          window.CUSTOMERS_DB = [c];
+          if (App.state.currentUser && App.state.currentUser.customer) {
+            App.state.currentUser.customer = c;
+          }
+          try { localStorage.setItem('yashir_customers', JSON.stringify([c])); } catch (e) {}
+        }
+        onUpdate && onUpdate();
+      }, function (err) {
+        console.warn('DBSync.listenCustomers error:', err);
+      });
+    }
+    return function () {};
   }
 
   function loadCustomers(onDone) {
     if (!db()) { onDone && onDone(false); return; }
+    if (!window.App || !App.Auth.isAdmin()) {
+      onDone && onDone(false);
+      return;
+    }
     db().collection(COLLECTIONS.CUSTOMERS).get()
       .then(function (snap) {
-        if (snap.empty) {
-          /* Firestore ריק — מעלה את הלקוחות מ-localStorage/static */
-          var existing = window.CUSTOMERS_DB || [];
-          if (existing.length) {
-            var batch = db().batch();
-            existing.forEach(function (c) {
-              batch.set(db().collection(COLLECTIONS.CUSTOMERS).doc(String(c.id)), c);
-            });
-            batch.commit().catch(function () {});
-          }
-          onDone && onDone(true);
-          return;
-        }
         var list = [];
         snap.forEach(function (d) { list.push(d.data()); });
         window.CUSTOMERS_DB = list;
-        /* שמור ב-localStorage כגיבוי */
         try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
         onDone && onDone(true);
       })
@@ -62,8 +104,27 @@ var DBSync = (function () {
       });
   }
 
+  function loadCustomersForAdmin() {
+    return loadCustomersPromise();
+  }
+
+  function loadCustomersPromise() {
+    if (!db()) return Promise.resolve(false);
+    return db().collection(COLLECTIONS.CUSTOMERS).get()
+      .then(function (snap) {
+        var list = [];
+        snap.forEach(function (d) { list.push(d.data()); });
+        window.CUSTOMERS_DB = list;
+        try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
+        return true;
+      })
+      .catch(function (err) {
+        console.warn('DBSync.loadCustomersPromise error:', err);
+        return false;
+      });
+  }
+
   function saveCustomer(customer, oldId) {
-    /* שמור תמיד ב-localStorage */
     try { localStorage.setItem('yashir_customers', JSON.stringify(window.CUSTOMERS_DB)); } catch (e) {}
 
     if (!db()) return;
@@ -71,7 +132,6 @@ var DBSync = (function () {
     db().collection(COLLECTIONS.CUSTOMERS).doc(docId).set(customer)
       .catch(function (err) { console.warn('DBSync.saveCustomer error:', err); });
 
-    /* אם ח.פ השתנה — מחק את הישן */
     if (oldId && String(oldId) !== docId) {
       db().collection(COLLECTIONS.CUSTOMERS).doc(String(oldId)).delete()
         .catch(function () {});
@@ -90,7 +150,6 @@ var DBSync = (function () {
     db().collection(COLLECTIONS.CUSTOMERS).doc(String(customerId))
       .update({ personalPrices: personalPrices })
       .catch(function () {
-        /* אם המסמך לא קיים — set במקום update */
         var cu = (window.CUSTOMERS_DB || []).find(function (c) { return String(c.id) === String(customerId); });
         if (cu) db().collection(COLLECTIONS.CUSTOMERS).doc(String(customerId)).set(cu).catch(function () {});
       });
@@ -98,25 +157,25 @@ var DBSync = (function () {
   }
 
   /* ──────────────────────────────────────────
-     הגדרות מערכת
+     הגדרות מערכת (public / main מפוצלים)
      ────────────────────────────────────────── */
+
+  function applySettingsToApp(data) {
+    if (!data || !window.App || !App.state) return;
+    Object.assign(window.App.state.settings, data);
+    var st = window.App.state.settings;
+    if (st.systemMessage_en === undefined) st.systemMessage_en = '';
+    if (st.landingTitle_en === undefined) st.landingTitle_en = '';
+    if (st.landingSubtitle_en === undefined) st.landingSubtitle_en = '';
+  }
 
   function loadSettings(onDone) {
     if (!db()) { onDone && onDone(false); return; }
-    db().collection(COLLECTIONS.SETTINGS).doc(SETTINGS_DOC).get()
+    db().collection(COLLECTIONS.SETTINGS).doc(SETTINGS_DOC_PUBLIC).get()
       .then(function (doc) {
         if (doc.exists) {
-          var data = doc.data();
-          /* מיזוג עם state.settings הקיים */
-          if (window.App && window.App.state) {
-            Object.assign(window.App.state.settings, data);
-            var st = window.App.state.settings;
-            if (st.systemMessage_en === undefined) st.systemMessage_en = '';
-            if (st.landingTitle_en === undefined) st.landingTitle_en = '';
-            if (st.landingSubtitle_en === undefined) st.landingSubtitle_en = '';
-          }
-          /* שמור ב-localStorage */
-          try { localStorage.setItem('yashir_settings', JSON.stringify(data)); } catch (e) {}
+          applySettingsToApp(doc.data());
+          try { localStorage.setItem('yashir_settings', JSON.stringify(window.App.state.settings)); } catch (e) {}
         }
         onDone && onDone(true);
       })
@@ -126,11 +185,53 @@ var DBSync = (function () {
       });
   }
 
+  function loadMainSettings(onDone) {
+    if (!db()) { onDone && onDone(false); return; }
+    if (!window.App || !App.Auth.isAdmin()) {
+      onDone && onDone(false);
+      return;
+    }
+    db().collection(COLLECTIONS.SETTINGS).doc(SETTINGS_DOC_MAIN).get()
+      .then(function (doc) {
+        if (doc.exists) {
+          applySettingsToApp(doc.data());
+          try { localStorage.setItem('yashir_settings', JSON.stringify(window.App.state.settings)); } catch (e) {}
+        }
+        onDone && onDone(true);
+      })
+      .catch(function (err) {
+        console.warn('DBSync.loadMainSettings error:', err);
+        onDone && onDone(false);
+      });
+  }
+
   function saveSettings(settings) {
     try { localStorage.setItem('yashir_settings', JSON.stringify(settings)); } catch (e) {}
     if (!db()) return;
-    db().collection(COLLECTIONS.SETTINGS).doc(SETTINGS_DOC).set(settings)
-      .catch(function (err) { console.warn('DBSync.saveSettings error:', err); });
+    var pub = pickPublicSettings(settings);
+    var priv = pickPrivateSettings(settings);
+    db().collection(COLLECTIONS.SETTINGS).doc(SETTINGS_DOC_PUBLIC).set(pub, { merge: true })
+      .catch(function (err) { console.warn('DBSync.saveSettings public:', err); });
+    db().collection(COLLECTIONS.SETTINGS).doc(SETTINGS_DOC_MAIN).set(priv, { merge: true })
+      .catch(function (err) { console.warn('DBSync.saveSettings main:', err); });
+  }
+
+  function bootstrapPublicSettingsIfAdmin(onDone) {
+    if (!window.YashirBackend || !window.App || !App.Auth.isAdmin()) {
+      onDone && onDone();
+      return;
+    }
+    db().collection(COLLECTIONS.SETTINGS).doc(SETTINGS_DOC_PUBLIC).get()
+      .then(function (snap) {
+        if (snap.exists) {
+          onDone && onDone();
+          return;
+        }
+        return YashirBackend.ensurePublicAppSettings().then(function () {
+          return loadSettings(onDone);
+        }).catch(function () { onDone && onDone(); });
+      })
+      .catch(function () { onDone && onDone(); });
   }
 
   /* ──────────────────────────────────────────
@@ -177,30 +278,33 @@ var DBSync = (function () {
   }
 
   /* ──────────────────────────────────────────
-     טעינה ראשונית של הכל
+     טעינה ראשונית
      ────────────────────────────────────────── */
 
   function loadAll(onComplete) {
-    var remaining = 3;
+    var remaining = 2;
     function done() { remaining--; if (remaining === 0 && onComplete) onComplete(); }
-
-    loadCustomers(done);
     loadSettings(done);
-    /* מוצרים כבר נטענים דרך loadProductsFromFirestore ב-app.js */
-    done(); /* placeholder לגנרטור */
+    done();
   }
 
   return {
     loadAll:            loadAll,
     listenCustomers:    listenCustomers,
     loadCustomers:      loadCustomers,
+    loadCustomersForAdmin: loadCustomersForAdmin,
+    loadCustomersPromise: loadCustomersPromise,
     saveCustomer:       saveCustomer,
     deleteCustomer:     deleteCustomer,
     saveCustomerPrices: saveCustomerPrices,
     loadSettings:       loadSettings,
+    loadMainSettings:   loadMainSettings,
+    bootstrapPublicSettingsIfAdmin: bootstrapPublicSettingsIfAdmin,
     saveSettings:       saveSettings,
     loadExpenses:       loadExpenses,
     saveExpense:        saveExpense,
-    deleteExpense:      deleteExpense
+    deleteExpense:      deleteExpense,
+    pickPublicSettings: pickPublicSettings,
+    pickPrivateSettings: pickPrivateSettings
   };
 })();

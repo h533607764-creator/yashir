@@ -40,25 +40,27 @@ var LoginView = {
     var pass = document.getElementById('lv-pass').value.trim();
     var rem  = document.getElementById('lv-rem').checked;
     if (!hp) { App.toast(t('login.missingHp'), 'warning'); return; }
-    if (!App.Auth.login(hp, rem, pass)) {
-      App.toast(t('login.notFound'), 'error');
-      document.getElementById('lv-hp').classList.add('input-error');
-      return;
-    }
-    App.renderHeader();
-    var c = App.state.currentUser.customer;
-    App.showModal(
-      '<div class="sys-message">' +
-        '<div class="sys-icon success"><span class="material-icons-round" style="font-size:30px">waving_hand</span></div>' +
-        '<h3>' + t('header.hello') + App.escHTML(pLang(c, 'name')) + '!</h3>' +
-        '<p>' + t('login.welcome') + '<br>' + t('login.freeShipping') + ' <strong>₪' + App.state.settings.minOrderAmount + '</strong></p>' +
-        '<div style="display:flex;gap:10px">' +
-          '<button class="btn-primary" onclick="App.closeModal();App.navigate(\'catalog\')">' +
-            '<span class="material-icons-round">menu_book</span> ' + t('login.toCatalog') +
-          '</button>' +
-        '</div>' +
-      '</div>'
-    );
+    App.Auth.loginCustomerFirebase(hp, rem, pass)
+      .then(function () {
+        App.renderHeader();
+        var c = App.state.currentUser.customer;
+        App.showModal(
+          '<div class="sys-message">' +
+            '<div class="sys-icon success"><span class="material-icons-round" style="font-size:30px">waving_hand</span></div>' +
+            '<h3>' + t('header.hello') + App.escHTML(pLang(c, 'name')) + '!</h3>' +
+            '<p>' + t('login.welcome') + '<br>' + t('login.freeShipping') + ' <strong>₪' + App.state.settings.minOrderAmount + '</strong></p>' +
+            '<div style="display:flex;gap:10px">' +
+              '<button class="btn-primary" onclick="App.closeModal();App.navigate(\'catalog\')">' +
+                '<span class="material-icons-round">menu_book</span> ' + t('login.toCatalog') +
+              '</button>' +
+            '</div>' +
+          '</div>'
+        );
+      })
+      .catch(function () {
+        App.toast(t('login.notFound'), 'error');
+        document.getElementById('lv-hp').classList.add('input-error');
+      });
   },
 
   doAdmin: function () {

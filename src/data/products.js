@@ -133,12 +133,11 @@ var _productsInitialSnapshotPending = true;
 
 /* ===================================================
    טעינת מוצרים מ-Firestore
-   אם הקולקציה ריקה — מזרים את הנתונים הסטטיים אוטומטית
+   אם הקולקציה ריקה — נשארים על מוצרים סטטיים עד שמנהל ממלא מ-Firestore
    =================================================== */
 function loadProductsFromFirestore(onSuccess, onError) {
   var TIMEOUT_MS = 6000;
   var done = false;
-  var seeding = false;
 
   var timer = setTimeout(function () {
     if (!done) { done = true; onError && onError(); }
@@ -149,14 +148,10 @@ function loadProductsFromFirestore(onSuccess, onError) {
       if (!done) { done = true; clearTimeout(timer); }
 
       if (snapshot.empty) {
-        if (!seeding) {
-          seeding = true;
-          var batch = window.DB.batch();
-          PRODUCTS_STATIC.forEach(function (p) {
-            batch.set(window.DB.collection('products').doc(p.id), p);
-          });
-          batch.commit().catch(function () { seeding = false; });
-        }
+        console.warn('Products collection empty — using static fallback until admin seeds Firestore.');
+        setYashirProductsList(PRODUCTS_STATIC);
+        try { localStorage.setItem('yashir_products', JSON.stringify(PRODUCTS_STATIC)); } catch (e) {}
+        onSuccess && onSuccess();
         return;
       }
 

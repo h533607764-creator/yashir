@@ -10,3 +10,5 @@ var firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 window.DB = firebase.firestore();
+window.AUTH = firebase.auth();
+window.FUNCTIONS = firebase.app().functions('europe-west1');
