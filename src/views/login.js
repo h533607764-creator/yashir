@@ -57,8 +57,21 @@ var LoginView = {
           '</div>'
         );
       })
-      .catch(function () {
-        App.toast(t('login.notFound'), 'error');
+      .catch(function (e) {
+        console.error('customer login failed:', e);
+        var code = e && e.code != null ? String(e.code) : '';
+        if (code === 'AUTH_FAIL_LOCAL' || code === 'functions/permission-denied' || code === 'permission-denied') {
+          App.toast(t('login.invalidCredentials'), 'error');
+        } else if (
+          code === 'functions/unavailable' ||
+          code === 'functions/not-found' ||
+          code === 'functions/deadline-exceeded' ||
+          code === 'auth/network-request-failed'
+        ) {
+          App.toast(t('login.authNetwork'), 'error');
+        } else {
+          App.toast(t('login.authServer'), 'error');
+        }
         document.getElementById('lv-hp').classList.add('input-error');
       });
   },

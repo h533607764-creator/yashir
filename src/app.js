@@ -21,6 +21,47 @@ var App = (function () {
     return new Date(d).toLocaleDateString(locale);
   }
 
+  function errorCode(e) {
+    return e && e.code != null ? String(e.code) : '';
+  }
+
+  function errorMessage(e) {
+    return e && e.message != null ? String(e.message) : '';
+  }
+
+  function authReject(code, msg) {
+    var err = new Error(msg || code);
+    err.code = code;
+    return Promise.reject(err);
+  }
+
+  function isBackendUnavailable(e) {
+    var code = errorCode(e);
+    var msg = errorMessage(e);
+    return (
+      code === 'NO_BACKEND' ||
+      code === 'FUNCTIONS_UNAVAILABLE' ||
+      code === 'functions/not-found' ||
+      code === 'functions/unavailable' ||
+      code === 'functions/deadline-exceeded' ||
+      code === 'functions/internal' ||
+      code === 'deadline-exceeded' ||
+      code === 'unavailable' ||
+      code === 'auth/network-request-failed' ||
+      code === 'auth/internal-error' ||
+      msg === 'NO_BACKEND' ||
+      msg === 'FUNCTIONS_UNAVAILABLE' ||
+      /network|fetch|Failed to fetch|NETWORK_ERROR|internal|unavailable|not-found/i.test(msg)
+    );
+  }
+
+  function fallbackModeError(code, msg, cause) {
+    var err = new Error(msg || code);
+    err.code = code;
+    err.cause = cause;
+    return err;
+  }
+
   /** Single epsilon (₪) for pricing drift: cart repricing UI vs submit validation vs Firestore checks. */
   var PRICE_DRIFT_EPSILON = 0.02;
 
@@ -107,10 +148,19 @@ var App = (function () {
     },
     loginCustomerFirebase: function (hp, remember, password) {
       if (!window.DB) {
-        if (!Auth.login(hp, remember, password)) return Promise.reject(new Error('AUTH_FAIL'));
+        if (!Auth.login(hp, remember, password)) {
+          console.error('customer local login failed: invalid business ID or password');
+          return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
+        }
         return Promise.resolve();
       }
-      if (!window.AUTH || !window.YashirBackend) return Promise.reject(new Error('NO_BACKEND'));
+      function localFallback(cause) {
+        console.error('customer Firebase auth unavailable, trying local fallback:', cause);
+        if (Auth.login(hp, remember, password)) return Promise.resolve({ fallback: 'local-customer-auth' });
+        console.error('customer local fallback failed:', cause);
+        return Promise.reject(fallbackModeError('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED', cause));
+      }
+      if (!window.AUTH || !window.YashirBackend) return localFallback(fallbackModeError('NO_BACKEND', 'NO_BACKEND'));
       var persist = remember
         ? firebase.auth.Auth.Persistence.LOCAL
         : firebase.auth.Auth.Persistence.SESSION;
@@ -126,6 +176,11 @@ var App = (function () {
             }
             try { sessionStorage.setItem('yashir_sess_hp', hp); } catch (e) {}
           });
+        })
+        .catch(function (e) {
+          console.error('customer Firebase login failed:', e);
+          if (isBackendUnavailable(e)) return localFallback(e);
+          return Promise.reject(e);
         });
     },
     loginAdmin: function (pin) {
@@ -139,9 +194,17 @@ var App = (function () {
     },
     loginAdminFirebase: function (pin) {
       if (!window.DB) {
-        return Auth.loginAdmin(pin) ? Promise.resolve() : Promise.reject(new Error('AUTH_FAIL'));
+        if (Auth.loginAdmin(pin)) return Promise.resolve();
+        console.error('admin local login failed: invalid PIN');
+        return authReject('AUTH_FAIL_LOCAL', 'LOCAL_ADMIN_AUTH_FAILED');
       }
-      if (!window.AUTH || !window.YashirBackend) return Promise.reject(new Error('NO_BACKEND'));
+      function localFallback(cause) {
+        console.error('admin Firebase auth unavailable, trying local PIN fallback:', cause);
+        if (Auth.loginAdmin(pin)) return Promise.resolve({ fallback: 'local-admin-auth' });
+        console.error('admin local PIN fallback failed:', cause);
+        return Promise.reject(fallbackModeError('AUTH_FAIL_LOCAL', 'LOCAL_ADMIN_AUTH_FAILED', cause));
+      }
+      if (!window.AUTH || !window.YashirBackend) return localFallback(fallbackModeError('NO_BACKEND', 'NO_BACKEND'));
       return YashirBackend.authenticateAdmin(pin)
         .then(function (res) {
           return window.AUTH.signInWithCustomToken(res.data.token).then(function () {
@@ -151,6 +214,11 @@ var App = (function () {
             _pricingRefreshQueuedWhileModal = false;
             try { sessionStorage.setItem('yashir_sess_admin', '1'); } catch (e) {}
           });
+        })
+        .catch(function (e) {
+          console.error('admin Firebase login failed:', e);
+          if (isBackendUnavailable(e)) return localFallback(e);
+          return Promise.reject(e);
         });
     },
     logout: function () {
@@ -600,20 +668,58 @@ var App = (function () {
         try { Store.set('products', window.PRODUCTS); } catch (e0) {}
       }
 
-      if (!window.DB) {
+      function reserveLocalOrderId() {
         var nextLocal =
           typeof state.settings.nextOrderId === 'number' && !isNaN(state.settings.nextOrderId)
             ? state.settings.nextOrderId
             : 352436352;
-        var oidLoc = String(nextLocal);
         state.settings.nextOrderId = nextLocal + 1;
+        return String(nextLocal);
+      }
+
+      function persistLocalOrderFallback(order, cause) {
+        if (cause) console.error('order fallback saved locally:', cause);
         applyLocalStockFromCart();
-        persistLocalAndFinish(makeOrderPayload(oidLoc));
+        persistLocalAndFinish(order);
+      }
+
+      function directFirestoreOrderFallback(cause) {
+        console.error('createOrder callable unavailable, trying direct Firestore fallback:', cause);
+        var order = makeOrderPayload(reserveLocalOrderId());
+        if (!window.DB || typeof firebase === 'undefined' || !firebase.firestore || !firebase.firestore.FieldValue) {
+          persistLocalOrderFallback(order, cause);
+          return;
+        }
+        var batch = window.DB.batch();
+        batch.set(window.DB.collection('orders').doc(String(order.id)), order);
+        state.cart.forEach(function (line) {
+          if (_isShippingLineProduct(line.product)) return;
+          var qd = parseInt(line.qty, 10);
+          if (isNaN(qd) || qd < 1) qd = 1;
+          qd = Math.min(999, qd);
+          batch.update(
+            window.DB.collection('products').doc(String(line.product.id)),
+            { stock: firebase.firestore.FieldValue.increment(-qd) }
+          );
+        });
+        batch.commit()
+          .then(function () {
+            applyLocalStockFromCart();
+            persistLocalAndFinish(order);
+          })
+          .catch(function (firestoreErr) {
+            console.error('direct Firestore order fallback failed; saving local order only:', firestoreErr);
+            persistLocalOrderFallback(order, firestoreErr);
+          });
+      }
+
+      if (!window.DB) {
+        persistLocalOrderFallback(makeOrderPayload(reserveLocalOrderId()));
         return;
       }
 
       if (!window.YashirBackend || !window.AUTH || !window.AUTH.currentUser) {
-        toast(t('cart.orderSaveFailed'), 'error');
+        directFirestoreOrderFallback(fallbackModeError('NO_BACKEND', 'NO_BACKEND'));
         return;
       }
 
@@ -650,7 +756,11 @@ var App = (function () {
           Store.set('orders', allSync);
         })
         .catch(function (e) {
-          console.warn('createOrder callable:', e);
+          console.error('createOrder callable failed:', e);
+          if (isBackendUnavailable(e)) {
+            directFirestoreOrderFallback(e);
+            return;
+          }
           var msg = (e && e.message) ? String(e.message) : '';
           var code = (e && e.code) ? String(e.code) : '';
           if (msg.indexOf('PRODUCT_DOC_MISSING') >= 0 || code.indexOf('failed-precondition') >= 0) {
@@ -1149,7 +1259,9 @@ var App = (function () {
         console.error('secret admin login', e);
         var code = e && e.code != null ? String(e.code) : '';
         var msg;
-        if (code === 'functions/permission-denied' || code === 'permission-denied') {
+        if (code === 'AUTH_FAIL_LOCAL') {
+          msg = t('login.adminWrong');
+        } else if (code === 'functions/permission-denied' || code === 'permission-denied') {
           msg = t('sys.wrongCode');
         } else if (code === 'functions/not-found') {
           msg = t('sys.adminLoginFnMissing');
