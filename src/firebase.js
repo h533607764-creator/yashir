@@ -11,4 +11,5 @@ var firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 window.DB = firebase.firestore();
 window.AUTH = firebase.auth();
+/* Region must match functions/index.js REGION (authenticateAdmin, createOrder, …) */
 window.FUNCTIONS = firebase.app().functions('europe-west1');

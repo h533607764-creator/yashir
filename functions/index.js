@@ -6,7 +6,7 @@ var pricing = require('./pricing');
 
 admin.initializeApp();
 
-var REGION = 'europe-west1';
+var REGION = 'europe-west1'; /* keep in sync with src/firebase.js FUNCTIONS region */
 var db = admin.firestore();
 
 var PUBLIC_SETTINGS_FIELDS = [
@@ -30,6 +30,13 @@ function pickPublicSettings(data) {
   return out;
 }
 
+function normalizedAdminPin(mainData) {
+  var d = mainData || {};
+  var raw = d.adminPin != null ? String(d.adminPin) : '';
+  var trimmed = raw.trim();
+  return trimmed !== '' ? trimmed : '1234';
+}
+
 function mergeSettings(mainData) {
   var d = mainData || {};
   return {
@@ -38,7 +45,7 @@ function mergeSettings(mainData) {
     vatRate: typeof d.vatRate === 'number' ? d.vatRate : 0.18,
     nextOrderId:
       typeof d.nextOrderId === 'number' && !isNaN(d.nextOrderId) ? d.nextOrderId : 352436352,
-    adminPin: d.adminPin != null ? String(d.adminPin) : '1234'
+    adminPin: normalizedAdminPin(d)
   };
 }
 
@@ -72,7 +79,8 @@ exports.authenticateCustomer = functions.region(REGION).https.onCall(async funct
 });
 
 exports.authenticateAdmin = functions.region(REGION).https.onCall(async function (data) {
-  var pin = data && data.pin != null ? String(data.pin) : '';
+  var pin =
+    data && data.pin != null && String(data.pin).trim() !== '' ? String(data.pin).trim() : '';
   var mainSnap = await db.collection('app_settings').doc('main').get();
   var merged = mergeSettings(mainSnap.exists ? mainSnap.data() : {});
   if (pin !== merged.adminPin) {

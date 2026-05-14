@@ -1138,14 +1138,41 @@ var App = (function () {
   function _secretLogin() {
     var pin = document.getElementById('sec-pin');
     if (!pin) return;
-    App.Auth.loginAdminFirebase(pin.value)
+    var pinVal = pin.value != null ? String(pin.value).trim() : '';
+    App.Auth.loginAdminFirebase(pinVal)
       .then(function () {
         _tearDownSecretAdmin();
         renderHeader();
         navigate('admin');
       })
-      .catch(function () {
-        toast(t('sys.wrongCode'), 'error');
+      .catch(function (e) {
+        console.error('secret admin login', e);
+        var code = e && e.code != null ? String(e.code) : '';
+        var msg;
+        if (code === 'functions/permission-denied' || code === 'permission-denied') {
+          msg = t('sys.wrongCode');
+        } else if (code === 'functions/not-found') {
+          msg = t('sys.adminLoginFnMissing');
+        } else if (code === 'functions/internal') {
+          msg = t('sys.adminLoginServer');
+        } else if (
+          code === 'functions/unavailable' ||
+          code === 'unavailable' ||
+          code === 'deadline-exceeded' ||
+          code === 'auth/network-request-failed' ||
+          (e &&
+            e.message &&
+            /network|fetch|Failed to fetch|NETWORK_ERROR/i.test(String(e.message)))
+        ) {
+          msg = t('sys.adminLoginNetwork');
+        } else if (code === 'auth/internal-error') {
+          msg = t('sys.adminLoginAuth');
+        } else if (code.indexOf('auth/') === 0) {
+          msg = t('sys.adminLoginAuth');
+        } else {
+          msg = t('sys.adminLoginGeneric');
+        }
+        toast(msg, 'error');
         pin.value = '';
         pin.focus();
       });
