@@ -155,8 +155,10 @@ var App = (function () {
         return Promise.resolve();
       }
       function localFallback(cause) {
-        console.error('customer Firebase auth unavailable, trying local fallback:', cause);
-        if (Auth.login(hp, remember, password)) return Promise.resolve({ fallback: 'local-customer-auth' });
+        if (Auth.login(hp, remember, password)) {
+          console.log('FALLBACK_CUSTOMER_USED');
+          return Promise.resolve({ fallback: 'local-customer-auth' });
+        }
         console.error('customer local fallback failed:', cause);
         return Promise.reject(fallbackModeError('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED', cause));
       }
@@ -165,10 +167,19 @@ var App = (function () {
         ? firebase.auth.Auth.Persistence.LOCAL
         : firebase.auth.Auth.Persistence.SESSION;
       return window.AUTH.setPersistence(persist)
-        .then(function () { return YashirBackend.authenticateCustomer(hp, password); })
+        .then(function () {
+          console.log('TRY_FIREBASE_CUSTOMER');
+          try {
+            return YashirBackend.authenticateCustomer(hp, password);
+          } catch (syncErr) {
+            return Promise.reject(syncErr);
+          }
+        })
         .then(function (res) {
           var cust = res && res.data && res.data.customer;
-          return window.AUTH.signInWithCustomToken(res.data.token).then(function () {
+          var token = res && res.data && res.data.token;
+          if (!token) return Promise.reject(new Error('NO_CUSTOMER_TOKEN'));
+          return window.AUTH.signInWithCustomToken(token).then(function () {
             if (cust) {
               state.currentUser = { role: 'customer', customer: cust };
               window.CUSTOMERS_DB = [cust];
@@ -179,8 +190,7 @@ var App = (function () {
         })
         .catch(function (e) {
           console.error('customer Firebase login failed:', e);
-          if (isBackendUnavailable(e)) return localFallback(e);
-          return Promise.reject(e);
+          return localFallback(e);
         });
     },
     loginAdmin: function (pin) {
@@ -199,15 +209,27 @@ var App = (function () {
         return authReject('AUTH_FAIL_LOCAL', 'LOCAL_ADMIN_AUTH_FAILED');
       }
       function localFallback(cause) {
-        console.error('admin Firebase auth unavailable, trying local PIN fallback:', cause);
-        if (Auth.loginAdmin(pin)) return Promise.resolve({ fallback: 'local-admin-auth' });
+        if (Auth.loginAdmin(pin)) {
+          console.log('FALLBACK_ADMIN_USED');
+          return Promise.resolve({ fallback: 'local-admin-auth' });
+        }
         console.error('admin local PIN fallback failed:', cause);
         return Promise.reject(fallbackModeError('AUTH_FAIL_LOCAL', 'LOCAL_ADMIN_AUTH_FAILED', cause));
       }
       if (!window.AUTH || !window.YashirBackend) return localFallback(fallbackModeError('NO_BACKEND', 'NO_BACKEND'));
-      return YashirBackend.authenticateAdmin(pin)
+      return Promise.resolve()
+        .then(function () {
+          console.log('TRY_FIREBASE_ADMIN');
+          try {
+            return YashirBackend.authenticateAdmin(pin);
+          } catch (syncErr) {
+            return Promise.reject(syncErr);
+          }
+        })
         .then(function (res) {
-          return window.AUTH.signInWithCustomToken(res.data.token).then(function () {
+          var token = res && res.data && res.data.token;
+          if (!token) return Promise.reject(new Error('NO_ADMIN_TOKEN'));
+          return window.AUTH.signInWithCustomToken(token).then(function () {
             state.currentUser = { role: 'admin' };
             state.cart = [];
             state.pricingPlan = null;
@@ -217,8 +239,7 @@ var App = (function () {
         })
         .catch(function (e) {
           console.error('admin Firebase login failed:', e);
-          if (isBackendUnavailable(e)) return localFallback(e);
-          return Promise.reject(e);
+          return localFallback(e);
         });
     },
     logout: function () {
