@@ -55,20 +55,21 @@ function httpsError(code, message) {
 
 exports.authenticateCustomer = functions.region(REGION).https.onCall(async function (data) {
   var hp = data && data.hp != null ? String(data.hp).trim() : '';
-  var password = data && data.password != null ? String(data.password) : '';
+  var password = data && data.password != null ? String(data.password).trim() : '';
   if (!/^\d{5,12}$/.test(hp)) {
     throw httpsError('invalid-argument', 'INVALID_HP');
+  }
+  if (!password) {
+    throw httpsError('permission-denied', 'AUTH_FAILED');
   }
   var snap = await db.collection('customers').doc(hp).get();
   if (!snap.exists) {
     throw httpsError('permission-denied', 'AUTH_FAILED');
   }
   var c = snap.data();
-  var reqPw = c.password != null ? String(c.password) : '';
-  if (reqPw !== '') {
-    if (password !== reqPw) {
-      throw httpsError('permission-denied', 'AUTH_FAILED');
-    }
+  var reqPw = c.password != null ? String(c.password).trim() : '';
+  if (reqPw === '' || password !== reqPw) {
+    throw httpsError('permission-denied', 'AUTH_FAILED');
   }
   var uid = 'cust_' + hp;
   var token = await admin.auth().createCustomToken(uid, {

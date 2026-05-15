@@ -130,32 +130,42 @@ var App = (function () {
   /* ===== AUTH ===== */
   var Auth = {
     login: function (hp, remember, password) {
-      var c = CUSTOMERS_DB.find(function (x) { return x.id === hp; });
+      var hpTrim = hp != null ? String(hp).trim() : '';
+      var passTrim = password != null ? String(password).trim() : '';
+      if (!hpTrim || !passTrim) return false;
+      var c = CUSTOMERS_DB.find(function (x) { return String(x.id) === hpTrim; });
       if (!c) return false;
-
-      if (c.password && c.password !== '') {
-        if (!password || password !== c.password) return false;
-      }
+      var stored = c.password != null ? String(c.password).trim() : '';
+      if (stored === '' || passTrim !== stored) return false;
 
       state.currentUser = { role: 'customer', customer: c };
       state.cart = [];
       state.pricingPlan = null;
       _pricingRefreshQueuedWhileModal = false;
       Cart._restore();
-      try { sessionStorage.setItem('yashir_sess_hp', hp); } catch (e) {}
-      if (remember) Store.set('remember', { hp: hp, exp: Date.now() + 30 * 864e5 });
+      try { sessionStorage.setItem('yashir_sess_hp', hpTrim); } catch (e) {}
+      if (remember) {
+        Store.set('remember', { hp: hpTrim, password: passTrim, exp: Date.now() + 30 * 864e5 });
+      } else {
+        Store.del('remember');
+      }
       return true;
     },
     loginCustomerFirebase: function (hp, remember, password) {
+      var hpTrim = hp != null ? String(hp).trim() : '';
+      var passTrim = password != null ? String(password).trim() : '';
+      if (!hpTrim || !passTrim) {
+        return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
+      }
       if (!window.DB) {
-        if (!Auth.login(hp, remember, password)) {
+        if (!Auth.login(hpTrim, remember, passTrim)) {
           console.error('customer local login failed: invalid business ID or password');
           return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
         }
         return Promise.resolve();
       }
       function localFallback(cause) {
-        if (Auth.login(hp, remember, password)) {
+        if (Auth.login(hpTrim, remember, passTrim)) {
           console.log('FALLBACK_CUSTOMER_USED');
           return Promise.resolve({ fallback: 'local-customer-auth' });
         }
@@ -170,7 +180,7 @@ var App = (function () {
         .then(function () {
           console.log('TRY_FIREBASE_CUSTOMER');
           try {
-            return YashirBackend.authenticateCustomer(hp, password);
+            return YashirBackend.authenticateCustomer(hpTrim, passTrim);
           } catch (syncErr) {
             return Promise.reject(syncErr);
           }
@@ -185,7 +195,12 @@ var App = (function () {
               window.CUSTOMERS_DB = [cust];
               Cart._restore();
             }
-            try { sessionStorage.setItem('yashir_sess_hp', hp); } catch (e) {}
+            try { sessionStorage.setItem('yashir_sess_hp', hpTrim); } catch (e) {}
+            if (remember) {
+              Store.set('remember', { hp: hpTrim, password: passTrim, exp: Date.now() + 30 * 864e5 });
+            } else {
+              Store.del('remember');
+            }
           });
         })
         .catch(function (e) {
@@ -272,8 +287,8 @@ var App = (function () {
     tryAuto: function () {
       if (window.AUTH && window.DB) return false;
       var r = Store.get('remember');
-      if (!r || Date.now() > r.exp) return false;
-      return Auth.login(r.hp, false);
+      if (!r || Date.now() > r.exp || !r.hp || !r.password) return false;
+      return Auth.login(r.hp, false, r.password);
     },
     isGuest:    function () { return !state.currentUser; },
     isCustomer: function () { return !!(state.currentUser && state.currentUser.role === 'customer'); },
@@ -839,11 +854,6 @@ var App = (function () {
     if (state.currentUser) return;
     if (Auth.tryAuto()) return;
     try {
-      var hp = sessionStorage.getItem('yashir_sess_hp');
-      if (hp && typeof CUSTOMERS_DB !== 'undefined' && CUSTOMERS_DB.some(function (x) { return x.id === hp; })) {
-        Auth.login(hp, false);
-        return;
-      }
       if (sessionStorage.getItem('yashir_sess_admin') === '1') {
         state.currentUser = { role: 'admin' };
         state.cart = [];

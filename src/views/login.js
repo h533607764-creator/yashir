@@ -10,10 +10,9 @@ var LoginView = {
           '</div>' +
           '<div id="lv-customer">' +
             '<div class="form-group"><label>' + t('login.hpLabel') + '</label>' +
-              '<input type="text" id="lv-hp" inputmode="numeric" placeholder="' + t('login.hpPlaceholder') + '" maxlength="9" autofocus></div>' +
+              '<input type="text" id="lv-hp" inputmode="numeric" placeholder="' + t('login.hpPlaceholder') + '" maxlength="9" autocomplete="username" required autofocus></div>' +
             '<div class="form-group"><label>' + t('login.passwordLabel') + '</label>' +
-              '<input type="password" id="lv-pass" placeholder="' + t('login.passwordPlaceholder') + '"></div>' +
-            '<p style="font-size:12px;color:var(--text-muted);margin-top:-8px">' + t('login.passwordHint') + '</p>' +
+              '<input type="password" id="lv-pass" placeholder="' + t('login.passwordPlaceholder') + '" autocomplete="current-password" required></div>' +
             '<label class="checkbox-label"><input type="checkbox" id="lv-rem"> ' + t('login.remember') + '</label>' +
             '<button class="btn-primary full-width" onclick="LoginView.doLogin()">' +
               '<span class="material-icons-round">login</span> ' + t('login.loginBtn') +
@@ -36,10 +35,16 @@ var LoginView = {
   },
 
   doLogin: function () {
-    var hp   = document.getElementById('lv-hp').value.trim();
-    var pass = document.getElementById('lv-pass').value.trim();
-    var rem  = document.getElementById('lv-rem').checked;
-    if (!hp) { App.toast(t('login.missingHp'), 'warning'); return; }
+    var hpEl = document.getElementById('lv-hp');
+    var passEl = document.getElementById('lv-pass');
+    if (hpEl) hpEl.classList.remove('input-error');
+    if (passEl) passEl.classList.remove('input-error');
+    if (!hpEl || !passEl) return;
+    if (typeof hpEl.reportValidity === 'function' && !hpEl.reportValidity()) return;
+    if (typeof passEl.reportValidity === 'function' && !passEl.reportValidity()) return;
+    var hp   = hpEl.value.trim();
+    var pass = passEl.value.trim();
+    var rem  = (document.getElementById('lv-rem') || {}).checked;
     App.Auth.loginCustomerFirebase(hp, rem, pass)
       .then(function () {
         App.renderHeader();
@@ -59,20 +64,11 @@ var LoginView = {
       })
       .catch(function (e) {
         console.error('customer login failed:', e);
-        var code = e && e.code != null ? String(e.code) : '';
-        if (code === 'AUTH_FAIL_LOCAL' || code === 'functions/permission-denied' || code === 'permission-denied') {
-          App.toast(t('login.invalidCredentials'), 'error');
-        } else if (
-          code === 'functions/unavailable' ||
-          code === 'functions/not-found' ||
-          code === 'functions/deadline-exceeded' ||
-          code === 'auth/network-request-failed'
-        ) {
-          App.toast(t('login.authNetwork'), 'error');
-        } else {
-          App.toast(t('login.authServer'), 'error');
-        }
-        document.getElementById('lv-hp').classList.add('input-error');
+        App.toast(t('login.invalidCredentials'), 'error');
+        var h = document.getElementById('lv-hp');
+        var p = document.getElementById('lv-pass');
+        if (h) h.classList.add('input-error');
+        if (p) p.classList.add('input-error');
       });
   },
 
