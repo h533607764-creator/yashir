@@ -977,15 +977,14 @@ var App = (function () {
   }
 
   function restoreRoute() {
-    console.log('[ROUTER INIT]', window.location.hash || '(no hash)');
     var view = 'landing';
     var hashRoute = parseHashRoute();
     if (hashRoute) {
       view = hashRoute.view;
-      console.log('[ROUTE RESTORE]', hashRoute.raw);
+      console.log('[ROUTE RESTORE]', 'from hash', hashRoute.raw, '->', view);
     } else {
       try { view = sessionStorage.getItem('yashir_last_view') || 'landing'; } catch (e1) {}
-      console.log('[ROUTE RESTORE]', '(fallback)', view);
+      console.log('[ROUTE RESTORE]', 'no hash; session fallback ->', view);
     }
     var params = {};
     if (hashRoute) {
@@ -997,8 +996,14 @@ var App = (function () {
       view = 'catalog';
       params.openCart = true;
     }
-    if (view === 'admin' && !Auth.isAdmin()) view = 'landing';
-    if ((view === 'catalog' || view === 'success' || view === 'admin') && Auth.isGuest()) view = 'landing';
+    if (view === 'admin' && !Auth.isAdmin()) {
+      console.log('[HOME FALLBACK]', 'admin route requires admin session');
+      view = 'landing';
+    }
+    if ((view === 'success') && Auth.isGuest()) {
+      console.log('[HOME FALLBACK]', 'success requires signed-in user');
+      view = 'landing';
+    }
     if (view === 'success') {
       var oid = sessionStorage.getItem('yashir_last_order_id');
       var order = null;
@@ -1008,6 +1013,7 @@ var App = (function () {
       }
       if (order) params = { order: order };
       else {
+        console.log('[HOME FALLBACK]', 'success hash without order context');
         view = Auth.isCustomer() ? 'catalog' : 'landing';
         params = {};
       }
@@ -1017,7 +1023,14 @@ var App = (function () {
 
   function navigate(view, params, opts) {
     opts = opts || {};
+    var routeIn = view;
+    try {
+      console.log('[NAVIGATE CALL]', routeIn, new Error().stack);
+    } catch (eStack) { console.log('[NAVIGATE CALL]', routeIn); }
     view = normalizeRouteName(view) || 'landing';
+    if (!normalizeRouteName(routeIn) && String(routeIn || '').trim() !== '') {
+      console.log('[HOME FALLBACK]', 'unknown route name:', routeIn);
+    }
     if (view === 'cart') {
       view = 'catalog';
       params = Object.assign({}, params || {}, { openCart: true });
@@ -1053,6 +1066,7 @@ var App = (function () {
       case 'success':  SuccessView.render(el, params); break;
       case 'admin':
         if (!Auth.isAdmin()) {
+          console.log('[HOME FALLBACK]', 'navigate(admin) blocked: not admin');
           navigate('landing');
           return;
         }
@@ -1073,10 +1087,11 @@ var App = (function () {
     _pendingRouteHash = '';
     var route = parseHashRoute();
     if (!route) {
+      console.log('[HOME FALLBACK]', 'hashchange empty hash -> landing');
       navigate('landing', {}, { fromHash: true, replaceHash: true });
       return;
     }
-    console.log('[ROUTE RESTORE]', route.raw);
+    console.log('[ROUTE RESTORE]', 'hashchange', route.raw);
     navigate(route.view, route.params, { fromHash: true });
   }
 
@@ -1611,7 +1626,6 @@ var App = (function () {
     return _cartRepricePromptPromise;
   }
 
-  var _firebaseRouteInit = false;
   var _productsListenerAttached = false;
   var _customersSnapUnsub = null;
 
@@ -1707,6 +1721,7 @@ var App = (function () {
   /* ===== INIT ===== */
   function init() {
     loadData();
+    console.log('[ROUTER INIT]', window.location.hash || '(no hash)', window.AUTH && window.DB ? 'firebase' : 'local');
     renderHeader();
     updateFloatBtns();
     window.addEventListener('hashchange', handleHashChange);
@@ -1718,36 +1733,7 @@ var App = (function () {
     if (window.AUTH && window.DB) {
       window.AUTH.onAuthStateChanged(function (user) {
         applyFirebaseAuthUser(user).then(function () {
-          if (!_firebaseRouteInit) {
-            _firebaseRouteInit = true;
-            restoreRoute();
-          } else {
-            renderHeader();
-            updateFloatBtns();
-            var el = document.getElementById('view-content');
-            if (el) {
-              switch (state.currentView) {
-                case 'landing':  LandingView.render(el); break;
-                case 'login':    LoginView.render(el); break;
-                case 'catalog': {
-                  var _cpR = {};
-                  try {
-                    var _sr = sessionStorage.getItem('yashir_cat_section');
-                    if (_sr === 'full' || _sr === 'personal') _cpR.section = _sr;
-                  } catch (_er) {}
-                  CatalogView.render(el, _cpR);
-                  break;
-                }
-                case 'success':  SuccessView.render(el, {}); break;
-                case 'admin': {
-                  if (Auth.isAdmin()) AdminView.render(el, {});
-                  else navigate('landing');
-                  break;
-                }
-                default: LandingView.render(el);
-              }
-            }
-          }
+          restoreRoute();
 
           ensureProductsFirestoreWired();
           DBSync.loadSettings(function () {
@@ -1766,10 +1752,7 @@ var App = (function () {
           }
         }).catch(function (err) {
           console.warn('auth state:', err);
-          if (!_firebaseRouteInit) {
-            _firebaseRouteInit = true;
-            restoreRoute();
-          }
+          restoreRoute();
           ensureProductsFirestoreWired();
           DBSync.loadSettings(function () { renderHeader(); });
         });
