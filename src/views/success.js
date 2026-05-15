@@ -177,6 +177,29 @@ var SuccessView = {
       var titleCopy = titleBase + (isEn ? ' — Copy' : ' — עותק');
       var cssHref = printStylesheetHref();
 
+      var pdfScript =
+        '(function(){' +
+        'var oid=' + JSON.stringify(String(order.id)) + ';' +
+        'setTimeout(function(){try{window.print();}catch(eP){}},400);' +
+        'function wirePdf(){' +
+        'var b=document.getElementById("dn-download-pdf");' +
+        'if(!b)return;' +
+        'b.onclick=function(){' +
+        'var el=document.querySelector(".dn-print-root");' +
+        'if(!el||!window.html2pdf)return;' +
+        'html2pdf().set({' +
+        'margin:10,' +
+        'filename:"delivery-"+String(oid)+".pdf",' +
+        'image:{type:"jpeg",quality:0.98},' +
+        'html2canvas:{scale:2,useCORS:true},' +
+        'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}' +
+        '}).from(el).save();' +
+        '};' +
+        '}' +
+        'if(window.html2pdf)wirePdf();' +
+        'else window.addEventListener("load",wirePdf);' +
+        '})();';
+
       var win = window.open('', '_blank', 'width=900,height=800');
       if (!win) { App.toast(t('success.popupBlocked'), 'error'); return; }
 
@@ -186,11 +209,13 @@ var SuccessView = {
         '<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet">' +
         '<link rel="stylesheet" href="' + App.escHTML(cssHref) + '">' +
         '</head><body class="dn-print-body">' +
+        '<div class="dn-toolbar"><button type="button" id="dn-download-pdf">הורד PDF</button></div>' +
         '<div class="dn-print-root" style="' + wmInlineStyle(heroLogo).replace(/"/g, '&quot;') + '">' +
-        '<div class="dn-page dn-page--break-after">' + sheetHtml(titleBase) + '</div>' +
-        '<div class="dn-page dn-page--copy">' + sheetHtml(titleCopy) + '</div>' +
+        '<div class="dn-page dn-original">' + sheetHtml(titleBase) + '</div>' +
+        '<div class="dn-page dn-copy">' + sheetHtml(titleCopy) + '</div>' +
         '</div>' +
-        '<script>setTimeout(function(){window.print();},400);<\/script>' +
+        '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>' +
+        '<script>' + pdfScript + '<\/script>' +
         '</body></html>'
       );
       win.document.close();

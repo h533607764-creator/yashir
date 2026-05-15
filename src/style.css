@@ -1104,6 +1104,9 @@ body.dn-print-body * {
 body.dn-print-body .dn-print-root {
   position: relative;
   min-height: 0;
+  width: 210mm;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
 body.dn-print-body .dn-print-root::before {
@@ -1119,16 +1122,45 @@ body.dn-print-body .dn-print-root::before {
   opacity: 0.13;
 }
 
+body.dn-print-body .dn-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: #eef2f7;
+  padding: 10px 14px;
+  border-bottom: 1px solid #c8d0dc;
+  text-align: center;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body.dn-print-body #dn-download-pdf {
+  font-family: 'Assistant', Arial, sans-serif;
+  padding: 11px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  background: #3498db;
+  color: #fff;
+}
+
+body.dn-print-body #dn-download-pdf:hover {
+  background: #2980b9;
+}
+
 body.dn-print-body .dn-page {
   position: relative;
   z-index: 1;
-  page-break-after: auto;
-  break-after: auto;
+  width: 100%;
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 
-body.dn-print-body .dn-page--break-after {
-  page-break-after: always;
-  break-after: page;
+body.dn-print-body .dn-copy {
+  page-break-before: always;
+  break-before: page;
 }
 
 body.dn-print-body .dn-sheet {
@@ -1396,4 +1428,14 @@ body.dn-print-body .dn-ph {
   color: #c25200;
   font-weight: 600;
   font-style: italic;
+}
+
+@media print {
+  body.dn-print-body button {
+    display: none !important;
+  }
+
+  body.dn-print-body .dn-toolbar {
+    display: none !important;
+  }
 }
