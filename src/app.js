@@ -898,6 +898,54 @@ var App = (function () {
   };
 
   /* ===== ROUTING ===== */
+  var ROUTE_ALIASES = { home: 'landing', landing: 'landing', login: 'login', catalog: 'catalog', cart: 'cart', success: 'success', admin: 'admin' };
+  var _syncingHashRoute = false;
+  var _pendingRouteHash = '';
+
+  function normalizeRouteName(route) {
+    route = route != null ? String(route).trim().replace(/^#\/?/, '').split('?')[0].replace(/^\//, '') : '';
+    return ROUTE_ALIASES[route] || '';
+  }
+
+  function routeToHash(view, params) {
+    var route = view === 'landing' ? 'home' : view;
+    var query = '';
+    if (route === 'catalog' && params && params.section) {
+      query = '?section=' + encodeURIComponent(params.section);
+    }
+    return '#/' + route + query;
+  }
+
+  function parseHashRoute() {
+    var raw = window.location.hash || '';
+    if (!raw || raw === '#') return null;
+    var body = raw.replace(/^#\/?/, '');
+    var parts = body.split('?');
+    var view = normalizeRouteName(parts[0]);
+    if (!view) return null;
+    var params = {};
+    if (parts[1]) {
+      var q = new URLSearchParams(parts[1]);
+      if (q.get('section')) params.section = q.get('section');
+    }
+    return { view: view, params: params, raw: raw };
+  }
+
+  function setRouteHash(view, params, replace) {
+    var nextHash = routeToHash(view, params);
+    if (window.location.hash === nextHash) return;
+    _syncingHashRoute = true;
+    _pendingRouteHash = nextHash;
+    if (replace && window.history && window.history.replaceState) {
+      window.history.replaceState(null, '', nextHash);
+      _syncingHashRoute = false;
+      _pendingRouteHash = '';
+      return;
+    }
+    window.location.hash = nextHash;
+    setTimeout(function () { _syncingHashRoute = false; }, 50);
+  }
+
   function persistRoute(view, params) {
     try {
       sessionStorage.setItem('yashir_last_view', view);
@@ -929,10 +977,26 @@ var App = (function () {
   }
 
   function restoreRoute() {
+    console.log('[ROUTER INIT]', window.location.hash || '(no hash)');
     var view = 'landing';
-    try { view = sessionStorage.getItem('yashir_last_view') || 'landing'; } catch (e1) {}
+    var hashRoute = parseHashRoute();
+    if (hashRoute) {
+      view = hashRoute.view;
+      console.log('[ROUTE RESTORE]', hashRoute.raw);
+    } else {
+      try { view = sessionStorage.getItem('yashir_last_view') || 'landing'; } catch (e1) {}
+      console.log('[ROUTE RESTORE]', '(fallback)', view);
+    }
     var params = {};
-    try { params = JSON.parse(sessionStorage.getItem('yashir_last_params') || '{}'); } catch (e2) {}
+    if (hashRoute) {
+      params = hashRoute.params || {};
+    } else {
+      try { params = JSON.parse(sessionStorage.getItem('yashir_last_params') || '{}'); } catch (e2) {}
+    }
+    if (view === 'cart') {
+      view = 'catalog';
+      params.openCart = true;
+    }
     if (view === 'admin' && !Auth.isAdmin()) view = 'landing';
     if ((view === 'catalog' || view === 'success' || view === 'admin') && Auth.isGuest()) view = 'landing';
     if (view === 'success') {
@@ -948,15 +1012,23 @@ var App = (function () {
         params = {};
       }
     }
-    navigate(view, params);
+    navigate(view, params, { replaceHash: !hashRoute });
   }
 
-  function navigate(view, params) {
+  function navigate(view, params, opts) {
+    opts = opts || {};
+    view = normalizeRouteName(view) || 'landing';
+    if (view === 'cart') {
+      view = 'catalog';
+      params = Object.assign({}, params || {}, { openCart: true });
+    }
+    console.log('[NAVIGATE]', view, params || {});
     if (state.currentView === 'admin' && view !== 'admin' && window.AdminView && AdminView._ordersUnsub) {
       AdminView._ordersUnsub(); AdminView._ordersUnsub = null;
     }
     state.currentView = view;
     params = params || {};
+    if (!opts.fromHash) setRouteHash(view, params, !!opts.replaceHash);
     window.scrollTo(0, 0);
     renderHeader();
     updateFloatBtns();
@@ -975,6 +1047,7 @@ var App = (function () {
         }
         CatalogView.render(el, catParams);
         persistRoute('catalog', catParams);
+        if (params.openCart && Auth.isCustomer()) setTimeout(openCart, 0);
         return;
       }
       case 'success':  SuccessView.render(el, params); break;
@@ -988,6 +1061,23 @@ var App = (function () {
       default:         LandingView.render(el);
     }
     persistRoute(view, params);
+  }
+
+  function handleHashChange() {
+    if (_syncingHashRoute && window.location.hash === _pendingRouteHash) {
+      _syncingHashRoute = false;
+      _pendingRouteHash = '';
+      return;
+    }
+    _syncingHashRoute = false;
+    _pendingRouteHash = '';
+    var route = parseHashRoute();
+    if (!route) {
+      navigate('landing', {}, { fromHash: true, replaceHash: true });
+      return;
+    }
+    console.log('[ROUTE RESTORE]', route.raw);
+    navigate(route.view, route.params, { fromHash: true });
   }
 
   /* ===== HEADER ===== */
@@ -1619,6 +1709,7 @@ var App = (function () {
     loadData();
     renderHeader();
     updateFloatBtns();
+    window.addEventListener('hashchange', handleHashChange);
     document.getElementById('overlay-backdrop').addEventListener('click', function () {
       if (!document.getElementById('modal-wrap').classList.contains('hidden')) { closeModal(); return; }
       if (state.cartOpen) closeCart();
