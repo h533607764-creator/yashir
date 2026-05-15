@@ -17,7 +17,7 @@ var LoginView = {
               '<button type="button" class="btn-login-eye" onclick="LoginView.togglePasswordVisibility()" aria-label="הצג סיסמה">👁️</button>' +
               '</div></div>' +
             '<label class="checkbox-label"><input type="checkbox" id="lv-rem"> ' + t('login.remember') + '</label>' +
-            '<button class="btn-primary full-width" onclick="LoginView.doLogin()">' +
+            '<button type="button" id="lv-login-btn" class="btn-primary full-width">' +
               '<span class="material-icons-round">login</span> ' + t('login.loginBtn') +
             '</button>' +
             '<p class="login-guest-note">' + t('login.guest') + ' <a onclick="App.navigate(\'catalog\')" style="cursor:pointer;color:var(--orange)">' + t('login.toCatalog') + '</a></p>' +
@@ -28,11 +28,29 @@ var LoginView = {
     setTimeout(function () {
       var hp = document.getElementById('lv-hp');
       var pass = document.getElementById('lv-pass');
+      var btn = document.getElementById('lv-login-btn');
       if (hp) {
-        hp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { var passField = document.getElementById('lv-pass'); if (passField) passField.focus(); } });
+        hp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            var passField = document.getElementById('lv-pass');
+            if (passField) passField.focus();
+          }
+        });
       }
       if (pass) {
-        pass.addEventListener('keydown', function (e) { if (e.key === 'Enter') LoginView.doLogin(); });
+        pass.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            LoginView.doLogin(e);
+          }
+        });
+      }
+      if (btn) {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          LoginView.doLogin(e);
+        });
       }
     }, 50);
   },
@@ -43,12 +61,23 @@ var LoginView = {
     el.type = el.type === 'password' ? 'text' : 'password';
   },
 
-  doLogin: function () {
+  doLogin: function (e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (window.__LOGIN_LOCK__) {
+      console.log('[LOGIN BLOCKED DUPLICATE]');
+      return;
+    }
+    window.__LOGIN_LOCK__ = true;
+    console.log('[LOGIN START]');
     var hpEl = document.getElementById('lv-hp');
     var passEl = document.getElementById('lv-pass');
     if (hpEl) hpEl.classList.remove('input-error');
     if (passEl) passEl.classList.remove('input-error');
-    if (!hpEl || !passEl) return;
+    if (!hpEl || !passEl) {
+      window.__LOGIN_LOCK__ = false;
+      console.log('[LOGIN END]');
+      return;
+    }
     var hp   = hpEl.value != null ? String(hpEl.value).trim() : '';
     var pass = passEl.value != null ? String(passEl.value).trim() : '';
     var errMsg = t('login.invalidCredentials');
@@ -56,6 +85,8 @@ var LoginView = {
       App.toast(errMsg, 'error');
       if (hpEl) hpEl.classList.add('input-error');
       if (passEl) passEl.classList.add('input-error');
+      window.__LOGIN_LOCK__ = false;
+      console.log('[LOGIN END]');
       return;
     }
     var rem  = (document.getElementById('lv-rem') || {}).checked;
@@ -75,6 +106,8 @@ var LoginView = {
             '</div>' +
           '</div>'
         );
+        window.__LOGIN_LOCK__ = false;
+        console.log('[LOGIN END]');
       })
       .catch(function (e) {
         console.error('customer login failed:', e);
@@ -83,6 +116,8 @@ var LoginView = {
         var p = document.getElementById('lv-pass');
         if (h) h.classList.add('input-error');
         if (p) p.classList.add('input-error');
+        window.__LOGIN_LOCK__ = false;
+        console.log('[LOGIN END]');
       });
   },
 

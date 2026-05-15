@@ -126,9 +126,11 @@ var App = (function () {
     }
     var c = Store.get('customers');
     if (c) {
+      window.__CUSTOMERS_SOURCE__ = 'localStorage yashir_customers';
       window.CUSTOMERS_DB = normalizeCustomers(c);
       Store.set('customers', window.CUSTOMERS_DB);
     } else {
+      window.__CUSTOMERS_SOURCE__ = 'src/data/customers.js';
       window.CUSTOMERS_DB = normalizeCustomers(window.CUSTOMERS_DB || []);
     }
     var p = Store.get('products');
@@ -165,6 +167,11 @@ var App = (function () {
       console.log('[LOGIN CLEAN] found:', customer);
       console.log('[LOGIN CUSTOMER FULL]', customer);
       console.log('[LOGIN CLEAN] stored password:', customer ? customer.password : undefined);
+      console.log('[PASSWORD SOURCE]', {
+        source: window.__CUSTOMERS_SOURCE__ || 'unknown',
+        hp: hpTrim,
+        storedPassword: customer ? customer.password : undefined
+      });
       console.log('[LOGIN PASSWORD CHECK]', {
         hp: hpTrim,
         hasCustomer: !!customer,
@@ -1595,6 +1602,7 @@ var App = (function () {
           }
           var cu = normalizeCustomer(snap.data(), claims.customerId);
           state.currentUser = { role: 'customer', customer: cu };
+          window.__CUSTOMERS_SOURCE__ = 'Firestore auth customer doc';
           window.CUSTOMERS_DB = [cu];
           state.cart = [];
           state.pricingPlan = null;

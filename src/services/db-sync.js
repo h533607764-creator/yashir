@@ -68,6 +68,7 @@ var DBSync = (function () {
       return db().collection(COLLECTIONS.CUSTOMERS).onSnapshot(function (snap) {
         var list = [];
         snap.forEach(function (d) { list.push(normalizeCustomer(d.data(), d.id)); });
+        window.__CUSTOMERS_SOURCE__ = 'Firestore customers listener';
         window.CUSTOMERS_DB = list;
         try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
         onUpdate && onUpdate();
@@ -80,6 +81,7 @@ var DBSync = (function () {
       return db().collection(COLLECTIONS.CUSTOMERS).doc(cid).onSnapshot(function (doc) {
         if (doc.exists) {
           var c = normalizeCustomer(doc.data(), doc.id);
+          window.__CUSTOMERS_SOURCE__ = 'Firestore customer listener';
           window.CUSTOMERS_DB = [c];
           if (App.state.currentUser && App.state.currentUser.customer) {
             App.state.currentUser.customer = c;
@@ -104,6 +106,7 @@ var DBSync = (function () {
       .then(function (snap) {
         var list = [];
         snap.forEach(function (d) { list.push(normalizeCustomer(d.data(), d.id)); });
+        window.__CUSTOMERS_SOURCE__ = 'Firestore customers loadCustomers';
         window.CUSTOMERS_DB = list;
         try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
         onDone && onDone(true);
@@ -124,6 +127,7 @@ var DBSync = (function () {
       .then(function (snap) {
         var list = [];
         snap.forEach(function (d) { list.push(normalizeCustomer(d.data(), d.id)); });
+        window.__CUSTOMERS_SOURCE__ = 'Firestore customers loadCustomersPromise';
         window.CUSTOMERS_DB = list;
         try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
         return true;
