@@ -62,6 +62,10 @@ var App = (function () {
     return err;
   }
 
+  function useFirebaseFunctions() {
+    return typeof USE_FIREBASE_FUNCTIONS !== 'undefined' && USE_FIREBASE_FUNCTIONS === true;
+  }
+
   function normalizeCustomer(customer, fallbackHp) {
     if (!customer) return null;
     var out = Object.assign({}, customer);
@@ -158,6 +162,7 @@ var App = (function () {
       if (!customer || !customer.password) return false;
       if (String(customer.password).trim() !== passTrim) return false;
 
+      console.log('[LOCAL LOGIN SUCCESS]', customer.hp);
       state.currentUser = { role: 'customer', customer: customer };
       state.cart = [];
       state.pricingPlan = null;
@@ -176,6 +181,14 @@ var App = (function () {
       var passTrim = password != null ? String(password).trim() : '';
       if (!hpTrim || !passTrim) {
         return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
+      }
+      if (!useFirebaseFunctions()) {
+        console.log('[LOCAL MODE] Functions disabled');
+        if (!Auth.login(hpTrim, remember, passTrim)) {
+          console.error('customer local login failed: invalid business ID or password');
+          return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
+        }
+        return Promise.resolve();
       }
       if (!window.DB) {
         if (!Auth.login(hpTrim, remember, passTrim)) {
@@ -224,6 +237,7 @@ var App = (function () {
     },
     loginAdmin: function (pin) {
       if (pin !== (state.settings.adminPin || ADMIN_CREDENTIALS.pin)) return false;
+      console.log('[LOCAL ADMIN SUCCESS]');
       state.currentUser = { role: 'admin' };
       state.cart = [];
       state.pricingPlan = null;
@@ -232,6 +246,12 @@ var App = (function () {
       return true;
     },
     loginAdminFirebase: function (pin) {
+      if (!useFirebaseFunctions()) {
+        console.log('[LOCAL MODE] Functions disabled');
+        if (Auth.loginAdmin(pin)) return Promise.resolve();
+        console.error('admin local login failed: invalid PIN');
+        return authReject('AUTH_FAIL_LOCAL', 'LOCAL_ADMIN_AUTH_FAILED');
+      }
       if (!window.DB) {
         if (Auth.loginAdmin(pin)) return Promise.resolve();
         console.error('admin local login failed: invalid PIN');
@@ -765,6 +785,12 @@ var App = (function () {
 
       if (!window.DB) {
         persistLocalOrderFallback(makeOrderPayload(reserveLocalOrderId()));
+        return;
+      }
+
+      if (!useFirebaseFunctions()) {
+        console.log('[LOCAL MODE] Functions disabled');
+        directFirestoreOrderFallback(fallbackModeError('FUNCTIONS_DISABLED', 'FUNCTIONS_DISABLED'));
         return;
       }
 

@@ -1,15 +1,22 @@
 /* =============================================================
    Cloud Functions — אימות והזמנות בצד שרת (Callable)
    ============================================================= */
+const USE_FIREBASE_FUNCTIONS = false;
+
 var YashirBackend = (function () {
   'use strict';
 
   function httpsCallable(name) {
+    if (!USE_FIREBASE_FUNCTIONS) return null;
     if (!window.FUNCTIONS) return null;
     return window.FUNCTIONS.httpsCallable(name);
   }
 
   function call(name, data) {
+    if (!USE_FIREBASE_FUNCTIONS) {
+      console.log('[LOCAL MODE] Functions disabled');
+      return Promise.reject(new Error('FUNCTIONS_DISABLED'));
+    }
     var fn = httpsCallable(name);
     if (!fn) return Promise.reject(new Error('FUNCTIONS_UNAVAILABLE'));
     return fn(data || {});
