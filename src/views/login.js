@@ -49,8 +49,12 @@ var LoginView = {
     if (hpEl) hpEl.classList.remove('input-error');
     if (passEl) passEl.classList.remove('input-error');
     if (!hpEl || !passEl) return;
+    console.log('[LOGIN TRACE] LoginView.doLogin RAW hp from UI:', hpEl.value);
+    console.log('[LOGIN TRACE] LoginView.doLogin RAW password from UI:', passEl.value);
     var hp   = hpEl.value != null ? String(hpEl.value).trim() : '';
     var pass = passEl.value != null ? String(passEl.value).trim() : '';
+    console.log('[LOGIN TRACE] LoginView.doLogin trimmed hp:', hp);
+    console.log('[LOGIN TRACE] LoginView.doLogin trimmed password length:', pass.length);
     var errMsg = t('login.invalidCredentials');
     if (!hp || !pass) {
       App.toast(errMsg, 'error');

@@ -73,7 +73,9 @@ var App = (function () {
     var storedPassword = String(customer.password).trim();
     if (storedPassword === '') return false;
     if (!inputPassword) return false;
-    return inputPassword === storedPassword;
+    var cmp = inputPassword === storedPassword;
+    console.log('[LOGIN TRACE] loginPasswordMatchesCustomer comparison result:', cmp);
+    return cmp;
   }
 
   /** Single epsilon (₪) for pricing drift: cart repricing UI vs submit validation vs Firestore checks. */
@@ -145,8 +147,11 @@ var App = (function () {
   var Auth = {
     login: function (hp, remember, password) {
       var hpTrim = hp != null ? String(hp).trim() : '';
-      var customer = CUSTOMERS_DB.find(function (x) { return String(x.id) === hpTrim; });
       var inputPassword = password != null ? String(password).trim() : '';
+      console.log('[LOGIN TRACE] Auth.login path: LOCAL_CUSTOMERS_DB, hpTrim:', hpTrim, 'CUSTOMERS_DB.length:', (window.CUSTOMERS_DB || []).length);
+      var customer = CUSTOMERS_DB.find(function (x) { return String(x.id) === hpTrim; });
+      console.log('[LOGIN TRACE] Auth.login lookup customer (full):', customer);
+      console.log('[LOGIN TRACE] Auth.login lookup customer.id:', customer ? customer.id : '(none)');
       if (!loginPasswordMatchesCustomer(customer, inputPassword)) return false;
 
       state.currentUser = { role: 'customer', customer: customer };
@@ -168,7 +173,9 @@ var App = (function () {
       if (!hpTrim || !passTrim) {
         return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
       }
+      console.log('[LOGIN TRACE] Auth.loginCustomerFirebase start hpTrim:', hpTrim, 'has DB:', !!window.DB, 'has AUTH:', !!window.AUTH, 'has YashirBackend:', !!window.YashirBackend);
       if (!window.DB) {
+        console.log('[LOGIN TRACE] datasource: LOCAL_ONLY_no_Firestore');
         if (!Auth.login(hpTrim, remember, passTrim)) {
           console.error('customer local login failed: invalid business ID or password');
           return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
@@ -176,6 +183,7 @@ var App = (function () {
         return Promise.resolve();
       }
       function localFallback(cause) {
+        console.log('[LOGIN TRACE] localFallback invoked, datasource: LOCAL_FALLBACK_AFTER_ERROR cause:', cause);
         if (Auth.login(hpTrim, remember, passTrim)) {
           console.log('FALLBACK_CUSTOMER_USED');
           return Promise.resolve({ fallback: 'local-customer-auth' });
@@ -197,8 +205,11 @@ var App = (function () {
           }
         })
         .then(function (res) {
+          console.log('[LOGIN TRACE] Callable authenticateCustomer full res.data:', res && res.data);
           var cust = res && res.data && res.data.customer;
           var token = res && res.data && res.data.token;
+          console.log('[LOGIN TRACE] datasource after callable: FIRESTORE_returned_customer object:', cust);
+          console.log('[LOGIN TRACE] FIRESTORE_returned_customer.id:', cust && cust.id, 'customer.password:', cust && cust.password);
           if (!token) return Promise.reject(new Error('NO_CUSTOMER_TOKEN'));
           if (!loginPasswordMatchesCustomer(cust, passTrim)) {
             var pe = new Error('CLIENT_AUTH_PASSWORD');
