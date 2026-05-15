@@ -62,6 +62,20 @@ var App = (function () {
     return err;
   }
 
+  /** Customer login: compare trimmed string passwords only; logs for debugging. */
+  function loginPasswordMatchesCustomer(customer, inputPasswordRaw) {
+    var inputPassword = inputPasswordRaw != null ? String(inputPasswordRaw).trim() : '';
+    console.log('LOGIN DEBUG customer:', customer);
+    console.log('LOGIN DEBUG inputPassword:', inputPassword);
+    console.log('LOGIN DEBUG storedPassword:', customer ? customer.password : undefined);
+    if (!customer) return false;
+    if (customer.password === undefined || customer.password === null) return false;
+    var storedPassword = String(customer.password).trim();
+    if (storedPassword === '') return false;
+    if (!inputPassword) return false;
+    return inputPassword === storedPassword;
+  }
+
   /** Single epsilon (₪) for pricing drift: cart repricing UI vs submit validation vs Firestore checks. */
   var PRICE_DRIFT_EPSILON = 0.02;
 
@@ -131,21 +145,18 @@ var App = (function () {
   var Auth = {
     login: function (hp, remember, password) {
       var hpTrim = hp != null ? String(hp).trim() : '';
-      var passTrim = password != null ? String(password).trim() : '';
-      if (!hpTrim || !passTrim) return false;
-      var c = CUSTOMERS_DB.find(function (x) { return String(x.id) === hpTrim; });
-      if (!c) return false;
-      var stored = c.password != null ? String(c.password).trim() : '';
-      if (stored === '' || passTrim !== stored) return false;
+      var customer = CUSTOMERS_DB.find(function (x) { return String(x.id) === hpTrim; });
+      var inputPassword = password != null ? String(password).trim() : '';
+      if (!loginPasswordMatchesCustomer(customer, inputPassword)) return false;
 
-      state.currentUser = { role: 'customer', customer: c };
+      state.currentUser = { role: 'customer', customer: customer };
       state.cart = [];
       state.pricingPlan = null;
       _pricingRefreshQueuedWhileModal = false;
       Cart._restore();
       try { sessionStorage.setItem('yashir_sess_hp', hpTrim); } catch (e) {}
       if (remember) {
-        Store.set('remember', { hp: hpTrim, password: passTrim, exp: Date.now() + 30 * 864e5 });
+        Store.set('remember', { hp: hpTrim, password: inputPassword, exp: Date.now() + 30 * 864e5 });
       } else {
         Store.del('remember');
       }
@@ -189,6 +200,11 @@ var App = (function () {
           var cust = res && res.data && res.data.customer;
           var token = res && res.data && res.data.token;
           if (!token) return Promise.reject(new Error('NO_CUSTOMER_TOKEN'));
+          if (!loginPasswordMatchesCustomer(cust, passTrim)) {
+            var pe = new Error('CLIENT_AUTH_PASSWORD');
+            pe.code = 'CLIENT_AUTH_PASSWORD';
+            return Promise.reject(pe);
+          }
           return window.AUTH.signInWithCustomToken(token).then(function () {
             if (cust) {
               state.currentUser = { role: 'customer', customer: cust };
@@ -204,6 +220,11 @@ var App = (function () {
           });
         })
         .catch(function (e) {
+          var code = e && e.code != null ? String(e.code) : '';
+          var msg = e && e.message != null ? String(e.message) : '';
+          if (code === 'CLIENT_AUTH_PASSWORD' || msg === 'CLIENT_AUTH_PASSWORD') {
+            return Promise.reject(e);
+          }
           console.error('customer Firebase login failed:', e);
           return localFallback(e);
         });

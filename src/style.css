@@ -363,6 +363,22 @@ html[dir="ltr"] .form-group label { text-align: left; }
 .login-logo h2 { font-size: 22px; font-weight: 800; }
 .login-logo p { font-size: 14px; color: var(--text-muted); }
 .login-guest-note { font-size: 13px; color: var(--text-muted); text-align: center; }
+.login-pass-row { display: flex; align-items: stretch; gap: 8px; }
+.login-pass-row #lv-pass { flex: 1; min-width: 0; }
+.btn-login-eye {
+  flex-shrink: 0;
+  min-width: 48px;
+  padding: 0 12px;
+  font-size: 20px;
+  line-height: 1;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--input-bg);
+  color: var(--text);
+  cursor: pointer;
+  align-self: stretch;
+}
+.btn-login-eye:active { opacity: 0.85; }
 .admin-login-toggle { text-align: center; padding-top: 8px; border-top: 1px solid var(--border); }
 #login-admin-form { padding-top: 4px; display: flex; flex-direction: column; gap: 16px; }
 #login-customer-form { display: flex; flex-direction: column; gap: 16px; }

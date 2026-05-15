@@ -447,7 +447,7 @@ var AdminView = {
         (isNew ? '' : '<p style="font-size:12px;color:var(--orange);margin-top:-8px">' + t('admin.hpChangeWarning') + '</p>') +
         AdminView._fld(t('admin.businessName'), 'ef-name', cu.name, 'text') +
         AdminView._fldTransliterate(t('admin.customerNameEn'), 'ef-name-en', cu.name_en || '', 'ef-name') +
-        AdminView._fld(t('admin.passwordField'), 'ef-password', cu.password || '', 'password') +
+        AdminView._fld(t('admin.passwordField'), 'ef-password', cu.password || '', 'text') +
         '<p style="font-size:12px;color:var(--text-muted);margin-top:-8px">' + t('admin.passwordHint') + '</p>' +
         AdminView._fld(t('common.phone'), 'ef-phone', cu.phone, 'tel') +
         AdminView._fld(t('common.email'), 'ef-email', cu.email, 'email') +
