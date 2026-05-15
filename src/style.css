@@ -1075,14 +1075,14 @@ html[dir="ltr"] .form-group label { text-align: left; }
 .price-unit { display: none; }
 
 /* =============================================================
-   תעודת משלוח — הדפסה בלבד (SuccessView.printNote)
-   נטען בחלון popup: body.dn-print-body + link href="…/src/style.css"
-   רקע סימני מים: --dn-wm-image מוגדר inline על .dn-print-root ונצבע ב-.dn-wm-layer בתוך כל גיליון
+   תעודת משלוח — ERP print/PDF (SuccessView.printNote)
+   מבנה: body.dn-print-body > .root > .page × 2
+   watermark: .page::before + var(--logo) על .root
    ============================================================= */
 
 @page {
   size: A4;
-  margin: 10mm;
+  margin: 12mm;
 }
 
 body.dn-print-body {
@@ -1090,7 +1090,7 @@ body.dn-print-body {
   margin: 0;
   padding: 0;
   color: #111;
-  background: #fff;
+  background: #e8ecf1;
   direction: rtl;
   text-align: right;
   -webkit-print-color-adjust: exact;
@@ -1101,14 +1101,9 @@ body.dn-print-body * {
   box-sizing: border-box;
 }
 
-body.dn-print-body .dn-print-root {
-  position: relative;
-  min-height: 0;
+body.dn-print-body .root {
   width: 210mm;
-  max-width: 100%;
   margin: 0 auto;
-  word-spacing: 2px;
-  letter-spacing: 0.2px;
 }
 
 body.dn-print-body .dn-toolbar {
@@ -1139,340 +1134,307 @@ body.dn-print-body #dn-download-pdf:hover {
   background: #2980b9;
 }
 
-body.dn-print-body .dn-page {
+body.dn-print-body .page {
   position: relative;
-  z-index: 1;
-  width: 100%;
-  min-height: calc(297mm - 20mm);
+  width: 210mm;
+  height: 297mm;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 8mm 10mm;
+  background: #fff;
+  page-break-after: always;
+  break-after: page;
 }
 
-body.dn-print-body .dn-page.dn-copy {
-  position: relative;
-  page-break-before: always;
-  break-before: page;
-  filter: grayscale(0.2);
-  opacity: 0.98;
+body.dn-print-body .page:last-child {
+  page-break-after: auto;
+  break-after: auto;
 }
 
-body.dn-print-body .dn-page.dn-copy::before {
-  content: "COPY";
-  position: absolute;
-  top: 10mm;
-  right: 10mm;
-  left: auto;
-  font-family: 'Assistant', Arial, sans-serif;
-  font-size: 40px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  color: #000;
-  opacity: 0.08;
-  pointer-events: none;
-  z-index: 4;
-  line-height: 1;
-}
-
-body.dn-print-body .dn-sheet {
-  position: relative;
-  z-index: 1;
-  padding: 6px 4px 18px;
-  max-width: 100%;
-  overflow: visible;
-  min-height: 100%;
-}
-
-body.dn-print-body .dn-wm-layer {
+body.dn-print-body .page::before {
+  content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: var(--dn-wm-image, none);
+  background-image: var(--logo, none);
   background-repeat: no-repeat;
-  background-position: center;
-  background-size: cover;
-  opacity: 0.1;
+  background-position: center center;
+  background-size: 65%;
+  opacity: 0.07;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
-body.dn-print-body .dn-sheet-front {
+body.dn-print-body .page.page--copy::before {
+  opacity: 0.077;
+}
+
+body.dn-print-body .page-body {
   position: relative;
   z-index: 1;
-}
-
-body.dn-print-body .dn-bsd {
-  position: absolute;
-  top: 0;
-  right: 0;
-  font-size: 11px;
-  color: #222;
-  font-family: Arial, "Noto Sans Hebrew", sans-serif;
-  font-weight: 700;
-  z-index: 2;
-}
-
-body.dn-print-body .dn-header {
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 18px 0 14px;
-  padding-top: 12px;
-  word-spacing: 2px;
-  letter-spacing: 0.2px;
 }
 
-body.dn-print-body .dn-header-row {
-  width: 100%;
+body.dn-print-body .erp-bsd {
+  position: absolute;
+  top: 2mm;
+  right: 3mm;
+  font-size: 10px;
+  font-weight: 700;
+  color: #222;
+  z-index: 2;
 }
 
-body.dn-print-body .dn-header-row-top {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-body.dn-print-body .dn-header-logo-cell {
+body.dn-print-body .erp-head {
+  display: grid;
+  grid-template-columns: 1fr 1.28fr 1fr;
+  gap: 10px;
+  align-items: start;
   flex-shrink: 0;
 }
 
-body.dn-print-body .dn-header-title-cell {
-  flex: 1;
-  text-align: center;
-}
-
-body.dn-print-body .dn-header-row-order {
-  text-align: center;
-}
-
-body.dn-print-body .dn-header-row-biz {
+body.dn-print-body .erp-head-logo {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+  align-items: flex-start;
 }
 
-body.dn-print-body .dn-header-biz-card {
-  width: 100%;
-  max-width: 340px;
-}
-
-body.dn-print-body .dn-header-logo-img {
-  max-width: 120px;
-  max-height: 56px;
+body.dn-print-body .erp-logo-lg {
+  display: block;
+  max-width: 100%;
   width: auto;
   height: auto;
+  max-height: 82px;
   object-fit: contain;
-  display: block;
 }
 
-body.dn-print-body .dn-biz-line {
-  font-size: 12px;
-  line-height: 1.5;
+body.dn-print-body .erp-head-center {
+  text-align: center;
+}
+
+body.dn-print-body .erp-doc-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111;
+  line-height: 1.3;
+  margin: 0 0 4px;
+}
+
+body.dn-print-body .erp-doc-ord {
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: #111;
+}
+
+body.dn-print-body .erp-card {
+  border: 1px solid #bfbfbf;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+body.dn-print-body .erp-head-biz {
+  align-self: stretch;
+}
+
+body.dn-print-body .erp-biz-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: #c25200;
+  margin-bottom: 4px;
+}
+
+body.dn-print-body .erp-biz-row {
+  font-size: 11px;
+  line-height: 1.45;
   color: #222;
   margin: 0 0 2px;
 }
 
-body.dn-print-body .dn-biz-line.dn-biz-company {
-  font-size: 16px;
+body.dn-print-body .erp-biz-k {
   font-weight: 700;
+}
+
+body.dn-print-body .erp-date {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(0, 0, 0, 0.14);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #333;
+}
+
+body.dn-print-body .erp-cust {
+  flex-shrink: 0;
+}
+
+body.dn-print-body .erp-card-head {
+  font-size: 13px;
+  font-weight: 800;
   color: #c25200;
   margin-bottom: 6px;
 }
 
-body.dn-print-body .dn-biz-line .dn-ph {
-  color: #c25200;
-  font-weight: 600;
-  font-style: italic;
-}
-
-body.dn-print-body .dn-doc-title-line1 {
-  font-size: 17px;
-  font-weight: 800;
-  text-align: center;
-  margin: 0;
-  color: #111;
-  line-height: 1.35;
-}
-
-body.dn-print-body .dn-doc-order-num {
-  font-size: 18px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
-  color: #111;
-  text-align: center;
-  margin: 2px 0 4px;
-  line-height: 1.3;
-}
-
-body.dn-print-body .dn-biz-date-row {
+body.dn-print-body .erp-card-sub {
   margin-top: 8px;
   padding-top: 6px;
   border-top: 1px solid rgba(0, 0, 0, 0.12);
-}
-
-body.dn-print-body .dn-date-val {
-  font-variant-numeric: tabular-nums;
-}
-
-body.dn-print-body .dn-grid2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin: 10px 0 12px;
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-
-@media (max-width: 520px) {
-  body.dn-print-body .dn-grid2 {
-    grid-template-columns: 1fr;
-  }
-}
-
-body.dn-print-body .dn-blk {
-  border: 1px solid #c8c8c8;
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.94);
-}
-
-body.dn-print-body .dn-blk h3 {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 800;
-  color: #c25200;
-}
-
-body.dn-print-body .dn-row {
   font-size: 12px;
-  line-height: 1.45;
-  margin: 4px 0;
+  font-weight: 800;
+  color: #444;
+}
+
+body.dn-print-body .erp-line {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   justify-content: space-between;
   flex-wrap: wrap;
+  font-size: 11px;
+  line-height: 1.45;
+  margin: 3px 0;
 }
 
-body.dn-print-body .dn-k {
+body.dn-print-body .erp-k {
   font-weight: 700;
   color: #444;
 }
 
-body.dn-print-body .dn-v {
-  text-align: left;
+body.dn-print-body .erp-v {
   flex: 1;
-  min-width: 120px;
+  min-width: 110px;
+  text-align: left;
   font-weight: 600;
+  color: #222;
 }
 
-body.dn-print-body .dn-items {
+body.dn-print-body .erp-tail {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+body.dn-print-body .erp-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.dn-print-body .erp-items {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
   table-layout: fixed;
-  word-wrap: break-word;
-  margin: 6px 0 12px;
+  font-size: 9.5px;
 }
 
-body.dn-print-body .dn-items th,
-body.dn-print-body .dn-items td {
-  border: 1px solid #999;
-  padding: 6px 5px;
-  vertical-align: top;
-}
-
-body.dn-print-body .dn-items th {
-  background: #f2f4f8;
-  font-weight: 800;
-  font-size: 10px;
-}
-
-body.dn-print-body .dn-no-break {
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-
-body.dn-print-body .dn-items tbody tr {
-  page-break-inside: avoid;
-  break-inside: avoid;
-}
-
-body.dn-print-body .dn-items thead {
+body.dn-print-body .erp-items thead {
   display: table-header-group;
+}
+
+body.dn-print-body .erp-items thead th {
+  background: #eceef2;
+  font-weight: 800;
+  border: 1px solid #888;
+  padding: 4px 3px;
+}
+
+body.dn-print-body .erp-items tbody td {
+  border: 1px solid #999;
+  padding: 4px 3px;
+  vertical-align: top;
+  word-wrap: break-word;
+}
+
+body.dn-print-body .erp-items tbody tr:nth-child(even) {
+  background: #faf7f4;
+}
+
+body.dn-print-body .erp-items tbody tr {
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
-body.dn-print-body .dn-items tr.dn-z1 {
-  background: #faf6f2;
-}
-
-body.dn-print-body .dn-items td.dn-num,
-body.dn-print-body .dn-items th.dn-num {
+body.dn-print-body .erp-num,
+body.dn-print-body .erp-items .erp-num {
   text-align: left;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-body.dn-print-body .dn-items td.dn-tl,
-body.dn-print-body .dn-items th.dn-tl {
+body.dn-print-body .erp-tl {
   text-align: right;
 }
 
-body.dn-print-body .dn-sum {
+body.dn-print-body .erp-sum {
   width: 100%;
-  max-width: 360px;
-  margin: 10px 0 0 auto;
+  max-width: 340px;
+  margin-right: 0;
+  margin-left: auto;
   border-collapse: collapse;
-  font-size: 13px;
-  break-inside: avoid;
-  page-break-inside: avoid;
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
-body.dn-print-body .dn-sum td {
-  border: none;
-  padding: 5px 8px;
+body.dn-print-body .erp-sum td {
+  padding: 4px 6px;
 }
 
-body.dn-print-body .dn-sum td.dn-lbl {
+body.dn-print-body .erp-lbl {
   font-weight: 700;
 }
 
-body.dn-print-body .dn-sum td.dn-amt {
+body.dn-print-body .erp-amt {
   text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
-body.dn-print-body .dn-sum tr.dn-pay td {
-  font-size: 16px;
+body.dn-print-body .erp-pay td {
+  font-size: 14px;
   font-weight: 800;
   border-top: 2px solid #c25200;
-  padding-top: 10px;
+  padding-top: 8px;
   color: #c25200;
 }
 
-body.dn-print-body .dn-sign {
-  margin-top: 22px;
-  padding-top: 10px;
+body.dn-print-body .erp-sign {
+  flex-shrink: 0;
+  margin-top: 4px;
+  padding-top: 8px;
   border-top: 1px solid #ccc;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
-body.dn-print-body .dn-sign .dn-sign-line {
-  margin-top: 14px;
+body.dn-print-body .erp-sign-line {
+  margin-top: 12px;
   border-bottom: 1px solid #333;
-  width: 70%;
-  max-width: 340px;
+  width: 68%;
+  max-width: 320px;
 }
 
-body.dn-print-body .dn-ph {
+body.dn-print-body .erp-ph {
   color: #c25200;
   font-weight: 600;
   font-style: italic;
 }
 
 @media print {
+  body.dn-print-body {
+    background: #fff;
+  }
+
+  body.dn-print-body .root {
+    overflow: hidden;
+  }
+
   body.dn-print-body button {
     display: none !important;
   }
