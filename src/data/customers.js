@@ -1,6 +1,7 @@
 // Firebase-ready: replace with db.collection('customers').get()
 var CUSTOMERS_DB = [
   {
+    hp: '123456789',
     id: '123456789',
     name: 'מסעדת הים',
     name_en: 'Msadt Haym',
@@ -17,6 +18,7 @@ var CUSTOMERS_DB = [
     personalPrices: { 'cup-001': 75, 'cup-002': 85, 'plt-001': 55 }
   },
   {
+    hp: '987654321',
     id: '987654321',
     name: 'קפה עיר',
     name_en: 'Qph Ayr',
@@ -33,6 +35,7 @@ var CUSTOMERS_DB = [
     personalPrices: {}
   },
   {
+    hp: '555666777',
     id: '555666777',
     name: 'גן אירועים אורכיד',
     name_en: 'Gn Ayrvaym Avrkyd',

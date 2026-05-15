@@ -30,6 +30,16 @@ var DBSync = (function () {
 
   function db() { return window.DB; }
 
+  function normalizeCustomer(data, docId) {
+    if (!data) return null;
+    var c = Object.assign({}, data);
+    var hp = c.hp != null ? c.hp : docId;
+    c.hp = hp != null ? String(hp).trim() : '';
+    c.password = c.password != null ? String(c.password).trim() : '';
+    if (c.id == null || String(c.id).trim() === '') c.id = c.hp;
+    return c;
+  }
+
   function pickPublicSettings(settings) {
     var out = {};
     if (!settings) return out;
@@ -57,7 +67,7 @@ var DBSync = (function () {
     if (window.App && App.Auth.isAdmin()) {
       return db().collection(COLLECTIONS.CUSTOMERS).onSnapshot(function (snap) {
         var list = [];
-        snap.forEach(function (d) { list.push(d.data()); });
+        snap.forEach(function (d) { list.push(normalizeCustomer(d.data(), d.id)); });
         window.CUSTOMERS_DB = list;
         try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
         onUpdate && onUpdate();
@@ -66,10 +76,10 @@ var DBSync = (function () {
       });
     }
     if (window.App && App.Auth.isCustomer() && App.state.currentUser.customer) {
-      var cid = String(App.state.currentUser.customer.id);
+      var cid = String(App.state.currentUser.customer.hp);
       return db().collection(COLLECTIONS.CUSTOMERS).doc(cid).onSnapshot(function (doc) {
         if (doc.exists) {
-          var c = doc.data();
+          var c = normalizeCustomer(doc.data(), doc.id);
           window.CUSTOMERS_DB = [c];
           if (App.state.currentUser && App.state.currentUser.customer) {
             App.state.currentUser.customer = c;
@@ -93,7 +103,7 @@ var DBSync = (function () {
     db().collection(COLLECTIONS.CUSTOMERS).get()
       .then(function (snap) {
         var list = [];
-        snap.forEach(function (d) { list.push(d.data()); });
+        snap.forEach(function (d) { list.push(normalizeCustomer(d.data(), d.id)); });
         window.CUSTOMERS_DB = list;
         try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
         onDone && onDone(true);
@@ -113,7 +123,7 @@ var DBSync = (function () {
     return db().collection(COLLECTIONS.CUSTOMERS).get()
       .then(function (snap) {
         var list = [];
-        snap.forEach(function (d) { list.push(d.data()); });
+        snap.forEach(function (d) { list.push(normalizeCustomer(d.data(), d.id)); });
         window.CUSTOMERS_DB = list;
         try { localStorage.setItem('yashir_customers', JSON.stringify(list)); } catch (e) {}
         return true;
@@ -128,7 +138,7 @@ var DBSync = (function () {
     try { localStorage.setItem('yashir_customers', JSON.stringify(window.CUSTOMERS_DB)); } catch (e) {}
 
     if (!db()) return;
-    var docId = String(customer.id);
+    var docId = String(customer.hp).trim();
     db().collection(COLLECTIONS.CUSTOMERS).doc(docId).set(customer)
       .catch(function (err) { console.warn('DBSync.saveCustomer error:', err); });
 
@@ -150,7 +160,7 @@ var DBSync = (function () {
     db().collection(COLLECTIONS.CUSTOMERS).doc(String(customerId))
       .update({ personalPrices: personalPrices })
       .catch(function () {
-        var cu = (window.CUSTOMERS_DB || []).find(function (c) { return String(c.id) === String(customerId); });
+        var cu = (window.CUSTOMERS_DB || []).find(function (c) { return String(c.hp).trim() === String(customerId).trim(); });
         if (cu) db().collection(COLLECTIONS.CUSTOMERS).doc(String(customerId)).set(cu).catch(function () {});
       });
     try { localStorage.setItem('yashir_customers', JSON.stringify(window.CUSTOMERS_DB)); } catch (e) {}

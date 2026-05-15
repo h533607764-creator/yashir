@@ -380,7 +380,7 @@ var CatalogView = {
     if (!product || !customer) return;
 
     var reqData  = {
-      customerId:   customer.id,
+      customerId:   customer.hp,
       customerName: customer.name,
       customerName_en: customer.name_en || '',
       customerPhone: customer.phone || '',
@@ -399,7 +399,7 @@ var CatalogView = {
     App.closeModal();
 
     if (window.DB) {
-      var docId = 'qr_' + String(customer.id) + '_' + String(product.id);
+      var docId = 'qr_' + String(customer.hp) + '_' + String(product.id);
       var ref = window.DB.collection('quote_requests').doc(docId);
       ref.get()
         .then(function (snap) {
@@ -453,7 +453,7 @@ var CatalogView = {
     var customer = App.Auth.isCustomer() ? App.state.currentUser.customer : null;
 
     var reqData = {
-      customerId:   customer.id,
+      customerId:   customer.hp,
       customerName: customer.name,
       customerName_en: customer.name_en || '',
       customerPhone: customer.phone || '',

@@ -67,7 +67,10 @@ exports.authenticateCustomer = functions.region(REGION).https.onCall(async funct
     throw httpsError('permission-denied', 'AUTH_FAILED');
   }
   var c = snap.data();
-  var reqPw = c.password != null ? String(c.password).trim() : '';
+  c.hp = c.hp != null ? String(c.hp).trim() : hp;
+  c.password = c.password != null ? String(c.password).trim() : '';
+  if (c.id == null || String(c.id).trim() === '') c.id = c.hp;
+  var reqPw = c.password;
   if (reqPw === '' || password !== reqPw) {
     throw httpsError('permission-denied', 'AUTH_FAILED');
   }
@@ -127,6 +130,9 @@ exports.createOrder = functions.region(REGION).https.onCall(async function (data
     throw httpsError('failed-precondition', 'CUSTOMER_MISSING');
   }
   var customer = custSnap.data();
+  customer.hp = customer.hp != null ? String(customer.hp).trim() : customerId;
+  customer.password = customer.password != null ? String(customer.password).trim() : '';
+  if (customer.id == null || String(customer.id).trim() === '') customer.id = customer.hp;
 
   var mainSnap = await db.collection('app_settings').doc('main').get();
   var pubSnap = await db.collection('app_settings').doc('public').get();
@@ -224,7 +230,7 @@ exports.createOrder = functions.region(REGION).https.onCall(async function (data
 
       var order = {
         id: orderIdStr,
-        customerId: customer.id,
+        customerId: customer.hp,
         customerName: customer.name,
         customerName_en: customer.name_en || '',
         customerPhone: customer.phone || '',

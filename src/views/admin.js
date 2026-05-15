@@ -252,8 +252,8 @@ var AdminView = {
         var aVal, bVal;
         switch (AdminView._customersSortField) {
           case 'id':
-            aVal = a.id || '';
-            bVal = b.id || '';
+            aVal = a.hp || '';
+            bVal = b.hp || '';
             break;
           case 'name':
             aVal = pLang(a, 'name') || '';
@@ -294,7 +294,7 @@ var AdminView = {
     var rows = customers.map(function (cu) {
       var debt = cu.existingDebt || 0;
       return '<tr>' +
-        '<td><code style="font-size:12px">' + cu.id + '</code></td>' +
+        '<td><code style="font-size:12px">' + cu.hp + '</code></td>' +
         '<td><strong>' + App.escHTML(pLang(cu, 'name')) + '</strong></td>' +
         '<td>' + (cu.phone || '—') + '</td>' +
         '<td>' + (cu.generalDiscount || 0) + '%</td>' +
@@ -302,9 +302,9 @@ var AdminView = {
         '<td style="color:' + (debt > 0 ? 'var(--orange)' : 'inherit') + ';font-weight:' + (debt > 0 ? '700' : '400') + '">₪' + debt + '</td>' +
         '<td>' + Object.keys(cu.personalPrices || {}).length + ' ' + t('common.products') + '</td>' +
         '<td style="display:flex;gap:6px;padding:8px">' +
-          '<button class="btn-sm" onclick="AdminView._editCust(\'' + cu.id + '\')" title="' + t('common.edit') + '"><span class="material-icons-round">edit</span></button>' +
-          '<button class="btn-sm" onclick="AdminView._custPrices(\'' + cu.id + '\')" title="' + t('admin.personalPrices') + '"><span class="material-icons-round">price_change</span></button>' +
-          '<button class="btn-sm danger" onclick="AdminView._delCust(\'' + cu.id + '\')" title="' + t('common.delete') + '"><span class="material-icons-round">delete</span></button>' +
+          '<button class="btn-sm" onclick="AdminView._editCust(\'' + cu.hp + '\')" title="' + t('common.edit') + '"><span class="material-icons-round">edit</span></button>' +
+          '<button class="btn-sm" onclick="AdminView._custPrices(\'' + cu.hp + '\')" title="' + t('admin.personalPrices') + '"><span class="material-icons-round">price_change</span></button>' +
+          '<button class="btn-sm danger" onclick="AdminView._delCust(\'' + cu.hp + '\')" title="' + t('common.delete') + '"><span class="material-icons-round">delete</span></button>' +
         '</td></tr>';
     }).join('');
 
@@ -435,15 +435,15 @@ var AdminView = {
   _editCust: function (id) {
     var isNew = !id;
     var cu = isNew
-      ? { id:'', name:'', name_en:'', email:'', phone:'', address:'', contactPerson:'', shippingAddress:'', generalDiscount:0, shippingCost:45, paymentTerms: t('admin.cash'), existingDebt:0, personalPrices:{}, password:'' }
-      : CUSTOMERS_DB.find(function (x) { return x.id === id; }) || {};
+      ? { hp:'', id:'', name:'', name_en:'', email:'', phone:'', address:'', contactPerson:'', shippingAddress:'', generalDiscount:0, shippingCost:45, paymentTerms: t('admin.cash'), existingDebt:0, personalPrices:{}, password:'' }
+      : CUSTOMERS_DB.find(function (x) { return x.hp === id; }) || {};
     var termsOpts = [t('admin.cash'),'שוטף 30','שוטף 60','שוטף 90','שוטף+30','שוטף+60'].map(function (trm) {
       return '<option value="' + trm + '"' + (cu.paymentTerms === trm ? ' selected' : '') + '>' + trm + '</option>';
     }).join('');
     App.showModal(
       '<h3>' + (isNew ? t('admin.addNewCustomer') : t('admin.editCustomer') + ' ' + pLang(cu, 'name')) + '</h3>' +
       '<div class="customer-form">' +
-        AdminView._fld(t('admin.hpField'), 'ef-id', cu.id, 'text') +
+        AdminView._fld(t('admin.hpField'), 'ef-id', cu.hp, 'text') +
         (isNew ? '' : '<p style="font-size:12px;color:var(--orange);margin-top:-8px">' + t('admin.hpChangeWarning') + '</p>') +
         AdminView._fld(t('admin.businessName'), 'ef-name', cu.name, 'text') +
         AdminView._fldTransliterate(t('admin.customerNameEn'), 'ef-name-en', cu.name_en || '', 'ef-name') +
@@ -479,11 +479,11 @@ var AdminView = {
       if (!confirm(t('admin.hpChangeConfirm'))) return;
     }
     
-    var duplicate = CUSTOMERS_DB.find(function (x) { return x.id === id && x.id !== origId; });
+    var duplicate = CUSTOMERS_DB.find(function (x) { return x.hp === id && x.hp !== origId; });
     if (duplicate) { App.toast(t('admin.hpCol') + ' ' + id + ' ' + t('admin.hpExists'), 'error'); return; }
-    var existing = origId ? CUSTOMERS_DB.find(function (x) { return x.id === origId; }) : null;
+    var existing = origId ? CUSTOMERS_DB.find(function (x) { return x.hp === origId; }) : null;
     var data = {
-      id: id, name: name,
+      hp: id, id: id, name: name,
       name_en: (document.getElementById('ef-name-en') || {}).value.trim() || '',
       password: (document.getElementById('ef-password') || {}).value.trim() || '',
       phone:           document.getElementById('ef-phone').value,
@@ -498,7 +498,7 @@ var AdminView = {
       personalPrices:  existing ? (existing.personalPrices || {}) : {}
     };
     if (origId && origId !== id) {
-      var oldIdx = CUSTOMERS_DB.findIndex(function (x) { return x.id === origId; });
+      var oldIdx = CUSTOMERS_DB.findIndex(function (x) { return x.hp === origId; });
       if (oldIdx > -1) CUSTOMERS_DB.splice(oldIdx, 1);
       CUSTOMERS_DB.push(data);
       DBSync.deleteCustomer(origId);
@@ -522,7 +522,7 @@ var AdminView = {
           .catch(function (e) { console.warn('Firestore migrate order customerId:', e); });
       }
     } else if (origId) {
-      var idx = CUSTOMERS_DB.findIndex(function (x) { return x.id === origId; });
+      var idx = CUSTOMERS_DB.findIndex(function (x) { return x.hp === origId; });
       if (idx > -1) CUSTOMERS_DB[idx] = data; else CUSTOMERS_DB.push(data);
     } else {
       CUSTOMERS_DB.push(data);
@@ -535,14 +535,14 @@ var AdminView = {
 
   _delCust: function (id) {
     if (!confirm(t('admin.deleteCustomerConfirm') + ' ' + id + '?')) return;
-    window.CUSTOMERS_DB = CUSTOMERS_DB.filter(function (x) { return x.id !== id; });
+    window.CUSTOMERS_DB = CUSTOMERS_DB.filter(function (x) { return x.hp !== id; });
     DBSync.deleteCustomer(id);
     App.toast(t('admin.customerDeleted'), 'success');
     AdminView._customers(document.getElementById('av-content'));
   },
 
   _custPrices: function (custId) {
-    var cu = CUSTOMERS_DB.find(function (x) { return x.id === custId; });
+    var cu = CUSTOMERS_DB.find(function (x) { return x.hp === custId; });
     if (!cu) return;
     var rows = PRODUCTS.filter(function(p){ return p.category !== 'shipping'; }).map(function (p) {
       var currPrice = cu.personalPrices && cu.personalPrices[p.id] !== undefined ? cu.personalPrices[p.id] : '';
@@ -596,7 +596,7 @@ var AdminView = {
   },
 
   _savePrices: function (custId) {
-    var cu = CUSTOMERS_DB.find(function (x) { return x.id === custId; });
+    var cu = CUSTOMERS_DB.find(function (x) { return x.hp === custId; });
     if (!cu) return;
     
     var errors = [];
@@ -1382,7 +1382,7 @@ var AdminView = {
     var price    = priceInp ? parseFloat(priceInp.value) : NaN;
     if (isNaN(price) || price <= 0) { App.toast(t('admin.enterValidPrice'), 'warning'); return; }
 
-    var cu = CUSTOMERS_DB.find(function (x) { return x.id === customerId; });
+    var cu = CUSTOMERS_DB.find(function (x) { return x.hp === customerId; });
     if (cu) {
       if (!cu.personalPrices) cu.personalPrices = {};
       cu.personalPrices[productId] = price;

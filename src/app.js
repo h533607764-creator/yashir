@@ -62,20 +62,20 @@ var App = (function () {
     return err;
   }
 
-  /** Customer login: compare trimmed string passwords only; logs for debugging. */
-  function loginPasswordMatchesCustomer(customer, inputPasswordRaw) {
-    var inputPassword = inputPasswordRaw != null ? String(inputPasswordRaw).trim() : '';
-    console.log('LOGIN DEBUG customer:', customer);
-    console.log('LOGIN DEBUG inputPassword:', inputPassword);
-    console.log('LOGIN DEBUG storedPassword:', customer ? customer.password : undefined);
-    if (!customer) return false;
-    if (customer.password === undefined || customer.password === null) return false;
-    var storedPassword = String(customer.password).trim();
-    if (storedPassword === '') return false;
-    if (!inputPassword) return false;
-    var cmp = inputPassword === storedPassword;
-    console.log('[LOGIN TRACE] loginPasswordMatchesCustomer comparison result:', cmp);
-    return cmp;
+  function normalizeCustomer(customer, fallbackHp) {
+    if (!customer) return null;
+    var out = Object.assign({}, customer);
+    var hp = out.hp != null ? out.hp : (fallbackHp != null ? fallbackHp : out.id);
+    out.hp = hp != null ? String(hp).trim() : '';
+    out.password = out.password != null ? String(out.password).trim() : '';
+    if (out.id == null || String(out.id).trim() === '') out.id = out.hp;
+    return out;
+  }
+
+  function normalizeCustomers(list) {
+    return (list || []).map(function (customer) {
+      return normalizeCustomer(customer);
+    }).filter(Boolean);
   }
 
   /** Single epsilon (₪) for pricing drift: cart repricing UI vs submit validation vs Firestore checks. */
@@ -121,7 +121,7 @@ var App = (function () {
       if (state.settings.landingSubtitle_en === undefined) state.settings.landingSubtitle_en = '';
     }
     var c = Store.get('customers');
-    if (c) window.CUSTOMERS_DB = c;
+    if (c) window.CUSTOMERS_DB = normalizeCustomers(c);
     var p = Store.get('products');
     if (p && p.length) {
       if (window.setYashirProductsList) window.setYashirProductsList(p);
@@ -147,12 +147,16 @@ var App = (function () {
   var Auth = {
     login: function (hp, remember, password) {
       var hpTrim = hp != null ? String(hp).trim() : '';
-      var inputPassword = password != null ? String(password).trim() : '';
-      console.log('[LOGIN TRACE] Auth.login path: LOCAL_CUSTOMERS_DB, hpTrim:', hpTrim, 'CUSTOMERS_DB.length:', (window.CUSTOMERS_DB || []).length);
-      var customer = CUSTOMERS_DB.find(function (x) { return String(x.id) === hpTrim; });
-      console.log('[LOGIN TRACE] Auth.login lookup customer (full):', customer);
-      console.log('[LOGIN TRACE] Auth.login lookup customer.id:', customer ? customer.id : '(none)');
-      if (!loginPasswordMatchesCustomer(customer, inputPassword)) return false;
+      var passTrim = password != null ? String(password).trim() : '';
+      window.CUSTOMERS_DB = normalizeCustomers(window.CUSTOMERS_DB || []);
+      var customer = window.CUSTOMERS_DB.find(function (c) {
+        return String(c.hp).trim() === hpTrim;
+      });
+      console.log('[LOGIN CLEAN] hp:', hpTrim);
+      console.log('[LOGIN CLEAN] found:', customer);
+      console.log('[LOGIN CLEAN] stored password:', customer ? customer.password : undefined);
+      if (!customer || !customer.password) return false;
+      if (String(customer.password).trim() !== passTrim) return false;
 
       state.currentUser = { role: 'customer', customer: customer };
       state.cart = [];
@@ -161,7 +165,7 @@ var App = (function () {
       Cart._restore();
       try { sessionStorage.setItem('yashir_sess_hp', hpTrim); } catch (e) {}
       if (remember) {
-        Store.set('remember', { hp: hpTrim, password: inputPassword, exp: Date.now() + 30 * 864e5 });
+        Store.set('remember', { hp: hpTrim, password: passTrim, exp: Date.now() + 30 * 864e5 });
       } else {
         Store.del('remember');
       }
@@ -173,31 +177,19 @@ var App = (function () {
       if (!hpTrim || !passTrim) {
         return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
       }
-      console.log('[LOGIN TRACE] Auth.loginCustomerFirebase start hpTrim:', hpTrim, 'has DB:', !!window.DB, 'has AUTH:', !!window.AUTH, 'has YashirBackend:', !!window.YashirBackend);
       if (!window.DB) {
-        console.log('[LOGIN TRACE] datasource: LOCAL_ONLY_no_Firestore');
         if (!Auth.login(hpTrim, remember, passTrim)) {
           console.error('customer local login failed: invalid business ID or password');
           return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
         }
         return Promise.resolve();
       }
-      function localFallback(cause) {
-        console.log('[LOGIN TRACE] localFallback invoked, datasource: LOCAL_FALLBACK_AFTER_ERROR cause:', cause);
-        if (Auth.login(hpTrim, remember, passTrim)) {
-          console.log('FALLBACK_CUSTOMER_USED');
-          return Promise.resolve({ fallback: 'local-customer-auth' });
-        }
-        console.error('customer local fallback failed:', cause);
-        return Promise.reject(fallbackModeError('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED', cause));
-      }
-      if (!window.AUTH || !window.YashirBackend) return localFallback(fallbackModeError('NO_BACKEND', 'NO_BACKEND'));
+      if (!window.AUTH || !window.YashirBackend) return authReject('NO_BACKEND', 'NO_BACKEND');
       var persist = remember
         ? firebase.auth.Auth.Persistence.LOCAL
         : firebase.auth.Auth.Persistence.SESSION;
       return window.AUTH.setPersistence(persist)
         .then(function () {
-          console.log('TRY_FIREBASE_CUSTOMER');
           try {
             return YashirBackend.authenticateCustomer(hpTrim, passTrim);
           } catch (syncErr) {
@@ -205,23 +197,18 @@ var App = (function () {
           }
         })
         .then(function (res) {
-          console.log('[LOGIN TRACE] Callable authenticateCustomer full res.data:', res && res.data);
-          var cust = res && res.data && res.data.customer;
+          var cust = normalizeCustomer(res && res.data && res.data.customer, hpTrim);
           var token = res && res.data && res.data.token;
-          console.log('[LOGIN TRACE] datasource after callable: FIRESTORE_returned_customer object:', cust);
-          console.log('[LOGIN TRACE] FIRESTORE_returned_customer.id:', cust && cust.id, 'customer.password:', cust && cust.password);
           if (!token) return Promise.reject(new Error('NO_CUSTOMER_TOKEN'));
-          if (!loginPasswordMatchesCustomer(cust, passTrim)) {
-            var pe = new Error('CLIENT_AUTH_PASSWORD');
-            pe.code = 'CLIENT_AUTH_PASSWORD';
-            return Promise.reject(pe);
-          }
+          console.log('[LOGIN CLEAN] hp:', hpTrim);
+          console.log('[LOGIN CLEAN] found:', cust);
+          console.log('[LOGIN CLEAN] stored password:', cust ? cust.password : undefined);
+          if (!cust || !cust.password) return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
+          if (String(cust.password).trim() !== passTrim) return authReject('AUTH_FAIL_LOCAL', 'LOCAL_CUSTOMER_AUTH_FAILED');
           return window.AUTH.signInWithCustomToken(token).then(function () {
-            if (cust) {
-              state.currentUser = { role: 'customer', customer: cust };
-              window.CUSTOMERS_DB = [cust];
-              Cart._restore();
-            }
+            state.currentUser = { role: 'customer', customer: cust };
+            window.CUSTOMERS_DB = [cust];
+            Cart._restore();
             try { sessionStorage.setItem('yashir_sess_hp', hpTrim); } catch (e) {}
             if (remember) {
               Store.set('remember', { hp: hpTrim, password: passTrim, exp: Date.now() + 30 * 864e5 });
@@ -231,13 +218,8 @@ var App = (function () {
           });
         })
         .catch(function (e) {
-          var code = e && e.code != null ? String(e.code) : '';
-          var msg = e && e.message != null ? String(e.message) : '';
-          if (code === 'CLIENT_AUTH_PASSWORD' || msg === 'CLIENT_AUTH_PASSWORD') {
-            return Promise.reject(e);
-          }
           console.error('customer Firebase login failed:', e);
-          return localFallback(e);
+          return Promise.reject(e);
         });
     },
     loginAdmin: function (pin) {
@@ -489,7 +471,7 @@ var App = (function () {
 
     clear: function () {
       state.cart = [];
-      if (Auth.isCustomer()) Store.del('cart_' + state.currentUser.customer.id);
+      if (Auth.isCustomer()) Store.del('cart_' + state.currentUser.customer.hp);
       Cart.updateBadge();
     },
 
@@ -529,7 +511,7 @@ var App = (function () {
 
     _save: function () {
       if (!Auth.isCustomer()) return;
-      var cid = state.currentUser.customer.id;
+      var cid = state.currentUser.customer.hp;
       Store.set('cart_' + cid, state.cart.map(function (i) {
         return { pid: i.product.id, qty: i.qty, unitPrice: i.unitPrice, discountPct: i.discountPct, outOfStock: i.outOfStock };
       }));
@@ -537,7 +519,7 @@ var App = (function () {
 
     _restore: function () {
       if (!Auth.isCustomer()) return;
-      var cid = state.currentUser.customer.id;
+      var cid = state.currentUser.customer.hp;
       var saved = Store.get('cart_' + cid);
       if (!saved || !saved.length) return;
       var customer = state.currentUser.customer;
@@ -693,7 +675,7 @@ var App = (function () {
       function makeOrderPayload(orderIdStr) {
         var order = {
           id: orderIdStr,
-          customerId: customer.id,
+          customerId: customer.hp,
           customerName: customer.name,
           customerName_en: customer.name_en || '',
           customerPhone: customer.phone || '',
@@ -1222,7 +1204,7 @@ var App = (function () {
     if (I18n.getLang() === 'en') {
       if (o.customerName_en) return o.customerName_en;
       if (o.customerId && typeof CUSTOMERS_DB !== 'undefined') {
-        var cu = CUSTOMERS_DB.find(function (x) { return String(x.id) === String(o.customerId); });
+        var cu = CUSTOMERS_DB.find(function (x) { return String(x.hp).trim() === String(o.customerId).trim(); });
         if (cu && cu.name_en) return cu.name_en;
       }
     }
@@ -1519,7 +1501,7 @@ var App = (function () {
     _customersSnapUnsub = DBSync.listenCustomers(function () {
       if (state.currentUser && state.currentUser.role === 'customer') {
         var freshCu = (window.CUSTOMERS_DB || []).find(function (c) {
-          return c.id === state.currentUser.customer.id;
+          return String(c.hp).trim() === String(state.currentUser.customer.hp).trim();
         });
         if (freshCu) state.currentUser.customer = freshCu;
         maybeRepriceCartAfterPricingChange();
@@ -1565,7 +1547,7 @@ var App = (function () {
             state.currentUser = null;
             return window.AUTH.signOut();
           }
-          var cu = snap.data();
+          var cu = normalizeCustomer(snap.data(), claims.customerId);
           state.currentUser = { role: 'customer', customer: cu };
           window.CUSTOMERS_DB = [cu];
           state.cart = [];
