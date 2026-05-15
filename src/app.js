@@ -319,8 +319,13 @@ var App = (function () {
         });
     },
     logout: function () {
+      console.log('[LOGOUT CALLED]', {
+        currentView: state.currentView,
+        hash: window.location.hash || '(no hash)'
+      });
       _tearDownSecretAdmin();
       var done = function () {
+        console.log('[RESET STATE]', 'logout');
         state.currentUser = null;
         state.cart = [];
         state.pricingPlan = null;
@@ -346,8 +351,9 @@ var App = (function () {
       }
     },
     tryAuto: function () {
-      if (window.AUTH && window.DB) return false;
+      if (window.AUTH && window.DB && useFirebaseFunctions()) return false;
       var r = Store.get('remember');
+      console.log('[SESSION RESTORE]', 'remember', !!(r && r.hp && r.password), r && r.exp);
       if (!r || Date.now() > r.exp || !r.hp || !r.password) return false;
       return Auth.login(r.hp, false, r.password);
     },
@@ -966,12 +972,31 @@ var App = (function () {
   }
 
   function restoreSession() {
+    console.log('[SESSION RESTORE]', {
+      hasUser: !!state.currentUser,
+      firebaseFunctions: useFirebaseFunctions(),
+      hash: window.location.hash || '(no hash)'
+    });
     if (state.currentUser) return;
     if (Auth.tryAuto()) return;
     try {
+      var hp = sessionStorage.getItem('yashir_sess_hp');
+      if (hp) {
+        window.CUSTOMERS_DB = normalizeCustomers(window.CUSTOMERS_DB || []);
+        var customer = window.CUSTOMERS_DB.find(function (c) {
+          return String(c.hp).trim() === String(hp).trim();
+        });
+        if (customer) {
+          state.currentUser = { role: 'customer', customer: customer };
+          Cart._restore();
+          console.log('[RESTORE CUSTOMER]', hp);
+          return;
+        }
+      }
       if (sessionStorage.getItem('yashir_sess_admin') === '1') {
         state.currentUser = { role: 'admin' };
         state.cart = [];
+        console.log('[RESTORE ADMIN]');
       }
     } catch (e) {}
   }
@@ -979,6 +1004,8 @@ var App = (function () {
   function restoreRoute() {
     var view = 'landing';
     var hashRoute = parseHashRoute();
+    console.log('[CURRENT HASH]', window.location.hash || '(no hash)');
+    console.log('[CURRENT VIEW]', state.currentView, state.currentUser ? state.currentUser.role : 'guest');
     if (hashRoute) {
       view = hashRoute.view;
       console.log('[ROUTE RESTORE]', 'from hash', hashRoute.raw, '->', view);
@@ -1018,6 +1045,7 @@ var App = (function () {
         params = {};
       }
     }
+    console.log('[ROUTE AFTER REFRESH]', view, params);
     navigate(view, params, { replaceHash: !hashRoute });
   }
 
@@ -1677,7 +1705,10 @@ var App = (function () {
 
   function applyFirebaseAuthUser(user) {
     if (!window.AUTH || !window.DB) return Promise.resolve();
+    console.log('[AUTH STATE]', user ? 'user' : 'null');
+    console.log('[FIREBASE USER]', user ? { uid: user.uid, email: user.email || '' } : null);
     if (!user) {
+      console.log('[RESET STATE]', 'firebase auth null');
       state.currentUser = null;
       return Promise.resolve();
     }
@@ -1688,6 +1719,7 @@ var App = (function () {
         state.cart = [];
         state.pricingPlan = null;
         _pricingRefreshQueuedWhileModal = false;
+        console.log('[RESTORE ADMIN]', 'firebase claims');
         return DBSync.loadCustomersPromise().then(function () {
           return new Promise(function (resolve) {
             DBSync.loadMainSettings(function () { resolve(); });
@@ -1712,8 +1744,10 @@ var App = (function () {
           state.pricingPlan = null;
           _pricingRefreshQueuedWhileModal = false;
           Cart._restore();
+          console.log('[RESTORE CUSTOMER]', claims.customerId);
         });
       }
+      console.log('[RESET STATE]', 'firebase claims missing role');
       state.currentUser = null;
     });
   }
@@ -1730,7 +1764,7 @@ var App = (function () {
       if (state.cartOpen) closeCart();
     });
 
-    if (window.AUTH && window.DB) {
+    if (window.AUTH && window.DB && useFirebaseFunctions()) {
       window.AUTH.onAuthStateChanged(function (user) {
         applyFirebaseAuthUser(user).then(function () {
           restoreRoute();
