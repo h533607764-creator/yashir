@@ -2163,6 +2163,27 @@ var AdminView = {
         '<div class="settings-grid">' +
           AdminView._fld(t('admin.minOrder'), 'sv-min', s.minOrderAmount, 'number') +
           AdminView._fld(t('admin.defaultShipping'), 'sv-ship', s.defaultShippingCost, 'number') +
+          '<div class="form-group full-width">' +
+            '<label>' + t('admin.logoUpload') + '</label>' +
+            '<p style="margin:0 0 8px;font-size:12px;color:var(--muted,#666)">' + t('admin.logoHint') + '</p>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">' +
+              (s.app_logo
+                ? '<img id="admin-logo-preview" crossorigin="anonymous" alt="" src="' + App.escHTML(String(s.app_logo)) + '" style="max-height:96px;max-width:240px;object-fit:contain;border:1px solid var(--border-blue,#c8d8ec);border-radius:8px;background:#fff"/>'
+                : '<img id="admin-logo-preview" alt="" style="display:none;max-height:96px;max-width:240px;object-fit:contain;border:1px solid var(--border-blue,#c8d8ec);border-radius:8px;background:#fff"/>') +
+              '<div style="display:flex;flex-direction:column;gap:8px">' +
+                '<input type="file" id="sv-logo-file" accept="image/*" onchange="AdminView._onLogoFile(event)">' +
+                '<button type="button" class="btn-secondary" onclick="AdminView._clearLogo()">' +
+                  '<span class="material-icons-round" style="font-size:18px">delete</span> ' + t('admin.logoRemove') +
+                '</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="form-group full-width"><label>' + t('admin.bizAddress') + '</label>' +
+            '<input type="text" id="sv-biz-addr" value="' + App.escHTML(s.businessAddress || '') + '"></div>' +
+          '<div class="form-group full-width"><label>' + t('admin.bizPhone') + '</label>' +
+            '<input type="tel" id="sv-biz-phone" value="' + App.escHTML(s.businessPhone || '') + '"></div>' +
+          '<div class="form-group full-width"><label>' + t('admin.bizEmail') + '</label>' +
+            '<input type="email" id="sv-biz-email" value="' + App.escHTML(s.businessEmail || '') + '"></div>' +
           '<div class="form-group full-width"><label>' + t('admin.systemMsg') + '</label>' +
             '<textarea id="sv-sysmsg" rows="3">' + (s.systemMessage || '') + '</textarea></div>' +
           '<div class="form-group full-width"><label>' + t('admin.landingTitle') + '</label>' +
@@ -2197,10 +2218,56 @@ var AdminView = {
     ]);
   },
 
+  _onLogoFile: function (ev) {
+    var inp = ev && ev.target;
+    var f = inp && inp.files && inp.files[0];
+    if (!f) return;
+    if (String(f.type || '').indexOf('image/') !== 0) {
+      App.toast(t('admin.logoNotImage'), 'warning');
+      return;
+    }
+    if (f.size > 450000) {
+      App.toast(t('admin.logoTooLarge'), 'warning');
+      return;
+    }
+    var r = new FileReader();
+    r.onload = function () {
+      var d = r.result;
+      App.state.settings.app_logo = typeof d === 'string' ? d : '';
+      var prev = document.getElementById('admin-logo-preview');
+      if (prev) {
+        prev.src = App.state.settings.app_logo;
+        prev.style.display = '';
+      }
+      App.saveSettings();
+      App.toast(t('admin.logoSaved'), 'success');
+    };
+    r.onerror = function () {
+      App.toast(t('admin.logoReadError'), 'error');
+    };
+    r.readAsDataURL(f);
+    inp.value = '';
+  },
+
+  _clearLogo: function () {
+    App.state.settings.app_logo = '';
+    try { localStorage.removeItem('app_logo'); } catch (e) {}
+    var prev = document.getElementById('admin-logo-preview');
+    if (prev) {
+      prev.removeAttribute('src');
+      prev.style.display = 'none';
+    }
+    App.saveSettings();
+    App.toast(t('admin.logoRemoved'), 'success');
+  },
+
   _saveSettings: function () {
     var s = App.state.settings;
     s.minOrderAmount       = parseInt(document.getElementById('sv-min').value)  || s.minOrderAmount;
     s.defaultShippingCost  = parseInt(document.getElementById('sv-ship').value) || s.defaultShippingCost;
+    s.businessAddress      = (document.getElementById('sv-biz-addr') || {}).value || '';
+    s.businessPhone        = (document.getElementById('sv-biz-phone') || {}).value || '';
+    s.businessEmail        = (document.getElementById('sv-biz-email') || {}).value || '';
     s.systemMessage        = document.getElementById('sv-sysmsg').value;
     s.landingTitle         = document.getElementById('sv-title').value;
     s.landingSubtitle      = document.getElementById('sv-sub').value;

@@ -26,7 +26,14 @@ var DBSync = (function () {
     'landingSubtitle_en'
   ];
 
-  var PRIVATE_SETTINGS_KEYS = ['adminPin', 'nextOrderId'];
+  var PRIVATE_SETTINGS_KEYS = [
+    'adminPin',
+    'nextOrderId',
+    'app_logo',
+    'businessAddress',
+    'businessPhone',
+    'businessEmail'
+  ];
 
   function db() { return window.DB; }
 

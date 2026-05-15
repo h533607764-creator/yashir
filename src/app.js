@@ -104,7 +104,11 @@ var App = (function () {
       landingSubtitle: 'ישיר שיווק והפצה — מוצרים חד-פעמיים לעסקים ואירועים',
       systemMessage_en: '',
       landingTitle_en: '',
-      landingSubtitle_en: ''
+      landingSubtitle_en: '',
+      app_logo: '',
+      businessAddress: '',
+      businessPhone: '',
+      businessEmail: ''
     }
   };
 
@@ -123,7 +127,17 @@ var App = (function () {
       if (state.settings.systemMessage_en === undefined) state.settings.systemMessage_en = '';
       if (state.settings.landingTitle_en === undefined) state.settings.landingTitle_en = '';
       if (state.settings.landingSubtitle_en === undefined) state.settings.landingSubtitle_en = '';
+      if (state.settings.app_logo === undefined) state.settings.app_logo = '';
+      if (state.settings.businessAddress === undefined) state.settings.businessAddress = '';
+      if (state.settings.businessPhone === undefined) state.settings.businessPhone = '';
+      if (state.settings.businessEmail === undefined) state.settings.businessEmail = '';
     }
+    try {
+      if (!state.settings.app_logo) {
+        var _al = localStorage.getItem('app_logo');
+        if (_al) state.settings.app_logo = _al;
+      }
+    } catch (e0) {}
     var c = Store.get('customers');
     if (c) {
       window.__CUSTOMERS_SOURCE__ = 'localStorage yashir_customers';
@@ -1811,7 +1825,9 @@ var App = (function () {
 
   /* ===== PUBLIC API ===== */
   return {
-    state: state, Auth: Auth, Cart: Cart, Orders: Orders, Pricing: Pricing, Store: Store, fmtP: fmtP, escHTML: escHTML,
+    state: state,
+    settings: state.settings,
+    Auth: Auth, Cart: Cart, Orders: Orders, Pricing: Pricing, Store: Store, fmtP: fmtP, escHTML: escHTML,
     dateFmt: dateFmt,
     navigate: navigate, goHome: goHome, toggleCart: toggleCart, openCart: openCart, closeCart: closeCart,
     showModal: showModal, closeModal: closeModal, toast: toast, Modal: Modal,
@@ -1821,6 +1837,10 @@ var App = (function () {
     _selectLang: _selectLang, _confirmLang: _confirmLang, _pendingLang: _pendingLang,
     saveSettings: function () {
       Store.set('settings', state.settings);
+      try {
+        if (state.settings.app_logo) localStorage.setItem('app_logo', state.settings.app_logo);
+        else localStorage.removeItem('app_logo');
+      } catch (e1) {}
       if (window.DBSync) DBSync.saveSettings(state.settings);
     },
     checkLowStock: checkLowStock,
