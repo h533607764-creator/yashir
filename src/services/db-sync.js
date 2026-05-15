@@ -27,6 +27,7 @@ var DBSync = (function () {
   ];
 
   var PRIVATE_SETTINGS_KEYS = ['adminPin', 'nextOrderId'];
+  var DEFAULT_CUSTOMER_PASSWORD = '1234';
 
   function db() { return window.DB; }
 
@@ -36,6 +37,7 @@ var DBSync = (function () {
     var hp = c.hp != null ? c.hp : docId;
     c.hp = hp != null ? String(hp).trim() : '';
     c.password = c.password != null ? String(c.password).trim() : '';
+    if (!c.password) c.password = DEFAULT_CUSTOMER_PASSWORD;
     if (c.id == null || String(c.id).trim() === '') c.id = c.hp;
     return c;
   }
@@ -135,6 +137,11 @@ var DBSync = (function () {
   }
 
   function saveCustomer(customer, oldId) {
+    customer = normalizeCustomer(customer);
+    if (window.CUSTOMERS_DB) {
+      var idx = window.CUSTOMERS_DB.findIndex(function (c) { return String(c.hp).trim() === String(customer.hp).trim(); });
+      if (idx > -1) window.CUSTOMERS_DB[idx] = customer;
+    }
     try { localStorage.setItem('yashir_customers', JSON.stringify(window.CUSTOMERS_DB)); } catch (e) {}
 
     if (!db()) return;
@@ -163,6 +170,7 @@ var DBSync = (function () {
         var cu = (window.CUSTOMERS_DB || []).find(function (c) { return String(c.hp).trim() === String(customerId).trim(); });
         if (cu) db().collection(COLLECTIONS.CUSTOMERS).doc(String(customerId)).set(cu).catch(function () {});
       });
+    window.CUSTOMERS_DB = (window.CUSTOMERS_DB || []).map(function (c) { return normalizeCustomer(c); });
     try { localStorage.setItem('yashir_customers', JSON.stringify(window.CUSTOMERS_DB)); } catch (e) {}
   }
 

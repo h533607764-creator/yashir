@@ -66,12 +66,15 @@ var App = (function () {
     return typeof USE_FIREBASE_FUNCTIONS !== 'undefined' && USE_FIREBASE_FUNCTIONS === true;
   }
 
+  var DEFAULT_CUSTOMER_PASSWORD = '1234';
+
   function normalizeCustomer(customer, fallbackHp) {
     if (!customer) return null;
     var out = Object.assign({}, customer);
     var hp = out.hp != null ? out.hp : (fallbackHp != null ? fallbackHp : out.id);
     out.hp = hp != null ? String(hp).trim() : '';
     out.password = out.password != null ? String(out.password).trim() : '';
+    if (!out.password) out.password = DEFAULT_CUSTOMER_PASSWORD;
     if (out.id == null || String(out.id).trim() === '') out.id = out.hp;
     return out;
   }
@@ -125,7 +128,12 @@ var App = (function () {
       if (state.settings.landingSubtitle_en === undefined) state.settings.landingSubtitle_en = '';
     }
     var c = Store.get('customers');
-    if (c) window.CUSTOMERS_DB = normalizeCustomers(c);
+    if (c) {
+      window.CUSTOMERS_DB = normalizeCustomers(c);
+      Store.set('customers', window.CUSTOMERS_DB);
+    } else {
+      window.CUSTOMERS_DB = normalizeCustomers(window.CUSTOMERS_DB || []);
+    }
     var p = Store.get('products');
     if (p && p.length) {
       if (window.setYashirProductsList) window.setYashirProductsList(p);
@@ -158,6 +166,7 @@ var App = (function () {
       });
       console.log('[LOGIN CLEAN] hp:', hpTrim);
       console.log('[LOGIN CLEAN] found:', customer);
+      console.log('[LOGIN CUSTOMER FULL]', customer);
       console.log('[LOGIN CLEAN] stored password:', customer ? customer.password : undefined);
       if (!customer || !customer.password) return false;
       if (String(customer.password).trim() !== passTrim) return false;
