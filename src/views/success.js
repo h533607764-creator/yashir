@@ -101,7 +101,7 @@ var SuccessView = {
         var lineList = parseFloat((listUnit * q).toFixed(2));
         var lineFinal = parseFloat((item.unitPrice * q).toFixed(2));
         var z = i % 2 === 0 ? 'dn-z0' : 'dn-z1';
-        return '<tr class="' + z + '">' +
+        return '<tr class="' + z + ' dn-no-break">' +
           '<td>' + App.escHTML(item.product && item.product.sku != null ? item.product.sku : '') + '</td>' +
           '<td class="dn-tl">' + App.escHTML(pLang(item.product, 'name')) + '</td>' +
           '<td class="dn-num">' + q + '</td>' +
@@ -191,8 +191,9 @@ var SuccessView = {
         'margin:10,' +
         'filename:"delivery-"+String(oid)+".pdf",' +
         'image:{type:"jpeg",quality:0.98},' +
-        'html2canvas:{scale:2,useCORS:true},' +
-        'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}' +
+        'html2canvas:{scale:2,useCORS:true,scrollY:0},' +
+        'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},' +
+        'pagebreak:{mode:["css","legacy"],avoid:".dn-no-break"}' +
         '}).from(el).save();' +
         '};' +
         '}' +

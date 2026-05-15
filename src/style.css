@@ -1158,9 +1158,29 @@ body.dn-print-body .dn-page {
   break-inside: avoid;
 }
 
-body.dn-print-body .dn-copy {
+body.dn-print-body .dn-page.dn-copy {
+  position: relative;
   page-break-before: always;
   break-before: page;
+  filter: grayscale(0.2);
+  opacity: 0.98;
+}
+
+body.dn-print-body .dn-page.dn-copy::before {
+  content: "COPY";
+  position: absolute;
+  top: 10mm;
+  right: 10mm;
+  left: auto;
+  font-family: 'Assistant', Arial, sans-serif;
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #000;
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: 4;
+  line-height: 1;
 }
 
 body.dn-print-body .dn-sheet {
@@ -1352,6 +1372,11 @@ body.dn-print-body .dn-items th {
   background: #f2f4f8;
   font-weight: 800;
   font-size: 10px;
+}
+
+body.dn-print-body .dn-no-break {
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 body.dn-print-body .dn-items tbody tr {
