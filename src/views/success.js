@@ -131,9 +131,10 @@ var SuccessView = {
         '</tbody></table>' +
         '<div class="dn-sign">' + App.escHTML(t('success.signatureRecipient')) + '<div class="dn-sign-line"></div></div>';
 
+      var shipContactLabel = isEn ? t('success.contactAndPhone') : 'איש קשר';
       var blocksGrid =
         '<div class="dn-grid2">' +
-          '<div class="dn-blk dn-blk--customer">' +
+          '<div class="dn-blk">' +
             '<h3>' + App.escHTML(t('success.clientSection')) + '</h3>' +
             '<div class="dn-row"><span class="dn-k">' + App.escHTML(t('admin.nameCol')) + '</span><span class="dn-v">' + App.escHTML(App.orderCustomerDisplay(order)) + '</span></div>' +
             '<div class="dn-row"><span class="dn-k">' + App.escHTML(t('success.bizIdShort')) + '</span><span class="dn-v">' + App.escHTML(order.customerId != null ? String(order.customerId) : '—') + '</span></div>' +
@@ -143,43 +144,55 @@ var SuccessView = {
           '<div class="dn-blk">' +
             '<h3>' + App.escHTML(t('success.shipSection')) + '</h3>' +
             '<div class="dn-row"><span class="dn-k">' + App.escHTML(t('success.shipAddressLabel')) + '</span><span class="dn-v">' + App.escHTML(shipAddr) + '</span></div>' +
-            '<div class="dn-row"><span class="dn-k">' + App.escHTML(t('success.contactAndPhone')) + '</span><span class="dn-v">' + contactLine + '</span></div>' +
+            '<div class="dn-row"><span class="dn-k">' + App.escHTML(shipContactLabel) + '</span><span class="dn-v">' + contactLine + '</span></div>' +
           '</div>' +
         '</div>';
 
-      function sheetHtml(docTitleLine) {
+      function sheetHtml(forCopy) {
         var coLine = isEn ? t('success.companyName') : ('ישיר' + '\u00A0' + 'שיווק' + '\u00A0' + 'והפצה');
+        var headingOnly = String(t('success.deliveryNoteNumbered') || '').trim();
+        var ordOnly = 'ORD-' + String(order.id) + (forCopy ? (isEn ? ' — Copy' : ' — עותק') : '');
         return (
           '<div class="dn-sheet">' +
+          '<div class="dn-wm-layer" aria-hidden="true"></div>' +
+          '<div class="dn-sheet-front">' +
           '<div class="dn-bsd">' + App.escHTML(t('success.bsd')) + '</div>' +
-          '<header class="dn-header">' +
-            '<div class="dn-header-right">' +
-              '<img class="dn-header-logo-img" src="' + App.escHTML(heroLogo) + '" alt="" crossorigin="anonymous" onerror="this.src=\'/logo.png\'">' +
+          '<header class="dn-header dn-no-break">' +
+            '<div class="dn-header-row dn-header-row-top">' +
+              '<div class="dn-header-logo-cell">' +
+                '<img class="dn-header-logo-img" src="' + App.escHTML(heroLogo) + '" alt="" crossorigin="anonymous" onerror="this.src=\'/logo.png\'">' +
+              '</div>' +
+              '<div class="dn-header-title-cell">' +
+                '<div class="dn-doc-title-line1">' + App.escHTML(headingOnly) + '</div>' +
+              '</div>' +
             '</div>' +
-            '<div class="dn-header-center">' +
-              '<div class="dn-doc-title">' + App.escHTML(docTitleLine) + '</div>' +
-              '<div class="dn-doc-meta"><strong>' + App.escHTML(issueLabel) + '</strong> ' + App.escHTML(docDate) + '</div>' +
+            '<div class="dn-header-row dn-header-row-order">' +
+              '<div class="dn-doc-order-num">' + App.escHTML(ordOnly) + '</div>' +
             '</div>' +
-            '<div class="dn-header-left">' +
-              '<div class="dn-biz-line dn-biz-company">' + App.escHTML(coLine) + '</div>' +
-              '<div class="dn-biz-line">' + bizLineHtml(st.businessAddress) + '</div>' +
-              '<div class="dn-biz-line">' + bizLineHtml(st.businessPhone) + '</div>' +
-              '<div class="dn-biz-line">' + bizLineHtml(st.businessEmail) + '</div>' +
-              '<div class="dn-biz-line">' +
-                '<span class="dn-biz-tax-label">' + App.escHTML(t('success.bizIdShort')) + '</span>' +
-                '\u00A0' +
-                (bizTaxDisp ? App.escHTML(bizTaxDisp) : '<span class="dn-ph">' + App.escHTML(t('success.bizPlaceholder')) + '</span>') +
+            '<div class="dn-header-row dn-header-row-biz">' +
+              '<div class="dn-blk dn-header-biz-card">' +
+                '<div class="dn-biz-line dn-biz-company">' + App.escHTML(coLine) + '</div>' +
+                '<div class="dn-biz-line">' + bizLineHtml(st.businessAddress) + '</div>' +
+                '<div class="dn-biz-line">' + bizLineHtml(st.businessPhone) + '</div>' +
+                '<div class="dn-biz-line">' + bizLineHtml(st.businessEmail) + '</div>' +
+                '<div class="dn-biz-line">' +
+                  '<span class="dn-biz-tax-label">' + App.escHTML(t('success.bizIdShort')) + '</span>' +
+                  '\u00A0' +
+                  (bizTaxDisp ? App.escHTML(bizTaxDisp) : '<span class="dn-ph">' + App.escHTML(t('success.bizPlaceholder')) + '</span>') +
+                '</div>' +
+                '<div class="dn-row dn-biz-date-row">' +
+                  '<span class="dn-k">' + App.escHTML(issueLabel) + '</span>' +
+                  '<span class="dn-v dn-date-val">' + App.escHTML(docDate) + '</span>' +
+                '</div>' +
               '</div>' +
             '</div>' +
           '</header>' +
           blocksGrid +
           tableBlock +
+          '</div>' +
           '</div>'
         );
       }
-
-      var titleBase = String(t('success.deliveryNoteNumbered') || '').replace(/\s+$/, '') + '\u00A0' + 'ORD-' + String(order.id);
-      var titleCopy = titleBase + (isEn ? ' — Copy' : ' — עותק');
       var cssHref = printStylesheetHref();
 
       var pdfScript =
@@ -196,7 +209,7 @@ var SuccessView = {
         'margin:10,' +
         'filename:"delivery-"+String(oid)+".pdf",' +
         'image:{type:"jpeg",quality:0.98},' +
-        'html2canvas:{scale:2,useCORS:true,scrollY:0},' +
+        'html2canvas:{scale:2,useCORS:true,scrollY:0,backgroundColor:"#ffffff",logging:false},' +
         'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},' +
         'pagebreak:{mode:["css","legacy"],avoid:".dn-no-break"}' +
         '}).from(el).save();' +
@@ -218,8 +231,8 @@ var SuccessView = {
         '</head><body class="dn-print-body">' +
         '<div class="dn-toolbar"><button type="button" id="dn-download-pdf">הורד PDF</button></div>' +
         '<div class="dn-print-root" style="' + wmInlineStyle(heroLogo).replace(/"/g, '&quot;') + '">' +
-        '<div class="dn-page dn-original">' + sheetHtml(titleBase) + '</div>' +
-        '<div class="dn-page dn-copy">' + sheetHtml(titleCopy) + '</div>' +
+        '<div class="dn-page dn-original">' + sheetHtml(false) + '</div>' +
+        '<div class="dn-page dn-copy">' + sheetHtml(true) + '</div>' +
         '</div>' +
         '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>' +
         '<script>' + pdfScript + '<\/script>' +
