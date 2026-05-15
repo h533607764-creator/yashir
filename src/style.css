@@ -1073,3 +1073,327 @@ html[dir="ltr"] .form-group label { text-align: left; }
 
 /* ===== PRODUCT INFO TAGS (price unit removed) ===== */
 .price-unit { display: none; }
+
+/* =============================================================
+   תעודת משלוח — הדפסה בלבד (SuccessView.printNote)
+   נטען בחלון popup: body.dn-print-body + link href="…/src/style.css"
+   רקע סימני מים: --dn-wm-image מוגדר inline על .dn-print-root
+   ============================================================= */
+
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
+body.dn-print-body {
+  font-family: 'Assistant', Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  color: #111;
+  background: #fff;
+  direction: rtl;
+  text-align: right;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body.dn-print-body * {
+  box-sizing: border-box;
+}
+
+body.dn-print-body .dn-print-root {
+  position: relative;
+  min-height: 0;
+}
+
+body.dn-print-body .dn-print-root::before {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--dn-wm-image, none) center center / 73% auto no-repeat;
+  opacity: 0.13;
+}
+
+body.dn-print-body .dn-page {
+  position: relative;
+  z-index: 1;
+  page-break-after: auto;
+  break-after: auto;
+}
+
+body.dn-print-body .dn-page--break-after {
+  page-break-after: always;
+  break-after: page;
+}
+
+body.dn-print-body .dn-sheet {
+  position: relative;
+  z-index: 1;
+  padding: 6px 4px 18px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+body.dn-print-body .dn-bsd {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 10px;
+  color: #333;
+  font-weight: 600;
+  z-index: 2;
+}
+
+body.dn-print-body .dn-header-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 20px 0 14px;
+  padding-top: 8px;
+  flex-wrap: wrap;
+}
+
+body.dn-print-body .dn-header-logo {
+  flex: 0 0 auto;
+  order: 0;
+  text-align: center;
+}
+
+body.dn-print-body .dn-header-logo img {
+  max-width: min(300px, 52vw);
+  max-height: 132px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+body.dn-print-body .dn-header-biz {
+  flex: 1 1 220px;
+  order: 1;
+  text-align: right;
+  align-self: center;
+}
+
+body.dn-print-body .dn-biz-line {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #222;
+  margin: 2px 0 4px;
+}
+
+body.dn-print-body .dn-biz-line.dn-biz-company {
+  font-size: 16px;
+  font-weight: 700;
+  color: #c25200;
+  margin-bottom: 8px;
+}
+
+body.dn-print-body .dn-biz-line .dn-ph {
+  color: #c25200;
+  font-weight: 600;
+  font-style: italic;
+}
+
+body.dn-print-body .dn-doc-title {
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+  margin: 12px 0 4px;
+  color: #111;
+}
+
+body.dn-print-body .dn-doc-meta {
+  font-size: 12px;
+  text-align: center;
+  color: #555;
+  margin-bottom: 12px;
+}
+
+body.dn-print-body .dn-doc-meta strong {
+  font-weight: 700;
+  color: #444;
+}
+
+body.dn-print-body .dn-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 520px) {
+  body.dn-print-body .dn-grid2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+body.dn-print-body .dn-blk {
+  border: 1px solid #c8c8c8;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+body.dn-print-body .dn-blk h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #c25200;
+}
+
+body.dn-print-body .dn-blk--customer {
+  padding: 6px 8px;
+  background: rgba(250, 250, 250, 0.95);
+  border-color: #ddd;
+}
+
+body.dn-print-body .dn-blk--customer h3 {
+  font-size: 11px;
+  font-weight: 600;
+  color: #999;
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+body.dn-print-body .dn-blk--customer .dn-row {
+  font-size: 10px;
+  color: #777;
+  font-weight: 400;
+  margin: 2px 0;
+}
+
+body.dn-print-body .dn-blk--customer .dn-k {
+  font-weight: 500;
+  color: #9a9a9a;
+}
+
+body.dn-print-body .dn-blk--customer .dn-v {
+  color: #6e6e6e;
+  font-weight: 400;
+}
+
+body.dn-print-body .dn-row {
+  font-size: 12px;
+  margin: 4px 0;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+body.dn-print-body .dn-k {
+  font-weight: 700;
+  color: #444;
+}
+
+body.dn-print-body .dn-v {
+  text-align: left;
+  flex: 1;
+  min-width: 120px;
+  font-weight: 600;
+}
+
+body.dn-print-body .dn-items {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  table-layout: fixed;
+  word-wrap: break-word;
+  margin: 6px 0 12px;
+}
+
+body.dn-print-body .dn-items th,
+body.dn-print-body .dn-items td {
+  border: 1px solid #999;
+  padding: 6px 5px;
+  vertical-align: top;
+}
+
+body.dn-print-body .dn-items th {
+  background: #f2f4f8;
+  font-weight: 800;
+  font-size: 10px;
+}
+
+body.dn-print-body .dn-items tbody tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+body.dn-print-body .dn-items thead {
+  display: table-header-group;
+}
+
+body.dn-print-body .dn-items tr.dn-z1 {
+  background: #faf6f2;
+}
+
+body.dn-print-body .dn-items td.dn-num,
+body.dn-print-body .dn-items th.dn-num {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+body.dn-print-body .dn-items td.dn-tl,
+body.dn-print-body .dn-items th.dn-tl {
+  text-align: right;
+}
+
+body.dn-print-body .dn-sum {
+  width: 100%;
+  max-width: 360px;
+  margin: 10px 0 0 auto;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+body.dn-print-body .dn-sum td {
+  border: none;
+  padding: 5px 8px;
+}
+
+body.dn-print-body .dn-sum td.dn-lbl {
+  font-weight: 700;
+}
+
+body.dn-print-body .dn-sum td.dn-amt {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+body.dn-print-body .dn-sum tr.dn-pay td {
+  font-size: 16px;
+  font-weight: 800;
+  border-top: 2px solid #c25200;
+  padding-top: 10px;
+  color: #c25200;
+}
+
+body.dn-print-body .dn-sign {
+  margin-top: 22px;
+  padding-top: 10px;
+  border-top: 1px solid #ccc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+body.dn-print-body .dn-sign .dn-sign-line {
+  margin-top: 14px;
+  border-bottom: 1px solid #333;
+  width: 70%;
+  max-width: 340px;
+}
+
+body.dn-print-body .dn-ph {
+  color: #c25200;
+  font-weight: 600;
+  font-style: italic;
+}
