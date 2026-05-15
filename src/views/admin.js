@@ -2184,6 +2184,8 @@ var AdminView = {
             '<input type="tel" id="sv-biz-phone" value="' + App.escHTML(s.businessPhone || '') + '"></div>' +
           '<div class="form-group full-width"><label>' + t('admin.bizEmail') + '</label>' +
             '<input type="email" id="sv-biz-email" value="' + App.escHTML(s.businessEmail || '') + '"></div>' +
+          '<div class="form-group full-width"><label>' + t('admin.bizTaxId') + '</label>' +
+            '<input type="text" id="sv-biz-tax" value="' + App.escHTML(String(s.businessTaxId || s.businessHp || s.vatId || '').trim()) + '" inputmode="numeric" autocomplete="off" placeholder="' + App.escHTML(t('admin.bizTaxIdPh')) + '"></div>' +
           '<div class="form-group full-width"><label>' + t('admin.systemMsg') + '</label>' +
             '<textarea id="sv-sysmsg" rows="3">' + (s.systemMessage || '') + '</textarea></div>' +
           '<div class="form-group full-width"><label>' + t('admin.landingTitle') + '</label>' +
@@ -2268,6 +2270,7 @@ var AdminView = {
     s.businessAddress      = (document.getElementById('sv-biz-addr') || {}).value || '';
     s.businessPhone        = (document.getElementById('sv-biz-phone') || {}).value || '';
     s.businessEmail        = (document.getElementById('sv-biz-email') || {}).value || '';
+    s.businessTaxId        = (document.getElementById('sv-biz-tax') || {}).value || '';
     s.systemMessage        = document.getElementById('sv-sysmsg').value;
     s.landingTitle         = document.getElementById('sv-title').value;
     s.landingSubtitle      = document.getElementById('sv-sub').value;

@@ -72,7 +72,7 @@ var SuccessView = {
       var vatLine = isEn ? ('VAT (' + vatPct + '%):') : ('מע״מ ' + vatPct + '%:');
 
       var docDate = new Date().toLocaleDateString(locale);
-      var issueLabel = isEn ? 'Issue date:' : 'תאריך הפקה:';
+      var issueLabel = isEn ? 'Date:' : 'תאריך:';
 
       var cu = lookupCustomer(order);
       var shipAddr = cu && (cu.shippingAddress || cu.address) ? String(cu.shippingAddress || cu.address) : '';
@@ -90,7 +90,7 @@ var SuccessView = {
       var grossSum = parseFloat((subtotal + savings).toFixed(2));
 
       var heroLogo = resolveLogoSrc();
-      var bizTaxRaw = st.businessTaxId || st.businessHp || st.companyHp || '';
+      var bizTaxDisp = String(st.businessTaxId || st.businessHp || st.vatId || st.companyHp || '').trim();
 
       var rows = order.items.map(function (item, i) {
         var listUnit = (item.product && typeof item.product.price === 'number' && !isNaN(item.product.price))
@@ -148,32 +148,37 @@ var SuccessView = {
         '</div>';
 
       function sheetHtml(docTitleLine) {
+        var coLine = isEn ? t('success.companyName') : ('ישיר' + '\u00A0' + 'שיווק' + '\u00A0' + 'והפצה');
         return (
           '<div class="dn-sheet">' +
           '<div class="dn-bsd">' + App.escHTML(t('success.bsd')) + '</div>' +
-          '<header class="dn-header-row">' +
-            '<div class="dn-header-logo">' +
-              '<img src="' + App.escHTML(heroLogo) + '" alt="" crossorigin="anonymous" onerror="this.src=\'/logo.png\'">' +
+          '<header class="dn-header">' +
+            '<div class="dn-header-right">' +
+              '<img class="dn-header-logo-img" src="' + App.escHTML(heroLogo) + '" alt="" crossorigin="anonymous" onerror="this.src=\'/logo.png\'">' +
             '</div>' +
-            '<div class="dn-header-biz">' +
-              '<div class="dn-biz-line dn-biz-company">' + App.escHTML(t('success.companyName')) + '</div>' +
+            '<div class="dn-header-center">' +
+              '<div class="dn-doc-title">' + App.escHTML(docTitleLine) + '</div>' +
+              '<div class="dn-doc-meta"><strong>' + App.escHTML(issueLabel) + '</strong> ' + App.escHTML(docDate) + '</div>' +
+            '</div>' +
+            '<div class="dn-header-left">' +
+              '<div class="dn-biz-line dn-biz-company">' + App.escHTML(coLine) + '</div>' +
               '<div class="dn-biz-line">' + bizLineHtml(st.businessAddress) + '</div>' +
               '<div class="dn-biz-line">' + bizLineHtml(st.businessPhone) + '</div>' +
               '<div class="dn-biz-line">' + bizLineHtml(st.businessEmail) + '</div>' +
-              '<div class="dn-biz-line"><span class="dn-biz-tax-label">' + App.escHTML(t('success.bizIdShort')) + '</span> ' +
-                (String(bizTaxRaw).trim() ? App.escHTML(String(bizTaxRaw).trim()) : '<span class="dn-ph">' + App.escHTML(t('success.bizPlaceholder')) + '</span>') +
+              '<div class="dn-biz-line">' +
+                '<span class="dn-biz-tax-label">' + App.escHTML(t('success.bizIdShort')) + '</span>' +
+                '\u00A0' +
+                (bizTaxDisp ? App.escHTML(bizTaxDisp) : '<span class="dn-ph">' + App.escHTML(t('success.bizPlaceholder')) + '</span>') +
               '</div>' +
             '</div>' +
           '</header>' +
-          '<div class="dn-doc-title">' + App.escHTML(docTitleLine) + '</div>' +
-          '<div class="dn-doc-meta"><strong>' + App.escHTML(issueLabel) + '</strong> ' + App.escHTML(docDate) + '</div>' +
           blocksGrid +
           tableBlock +
           '</div>'
         );
       }
 
-      var titleBase = t('success.deliveryNoteNumbered') + ' ORD-' + String(order.id);
+      var titleBase = String(t('success.deliveryNoteNumbered') || '').replace(/\s+$/, '') + '\u00A0' + 'ORD-' + String(order.id);
       var titleCopy = titleBase + (isEn ? ' — Copy' : ' — עותק');
       var cssHref = printStylesheetHref();
 
@@ -208,6 +213,7 @@ var SuccessView = {
         '<!DOCTYPE html><html dir="' + dir + '" lang="he"><head><meta charset="UTF-8">' +
         '<title>' + App.escHTML(t('success.deliveryNote')) + ' ORD-' + App.escHTML(String(order.id)) + '</title>' +
         '<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet">' +
+        '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;700&display=swap" rel="stylesheet">' +
         '<link rel="stylesheet" href="' + App.escHTML(cssHref) + '">' +
         '</head><body class="dn-print-body">' +
         '<div class="dn-toolbar"><button type="button" id="dn-download-pdf">הורד PDF</button></div>' +

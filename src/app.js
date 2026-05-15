@@ -108,7 +108,8 @@ var App = (function () {
       app_logo: '',
       businessAddress: '',
       businessPhone: '',
-      businessEmail: ''
+      businessEmail: '',
+      businessTaxId: ''
     }
   };
 
@@ -131,6 +132,12 @@ var App = (function () {
       if (state.settings.businessAddress === undefined) state.settings.businessAddress = '';
       if (state.settings.businessPhone === undefined) state.settings.businessPhone = '';
       if (state.settings.businessEmail === undefined) state.settings.businessEmail = '';
+      if (state.settings.businessTaxId === undefined) state.settings.businessTaxId = '';
+    }
+    var _btMerge = String(state.settings.businessTaxId || '').trim();
+    if (!_btMerge) {
+      var _leg = state.settings.businessHp || state.settings.vatId || state.settings.companyHp;
+      if (_leg != null && String(_leg).trim()) state.settings.businessTaxId = String(_leg).trim();
     }
     try {
       if (!state.settings.app_logo) {

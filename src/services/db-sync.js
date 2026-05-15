@@ -32,7 +32,8 @@ var DBSync = (function () {
     'app_logo',
     'businessAddress',
     'businessPhone',
-    'businessEmail'
+    'businessEmail',
+    'businessTaxId'
   ];
 
   function db() { return window.DB; }

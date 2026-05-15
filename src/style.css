@@ -1107,6 +1107,8 @@ body.dn-print-body .dn-print-root {
   width: 210mm;
   max-width: 100%;
   margin: 0 auto;
+  word-spacing: 2px;
+  letter-spacing: 0.2px;
 }
 
 body.dn-print-body .dn-print-root::before {
@@ -1195,56 +1197,64 @@ body.dn-print-body .dn-bsd {
   position: absolute;
   top: 0;
   right: 0;
-  font-size: 10px;
-  color: #333;
-  font-weight: 600;
+  font-size: 11px;
+  color: #222;
+  font-family: Arial, "Noto Sans Hebrew", sans-serif;
+  font-weight: 700;
   z-index: 2;
 }
 
-body.dn-print-body .dn-header-row {
-  display: flex;
-  flex-direction: row;
+body.dn-print-body .dn-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  margin: 20px 0 14px;
-  padding-top: 8px;
-  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 20px 0 16px;
+  padding-top: 14px;
+  word-spacing: 2px;
+  letter-spacing: 0.2px;
 }
 
-body.dn-print-body .dn-header-logo {
-  flex: 0 0 auto;
-  order: 0;
+body.dn-print-body .dn-header-right {
+  grid-column: 1;
+  justify-self: start;
   text-align: center;
 }
 
-body.dn-print-body .dn-header-logo img {
-  max-width: min(300px, 52vw);
-  max-height: 132px;
+body.dn-print-body .dn-header-center {
+  grid-column: 2;
+  justify-self: center;
+  text-align: center;
+  min-width: 160px;
+  max-width: 46%;
+}
+
+body.dn-print-body .dn-header-left {
+  grid-column: 3;
+  justify-self: end;
+  text-align: right;
+}
+
+body.dn-print-body .dn-header-logo-img {
+  max-width: min(280px, 38vw);
+  max-height: 128px;
   object-fit: contain;
   display: block;
   margin: 0 auto;
-}
-
-body.dn-print-body .dn-header-biz {
-  flex: 1 1 220px;
-  order: 1;
-  text-align: right;
-  align-self: center;
 }
 
 body.dn-print-body .dn-biz-line {
   font-size: 12px;
   line-height: 1.5;
   color: #222;
-  margin: 2px 0 4px;
+  margin: 0 0 2px;
 }
 
 body.dn-print-body .dn-biz-line.dn-biz-company {
   font-size: 16px;
   font-weight: 700;
   color: #c25200;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 body.dn-print-body .dn-biz-line .dn-ph {
@@ -1254,18 +1264,20 @@ body.dn-print-body .dn-biz-line .dn-ph {
 }
 
 body.dn-print-body .dn-doc-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
   text-align: center;
-  margin: 12px 0 4px;
+  margin: 0 0 6px;
   color: #111;
+  line-height: 1.25;
 }
 
 body.dn-print-body .dn-doc-meta {
   font-size: 12px;
   text-align: center;
   color: #555;
-  margin-bottom: 12px;
+  margin: 0;
+  line-height: 1.35;
 }
 
 body.dn-print-body .dn-doc-meta strong {
@@ -1277,7 +1289,7 @@ body.dn-print-body .dn-grid2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-bottom: 12px;
+  margin: 10px 0 12px;
 }
 
 @media (max-width: 520px) {
