@@ -14,7 +14,7 @@ var CUSTOMERS_DB = [
     shippingCost: 35,
     paymentTerms: 'שוטף 30',
     existingDebt: 0,
-    password: '1234',
+    password: '',
     personalPrices: { 'cup-001': 75, 'cup-002': 85, 'plt-001': 55 }
   },
   {
@@ -31,7 +31,7 @@ var CUSTOMERS_DB = [
     shippingCost: 45,
     paymentTerms: 'מזומן',
     existingDebt: 0,
-    password: '1234',
+    password: '',
     personalPrices: {}
   },
   {
@@ -48,7 +48,7 @@ var CUSTOMERS_DB = [
     shippingCost: 60,
     paymentTerms: 'שוטף 60',
     existingDebt: 0,
-    password: '1234',
+    password: '',
     personalPrices: { 'nap-001': 40, 'nap-002': 49, 'plt-002': 78 }
   }
 ];
