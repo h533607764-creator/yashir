@@ -27,7 +27,6 @@ var DBSync = (function () {
   ];
 
   var PRIVATE_SETTINGS_KEYS = ['adminPin', 'nextOrderId'];
-  var DEFAULT_CUSTOMER_PASSWORD = '1234';
 
   function db() { return window.DB; }
 
@@ -37,7 +36,6 @@ var DBSync = (function () {
     var hp = c.hp != null ? c.hp : docId;
     c.hp = hp != null ? String(hp).trim() : '';
     c.password = c.password != null ? String(c.password).trim() : '';
-    if (!c.password) c.password = DEFAULT_CUSTOMER_PASSWORD;
     if (c.id == null || String(c.id).trim() === '') c.id = c.hp;
     return c;
   }

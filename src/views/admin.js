@@ -447,8 +447,10 @@ var AdminView = {
         (isNew ? '' : '<p style="font-size:12px;color:var(--orange);margin-top:-8px">' + t('admin.hpChangeWarning') + '</p>') +
         AdminView._fld(t('admin.businessName'), 'ef-name', cu.name, 'text') +
         AdminView._fldTransliterate(t('admin.customerNameEn'), 'ef-name-en', cu.name_en || '', 'ef-name') +
-        AdminView._fld(t('admin.passwordField'), 'ef-password', cu.password || '', 'text') +
+        '<div class="form-group"><label>' + t('admin.passwordField') + '</label>' +
+          '<input type="text" id="ef-password" value="' + App.escHTML(cu.password || '') + '"></div>' +
         '<p style="font-size:12px;color:var(--text-muted);margin-top:-8px">' + t('admin.passwordHint') + '</p>' +
+        '<p style="font-size:12px;color:var(--text-muted);margin-top:-8px">ניתן להשתמש באותיות באנגלית, מספרים וסימנים</p>' +
         AdminView._fld(t('common.phone'), 'ef-phone', cu.phone, 'tel') +
         AdminView._fld(t('common.email'), 'ef-email', cu.email, 'email') +
         AdminView._fld(t('admin.address'), 'ef-address', cu.address, 'text') +
@@ -482,10 +484,12 @@ var AdminView = {
     var duplicate = CUSTOMERS_DB.find(function (x) { return x.hp === id && x.hp !== origId; });
     if (duplicate) { App.toast(t('admin.hpCol') + ' ' + id + ' ' + t('admin.hpExists'), 'error'); return; }
     var existing = origId ? CUSTOMERS_DB.find(function (x) { return x.hp === origId; }) : null;
+    var passwordValue = String((document.getElementById('ef-password') || {}).value || '').trim();
+    console.log('[ADMIN PASSWORD SAVE]', { hp: id, password: passwordValue });
     var data = {
       hp: id, id: id, name: name,
       name_en: (document.getElementById('ef-name-en') || {}).value.trim() || '',
-      password: (document.getElementById('ef-password') || {}).value.trim() || '',
+      password: passwordValue,
       phone:           document.getElementById('ef-phone').value,
       email:           document.getElementById('ef-email').value,
       address:         document.getElementById('ef-address').value,
