@@ -2,12 +2,17 @@
 
 var admin = require('firebase-admin');
 var functions = require('firebase-functions');
+var httpsV2 = require('firebase-functions/v2/https');
 var pricing = require('./pricing');
 
 admin.initializeApp();
 
 var REGION = 'europe-west1'; /* keep in sync with src/firebase.js FUNCTIONS region */
 var db = admin.firestore();
+var CALLABLE_OPTIONS = {
+  region: REGION,
+  cors: ['https://yashir-dpab.vercel.app']
+};
 
 var PUBLIC_SETTINGS_FIELDS = [
   'minOrderAmount',
@@ -50,10 +55,19 @@ function mergeSettings(mainData) {
 }
 
 function httpsError(code, message) {
-  return new functions.https.HttpsError(code, message || code);
+  return new httpsV2.HttpsError(code, message || code);
 }
 
-exports.authenticateCustomer = functions.region(REGION).https.onCall(async function (data) {
+function logCorsOrigin(request) {
+  var origin = request && request.rawRequest && request.rawRequest.headers
+    ? request.rawRequest.headers.origin
+    : '';
+  console.log('[CORS CHECK]', origin);
+}
+
+exports.authenticateCustomer = httpsV2.onCall(CALLABLE_OPTIONS, async function (request) {
+  logCorsOrigin(request);
+  var data = request.data || {};
   var hp = data && data.hp != null ? String(data.hp).trim() : '';
   var password = data && data.password != null ? String(data.password).trim() : '';
   if (!/^\d{5,12}$/.test(hp)) {
@@ -82,7 +96,9 @@ exports.authenticateCustomer = functions.region(REGION).https.onCall(async funct
   return { token: token, customer: c };
 });
 
-exports.authenticateAdmin = functions.region(REGION).https.onCall(async function (data) {
+exports.authenticateAdmin = httpsV2.onCall(CALLABLE_OPTIONS, async function (request) {
+  logCorsOrigin(request);
+  var data = request.data || {};
   var pin =
     data && data.pin != null && String(data.pin).trim() !== '' ? String(data.pin).trim() : '';
   var mainSnap = await db.collection('app_settings').doc('main').get();
@@ -97,8 +113,9 @@ exports.authenticateAdmin = functions.region(REGION).https.onCall(async function
   return { token: token };
 });
 
-exports.ensurePublicAppSettings = functions.region(REGION).https.onCall(async function (data, context) {
-  if (!context.auth || context.auth.token.admin !== true) {
+exports.ensurePublicAppSettings = httpsV2.onCall(CALLABLE_OPTIONS, async function (request) {
+  logCorsOrigin(request);
+  if (!request.auth || request.auth.token.admin !== true) {
     throw httpsError('permission-denied', 'ADMIN_ONLY');
   }
   var mainRef = db.collection('app_settings').doc('main');
@@ -113,11 +130,13 @@ exports.ensurePublicAppSettings = functions.region(REGION).https.onCall(async fu
   return { ok: true, created: true };
 });
 
-exports.createOrder = functions.region(REGION).https.onCall(async function (data, context) {
-  if (!context.auth || !context.auth.token.customerId) {
+exports.createOrder = httpsV2.onCall(CALLABLE_OPTIONS, async function (request) {
+  logCorsOrigin(request);
+  var data = request.data || {};
+  if (!request.auth || !request.auth.token.customerId) {
     throw httpsError('unauthenticated', 'NEED_CUSTOMER_AUTH');
   }
-  var customerId = String(context.auth.token.customerId);
+  var customerId = String(request.auth.token.customerId);
   var lineItems = data && Array.isArray(data.lineItems) ? data.lineItems : [];
   var notes = data && data.notes != null ? String(data.notes).slice(0, 4e3) : '';
 
