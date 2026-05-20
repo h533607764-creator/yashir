@@ -39,10 +39,15 @@ var SuccessView = {
       }
       return null;
     }
-    function bizLineHtml(val) {
+    function bizValHtml(val) {
       var v = val != null ? String(val).trim() : '';
       if (v) return App.escHTML(v);
       return '<span class="erp-ph">' + App.escHTML(t('success.bizPlaceholder')) + '</span>';
+    }
+    function fieldLine(label, valueHtml) {
+      return '<div class="erp-line">' +
+        '<span class="erp-k">' + App.escHTML(label) + '</span>' +
+        '<span class="erp-v">' + valueHtml + '</span></div>';
     }
     function printStylesheetHref() {
       try {
@@ -59,7 +64,7 @@ var SuccessView = {
     }
     function logoVarStyle(heroLogo) {
       var s = String(heroLogo || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      return '--logo:url(\'' + s + '\')';
+      return '--erp-logo:url(\'' + s + '\')';
     }
     function doPrint(order) {
       if (!order.items) { App.toast(t('success.orderNotFound'), 'error'); return; }
@@ -69,15 +74,19 @@ var SuccessView = {
       var st = (window.App && App.state && App.state.settings) ? App.state.settings : {};
       var vatRate = typeof st.vatRate === 'number' && !isNaN(st.vatRate) ? st.vatRate : 0.18;
       var vatPct = Math.round(vatRate * 100);
-      var vatLine = isEn ? ('VAT (' + vatPct + '%):') : ('מע״מ ' + vatPct + '%:');
+      var vatLine = isEn ? ('VAT (' + vatPct + '%)') : ('מע״מ ' + vatPct + '%');
 
       var docDate = new Date().toLocaleDateString(locale);
-      var bizTaxLbl = isEn ? 'Tax ID:' : 'ח.פ:';
-      var custTaxLbl = isEn ? 'Tax ID:' : 'ח.פ:';
+      var docTs = new Date().toLocaleString(locale);
+      var bizTaxLbl = isEn ? 'Tax ID' : 'ח.פ';
+      var custTaxLbl = isEn ? 'Tax ID' : 'ח.פ';
+      var numLbl = isEn ? 'No.' : 'מספר';
 
       var cu = lookupCustomer(order);
       var shipAddr = cu && (cu.shippingAddress || cu.address) ? String(cu.shippingAddress || cu.address) : '';
       if (!shipAddr.trim()) shipAddr = '—';
+      var custAddr = cu && cu.address ? String(cu.address).trim() : '';
+      if (!custAddr.trim()) custAddr = '—';
       var contactNm = cu && cu.contactPerson ? String(cu.contactPerson).trim() : '';
       var contactPhRaw = (cu && cu.phone) ? String(cu.phone).trim() : '';
       var contactPh = contactPhRaw || (order.customerPhone ? String(order.customerPhone).trim() : '');
@@ -96,6 +105,11 @@ var SuccessView = {
 
       var heroLogo = resolveLogoSrc();
       var bizTaxDisp = String(st.businessTaxId || st.businessHp || st.vatId || st.companyHp || '').trim();
+      var coLine = isEn ? t('success.companyName') : ('ישיר' + '\u00A0' + 'שיווק' + '\u00A0' + 'והפצה');
+      var docTitle = isEn ? t('success.deliveryNote') : 'תעודת משלוח';
+      var ordOnly = 'ORD-' + String(order.id);
+      var copyBadge = isEn ? 'COPY' : 'עותק';
+      var footerCo = coLine;
 
       var colSku = isEn ? t('success.colSku') : 'מק"ט';
       var colProd = isEn ? t('success.productName') : 'מוצר';
@@ -114,105 +128,133 @@ var SuccessView = {
         var lineList = parseFloat((listUnit * q).toFixed(2));
         var lineFinal = parseFloat((item.unitPrice * q).toFixed(2));
         return '<tr>' +
-          '<td>' + App.escHTML(item.product && item.product.sku != null ? item.product.sku : '') + '</td>' +
-          '<td class="erp-tl">' + App.escHTML(pLang(item.product, 'name')) + '</td>' +
-          '<td class="erp-num">' + q + '</td>' +
-          '<td class="erp-num">₪' + App.fmtP(listUnit) + '</td>' +
-          '<td class="erp-num">₪' + App.fmtP(lineList) + '</td>' +
-          '<td class="erp-num">' + App.fmtP(item.discountPct || 0) + '%</td>' +
-          '<td class="erp-num">₪' + App.fmtP(lineFinal) + '</td>' +
+          '<td class="erp-col-sku">' + App.escHTML(item.product && item.product.sku != null ? item.product.sku : '') + '</td>' +
+          '<td class="erp-col-prod erp-tl">' + App.escHTML(pLang(item.product, 'name')) + '</td>' +
+          '<td class="erp-num erp-col-qty">' + q + '</td>' +
+          '<td class="erp-num erp-col-unit">₪' + App.fmtP(listUnit) + '</td>' +
+          '<td class="erp-num erp-col-line">₪' + App.fmtP(lineList) + '</td>' +
+          '<td class="erp-num erp-col-disc">' + App.fmtP(item.discountPct || 0) + '%</td>' +
+          '<td class="erp-num erp-col-net">₪' + App.fmtP(lineFinal) + '</td>' +
         '</tr>';
       }).join('');
 
-      var tableBlock =
+      var itemsTable =
         '<div class="erp-table-wrap">' +
-        '<table class="erp-items"><thead><tr>' +
-          '<th>' + App.escHTML(colSku) + '</th>' +
-          '<th class="erp-tl">' + App.escHTML(colProd) + '</th>' +
-          '<th class="erp-num">' + App.escHTML(colQty) + '</th>' +
-          '<th class="erp-num">' + App.escHTML(colUnit) + '</th>' +
-          '<th class="erp-num">' + App.escHTML(colLine) + '</th>' +
-          '<th class="erp-num">' + App.escHTML(colDisc) + '</th>' +
-          '<th class="erp-num">' + App.escHTML(colNet) + '</th>' +
-        '</tr></thead><tbody>' + rows + '</tbody></table>' +
-        '</div>' +
-        '<table class="erp-sum"><tbody>' +
-          '<tr><td class="erp-lbl">' + App.escHTML(t('success.grossTotal')) + '</td><td class="erp-amt">₪' + App.fmtP(grossSum) + '</td></tr>' +
-          '<tr><td class="erp-lbl">' + App.escHTML(t('success.totalDiscount')) + '</td><td class="erp-amt">₪' + App.fmtP(savings) + '</td></tr>' +
-          '<tr><td class="erp-lbl">' + App.escHTML(t('success.preVatTotal')) + '</td><td class="erp-amt">₪' + App.fmtP(subtotal) + '</td></tr>' +
-          '<tr><td class="erp-lbl">' + App.escHTML(vatLine) + '</td><td class="erp-amt">₪' + App.fmtP(vat) + '</td></tr>' +
-          '<tr class="erp-pay"><td class="erp-lbl">' + App.escHTML(t('success.grandTotal')) + '</td><td class="erp-amt">₪' + App.fmtP(total) + '</td></tr>' +
-        '</tbody></table>' +
-        '<div class="erp-sign">' + App.escHTML(t('success.signatureRecipient')) + '<div class="erp-sign-line"></div></div>';
+        '<table class="erp-items">' +
+        '<thead><tr>' +
+          '<th class="erp-col-sku">' + App.escHTML(colSku) + '</th>' +
+          '<th class="erp-col-prod erp-tl">' + App.escHTML(colProd) + '</th>' +
+          '<th class="erp-col-qty">' + App.escHTML(colQty) + '</th>' +
+          '<th class="erp-col-unit">' + App.escHTML(colUnit) + '</th>' +
+          '<th class="erp-col-line">' + App.escHTML(colLine) + '</th>' +
+          '<th class="erp-col-disc">' + App.escHTML(colDisc) + '</th>' +
+          '<th class="erp-col-net">' + App.escHTML(colNet) + '</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+        '<tfoot><tr class="erp-tfoot-spacer"><td colspan="7"></td></tr></tfoot>' +
+        '</table></div>';
 
-      var tailBlock =
-        '<div class="erp-tail">' +
-        tableBlock +
+      var summaryBlock =
+        '<div class="erp-summary-box">' +
+        '<table class="erp-sum"><tbody>' +
+          '<tr><td class="erp-lbl">' + App.escHTML(t('success.grossTotal')) + '</td>' +
+            '<td class="erp-amt erp-num">₪' + App.fmtP(grossSum) + '</td></tr>' +
+          '<tr><td class="erp-lbl">' + App.escHTML(t('success.totalDiscount')) + '</td>' +
+            '<td class="erp-amt erp-num">₪' + App.fmtP(savings) + '</td></tr>' +
+          '<tr><td class="erp-lbl">' + App.escHTML(t('success.preVatTotal')) + '</td>' +
+            '<td class="erp-amt erp-num">₪' + App.fmtP(subtotal) + '</td></tr>' +
+          '<tr><td class="erp-lbl">' + App.escHTML(vatLine) + '</td>' +
+            '<td class="erp-amt erp-num">₪' + App.fmtP(vat) + '</td></tr>' +
+          '<tr class="erp-pay"><td class="erp-lbl">' + App.escHTML(t('success.grandTotal')) + '</td>' +
+            '<td class="erp-amt erp-num">₪' + App.fmtP(total) + '</td></tr>' +
+        '</tbody></table></div>';
+
+      var signLbl = isEn ? 'Recipient signature' : 'חתימת מקבל';
+      var dateLbl = isEn ? 'Date' : 'תאריך';
+      var signBlock =
+        '<div class="erp-sign-row">' +
+          '<div class="erp-sign">' +
+            '<div class="erp-sign-line"></div>' +
+            '<span class="erp-sign-lbl">' + App.escHTML(signLbl) + '</span>' +
+          '</div>' +
+          '<div class="erp-sign erp-sign--date">' +
+            '<div class="erp-sign-line"></div>' +
+            '<span class="erp-sign-lbl">' + App.escHTML(dateLbl) + '</span>' +
+          '</div>' +
         '</div>';
 
-      var custTitle = isEn ? t('success.clientSection') : 'לקוח';
-      var contactSec = isEn ? 'Contact' : 'איש קשר';
+      var custColTitle = isEn ? t('success.clientSection') : 'לקוח';
+      var shipColTitle = isEn ? t('success.shipSection') : 'משלוח';
       var custBlock =
-        '<section class="erp-card erp-cust">' +
-          '<div class="erp-card-head">' + App.escHTML(custTitle) + '</div>' +
-          '<div class="erp-line"><span class="erp-k">' + App.escHTML(t('admin.nameCol')) + '</span>' +
-            '<span class="erp-v">' + App.escHTML(App.orderCustomerDisplay(order)) + '</span></div>' +
-          '<div class="erp-line"><span class="erp-k">' + App.escHTML(custTaxLbl) + '</span>' +
-            '<span class="erp-v">' + App.escHTML(order.customerId != null ? String(order.customerId) : '—') + '</span></div>' +
-          '<div class="erp-line"><span class="erp-k">' + App.escHTML(t('common.phone')) + '</span>' +
-            '<span class="erp-v">' + App.escHTML(order.customerPhone || '—') + '</span></div>' +
-          '<div class="erp-line"><span class="erp-k">' + App.escHTML(t('common.email')) + '</span>' +
-            '<span class="erp-v">' + App.escHTML(order.customerEmail || '—') + '</span></div>' +
-          '<div class="erp-line"><span class="erp-k">' + App.escHTML(t('success.shipAddressLabel')) + '</span>' +
-            '<span class="erp-v">' + App.escHTML(shipAddr) + '</span></div>' +
-          '<div class="erp-card-sub">' + App.escHTML(contactSec) + '</div>' +
-          '<div class="erp-line"><span class="erp-k">' + App.escHTML(isEn ? 'Name' : 'שם') + '</span>' +
-            '<span class="erp-v">' + contactNmHtml + '</span></div>' +
-          '<div class="erp-line"><span class="erp-k">' + App.escHTML(t('common.phone')) + '</span>' +
-            '<span class="erp-v">' + contactPhHtml + '</span></div>' +
+        '<section class="erp-parties">' +
+          '<div class="erp-card erp-party">' +
+            '<div class="erp-card-head">' + App.escHTML(custColTitle) + '</div>' +
+            fieldLine(t('admin.nameCol'), App.escHTML(App.orderCustomerDisplay(order))) +
+            fieldLine(custTaxLbl, App.escHTML(order.customerId != null ? String(order.customerId) : '—')) +
+            fieldLine(t('common.phone'), App.escHTML(order.customerPhone || '—')) +
+            fieldLine(t('common.email'), App.escHTML(order.customerEmail || '—')) +
+            fieldLine(isEn ? 'Address' : 'כתובת', App.escHTML(custAddr)) +
+          '</div>' +
+          '<div class="erp-card erp-party">' +
+            '<div class="erp-card-head">' + App.escHTML(shipColTitle) + '</div>' +
+            fieldLine(t('success.shipAddressLabel'), App.escHTML(shipAddr)) +
+            fieldLine(isEn ? 'Contact' : 'איש קשר', contactNmHtml) +
+            fieldLine(t('common.phone'), contactPhHtml) +
+          '</div>' +
         '</section>';
 
-      function pageInner(forCopy) {
-        var coLine = isEn ? t('success.companyName') : ('ישיר' + '\u00A0' + 'שיווק' + '\u00A0' + 'והפצה');
-        var headingBase = String(t('success.deliveryNoteNumbered') || '').trim();
-        var headingLine = headingBase + (forCopy ? (isEn ? ' — Copy' : ' — עותק') : '');
-        var ordOnly = 'ORD-' + String(order.id);
+      function pageFooter() {
+        return '<footer class="erp-foot">' +
+          '<span class="erp-foot-co">' + App.escHTML(footerCo) + '</span>' +
+          '<span class="erp-foot-ts erp-num">' + App.escHTML(docTs) + '</span>' +
+          '<span class="erp-foot-pg"></span>' +
+        '</footer>';
+      }
+
+      function pageContent(forCopy) {
+        var copyExtra = forCopy
+          ? '<span class="erp-copy-badge" aria-hidden="true">' + App.escHTML(copyBadge) + '</span>'
+          : '';
         return (
           '<div class="erp-bsd">' + App.escHTML(t('success.bsd')) + '</div>' +
+          copyExtra +
           '<header class="erp-head">' +
             '<div class="erp-head-logo">' +
               '<img class="erp-logo-lg" src="' + App.escHTML(heroLogo) + '" alt="" crossorigin="anonymous" onerror="this.src=\'/logo.png\'">' +
             '</div>' +
             '<div class="erp-head-center">' +
-              '<div class="erp-doc-title">' + App.escHTML(headingLine) + '</div>' +
-              '<div class="erp-doc-ord">' + App.escHTML(ordOnly) + '</div>' +
+              '<div class="erp-doc-title">' + App.escHTML(docTitle) + (forCopy ? (isEn ? ' — Copy' : ' — עותק') : '') + '</div>' +
+              '<div class="erp-doc-num-lbl">' + App.escHTML(numLbl) + '</div>' +
+              '<div class="erp-doc-ord erp-ltr">' + App.escHTML(ordOnly) + '</div>' +
             '</div>' +
-            '<div class="erp-head-biz erp-card">' +
-              '<div class="erp-biz-name">' + App.escHTML(coLine) + '</div>' +
-              '<div class="erp-biz-row">' + bizLineHtml(st.businessAddress) + '</div>' +
-              '<div class="erp-biz-row">' + bizLineHtml(st.businessPhone) + '</div>' +
-              '<div class="erp-biz-row">' + bizLineHtml(st.businessEmail) + '</div>' +
-              '<div class="erp-biz-row">' +
-                '<span class="erp-biz-k">' + App.escHTML(bizTaxLbl) + '</span>\u00A0' +
-                (bizTaxDisp ? App.escHTML(bizTaxDisp) : '<span class="erp-ph">' + App.escHTML(t('success.bizPlaceholder')) + '</span>') +
-              '</div>' +
-              '<div class="erp-date">' + App.escHTML(docDate) + '</div>' +
+            '<div class="erp-card erp-head-biz">' +
+              '<div class="erp-line erp-biz-name"><span class="erp-v">' + App.escHTML(coLine) + '</span></div>' +
+              fieldLine(isEn ? 'Address' : 'כתובת', bizValHtml(st.businessAddress)) +
+              fieldLine(t('common.phone'), bizValHtml(st.businessPhone)) +
+              fieldLine(t('common.email'), bizValHtml(st.businessEmail)) +
+              fieldLine(bizTaxLbl, bizTaxDisp ? App.escHTML(bizTaxDisp) : '<span class="erp-ph">' + App.escHTML(t('success.bizPlaceholder')) + '</span>') +
+              '<div class="erp-date erp-num erp-ltr">' + App.escHTML(docDate) + '</div>' +
             '</div>' +
           '</header>' +
           custBlock +
-          tailBlock
+          '<div class="erp-body">' +
+            itemsTable +
+            '<div class="erp-close">' +
+              summaryBlock +
+              signBlock +
+            '</div>' +
+          '</div>' +
+          pageFooter()
         );
       }
 
-      function pageHtml(forCopy) {
-        return (
-          '<div class="page' + (forCopy ? ' page--copy' : '') + '">' +
-          '<div class="page-body">' + pageInner(forCopy) + '</div>' +
-          '</div>'
-        );
+      function erpPage(forCopy) {
+        var cls = 'erp-page ' + (forCopy ? 'erp-page--copy' : 'erp-page--original');
+        return '<section class="' + cls + '"><div class="erp-page-inner">' + pageContent(forCopy) + '</div></section>';
       }
 
       var cssHref = printStylesheetHref();
+      var logoStyle = logoVarStyle(heroLogo);
 
       var pdfScript =
         '(function(){' +
@@ -222,12 +264,13 @@ var SuccessView = {
         'var b=document.getElementById("dn-download-pdf");' +
         'if(!b)return;' +
         'b.onclick=function(){' +
-        'var el=document.querySelector(".root");' +
+        'var el=document.querySelector(".erp-doc");' +
         'if(!el||!window.html2pdf)return;' +
         'html2pdf().set({' +
-        'margin:12,' +
+        'margin:0,' +
         'filename:"delivery-"+String(oid)+".pdf",' +
-        'scale:2,' +
+        'image:{type:"jpeg",quality:1},' +
+        'html2canvas:{scale:2,useCORS:true},' +
         'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},' +
         'pagebreak:{mode:["css","legacy"]}' +
         '}).from(el).save();' +
@@ -244,13 +287,12 @@ var SuccessView = {
         '<!DOCTYPE html><html dir="' + dir + '" lang="he"><head><meta charset="UTF-8">' +
         '<title>' + App.escHTML(t('success.deliveryNote')) + ' ORD-' + App.escHTML(String(order.id)) + '</title>' +
         '<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700;800&display=swap" rel="stylesheet">' +
-        '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;700&display=swap" rel="stylesheet">' +
         '<link rel="stylesheet" href="' + App.escHTML(cssHref) + '">' +
         '</head><body class="dn-print-body">' +
         '<div class="dn-toolbar"><button type="button" id="dn-download-pdf">הורד PDF</button></div>' +
-        '<div class="root" style="' + logoVarStyle(heroLogo).replace(/"/g, '&quot;') + '">' +
-        pageHtml(false) +
-        pageHtml(true) +
+        '<div class="erp-doc" style="' + logoStyle.replace(/"/g, '&quot;') + '">' +
+        erpPage(false) +
+        erpPage(true) +
         '</div>' +
         '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>' +
         '<script>' + pdfScript + '<\/script>' +
